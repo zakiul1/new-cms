@@ -1,0 +1,6 @@
+{
+  "name": "Hello Plugin",
+  "slug": "hello",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php"
+}
