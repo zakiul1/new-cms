@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+use App\Models\Media;
+
 
 class Post extends Model
 {
@@ -52,4 +56,27 @@ class Post extends Model
     {
         return $this->terms()->whereHas('taxonomy', fn($q) => $q->where('key', 'tag'));
     }
+    public function featuredMedia(): BelongsTo
+{
+    return $this->belongsTo(Media::class, 'featured_media_id');
+}
+
+public function productMedia(): BelongsToMany
+{
+    return $this->belongsToMany(Media::class, 'post_media')
+        ->withPivot(['role', 'sort_order'])
+        ->wherePivot('role', 'product')
+        ->orderBy('post_media.sort_order')
+        ->withTimestamps();
+}
+public function galleryMedia(): BelongsToMany
+{
+    return $this->belongsToMany(Media::class, 'post_media')
+        ->withPivot(['role', 'sort_order'])
+        ->wherePivot('role', 'gallery')
+        ->orderBy('post_media.sort_order')
+        ->withTimestamps();
+}
+
+
 }

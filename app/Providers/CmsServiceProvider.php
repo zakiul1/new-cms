@@ -3,13 +3,15 @@
 namespace App\Providers;
 
 use App\Cms\Assets\AssetManager;
+use App\Cms\Content\Blocks\BlockRegistry;
+use App\Cms\Content\Blocks\BlockRenderer;
 use App\Cms\Core\SafeMode;
 use App\Cms\Core\Settings;
 use App\Cms\Hooks\Hooks;
 use App\Cms\Hooks\HookPoints;
 use App\Cms\Plugins\PluginManager;
 use App\Cms\Themes\ThemeManager;
-use Illuminate\Http\Request;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
 class CmsServiceProvider extends ServiceProvider
@@ -25,56 +27,68 @@ class CmsServiceProvider extends ServiceProvider
 
         $this->app->singleton(SafeMode::class);
 
-        $this->app->singleton(\App\Cms\Content\Blocks\BlockRegistry::class);
-        $this->app->singleton(\App\Cms\Content\Blocks\BlockRenderer::class);
-
+        $this->app->singleton(BlockRegistry::class);
+        $this->app->singleton(BlockRenderer::class);
     }
 
     public function boot(): void
     {
+        // ✅ CRITICAL: avoid DB/settings/theme/plugin boot during artisan/composer scripts
+        if ($this->app->runningInConsole()) {
+            return;
+        }
+
+        /** @var Hooks $hooks */
         $hooks = $this->app->make(Hooks::class);
+
+        /** @var SafeMode $safeMode */
         $safeMode = $this->app->make(SafeMode::class);
 
-        // Request may not exist in CLI (composer/artisan)
-        $request = $this->app->bound('request') ? $this->app->make('request') : null;
+        // Request exists in HTTP only (we already skipped console)
+        $request = $this->app->make('request');
 
-        // Enable safe mode only when session is available
+        // Safe mode from request/session (only valid in HTTP)
         $safeMode->maybeEnableFromRequest($request);
 
         // Booting hook
         $hooks->doAction(HookPoints::CMS_BOOT);
 
-        // Load enabled plugins (skip if safe mode OR no request session)
-        if (!$safeMode->isEnabled($request)) {
+        // Plugins (skip if safe mode)
+        if (! $safeMode->isEnabled($request)) {
             $this->app->make(PluginManager::class)->bootEnabledPlugins();
         }
 
-        // Boot theme
+        // Theme
         $this->app->make(ThemeManager::class)->bootActiveTheme();
 
         // Enqueue assets hook
         $hooks->doAction(HookPoints::CMS_ENQUEUE_ASSETS);
 
+        // Register core blocks (HTTP only)
+        $this->registerCoreBlocks($this->app);
+
         // Booted hook
         $hooks->doAction(HookPoints::CMS_BOOTED);
+    }
 
-
-        $registry = $this->app->make(\App\Cms\Content\Blocks\BlockRegistry::class);
+    private function registerCoreBlocks(Application $app): void
+    {
+        /** @var BlockRegistry $registry */
+        $registry = $app->make(BlockRegistry::class);
 
         $registry->register(
             'paragraph',
-            fn(array $data) =>
-            view('cms.blocks.paragraph', ['text' => (string) ($data['text'] ?? '')])->render()
+            fn (array $data) => view('cms.blocks.paragraph', [
+                'text' => (string) ($data['text'] ?? ''),
+            ])->render()
         );
 
         $registry->register(
             'heading',
-            fn(array $data) =>
-            view('cms.blocks.heading', ['text' => (string) ($data['text'] ?? ''), 'level' => (int) ($data['level'] ?? 2)])->render()
+            fn (array $data) => view('cms.blocks.heading', [
+                'text' => (string) ($data['text'] ?? ''),
+                'level' => (int) ($data['level'] ?? 2),
+            ])->render()
         );
-
     }
-
-
-
 }

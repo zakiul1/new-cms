@@ -2,12 +2,13 @@
 
 namespace App\Filament\Resources\Posts\Schemas;
 
-use Filament\Forms\Components\CheckboxList;
+use App\Filament\Forms\Components\MediaPicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 
@@ -32,8 +33,8 @@ class PostForm
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                if (!filled($get('slug'))) {
+                            ->afterStateUpdated(function ($state, callable $set, Get $get) {
+                                if (! filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
                                 }
                             }),
@@ -45,6 +46,16 @@ class PostForm
 
                         Textarea::make('excerpt')
                             ->rows(6),
+
+                        // ✅ WP-like Product Gallery (multiple) via Media Browser
+                        // This is a VIRTUAL field (not in posts table)
+                        // It will be saved in CreatePost/EditPost to post_media pivot.
+                        MediaPicker::make('product_media_ids')
+                            ->label('Product Images')
+                            ->multiple()
+                            ->maxItems(50)
+                            ->helperText('Select / upload multiple images. Drag to reorder inside the picker.')
+                            ->dehydrated(false),
                     ]),
 
                 // RIGHT (1/3)
@@ -54,6 +65,12 @@ class PostForm
                         'lg' => 1,
                     ])
                     ->schema([
+                        // ✅ Featured Image (single) via Media Browser
+                        MediaPicker::make('featured_media_id')
+                            ->label('Featured Image')
+                            ->helperText('Select / upload one image.')
+                            ->dehydrated(true),
+
                         Select::make('categories')
                             ->label('Categories')
                             ->relationship('categories', 'name')
@@ -66,8 +83,8 @@ class PostForm
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                        if (!filled($get('slug'))) {
+                                    ->afterStateUpdated(function ($state, callable $set, Get $get) {
+                                        if (! filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }
                                     }),
@@ -82,9 +99,9 @@ class PostForm
                                     ->searchable()
                                     ->preload()
                                     ->nullable()
-                                    ->options(function () {
+                                    ->options(function (): array {
                                         $taxonomyId = \App\Models\Taxonomy::where('key', 'category')->value('id');
-                                        if (!$taxonomyId) {
+                                        if (! $taxonomyId) {
                                             return [];
                                         }
 
@@ -119,13 +136,11 @@ class PostForm
                                     'taxonomy_id' => $taxonomyId,
                                     'name' => (string) $data['name'],
                                     'slug' => $slug,
-                                    'parent_id' => $data['parent_id'] ?? null, // ✅ save parent if chosen
+                                    'parent_id' => $data['parent_id'] ?? null,
                                 ]);
 
                                 return $term->getKey();
                             }),
-
-
 
                         Select::make('tags')
                             ->label('Tags')
