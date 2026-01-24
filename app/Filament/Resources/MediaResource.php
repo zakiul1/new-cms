@@ -6,13 +6,11 @@ use App\Filament\Resources\MediaResource\Pages\CreateMedia;
 use App\Filament\Resources\MediaResource\Pages\EditMedia;
 use App\Filament\Resources\MediaResource\Pages\ListMedia;
 use App\Filament\Resources\MediaResource\Schemas\MediaForm;
-use App\Filament\Resources\MediaResource\Tables\MediaTable;
 use App\Models\Media;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Table;
 
 class MediaResource extends Resource
 {
@@ -24,14 +22,7 @@ class MediaResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        // ✅ includes FileUpload + metadata fields
         return MediaForm::configure($schema);
-    }
-
-    public static function table(Table $table): Table
-    {
-        // ✅ your dedicated table class
-        return MediaTable::configure($table);
     }
 
     public static function getPages(): array

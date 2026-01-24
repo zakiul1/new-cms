@@ -34,7 +34,7 @@ class PostForm
                             ->maxLength(255)
                             ->live(onBlur: true)
                             ->afterStateUpdated(function ($state, callable $set, Get $get) {
-                                if (! filled($get('slug'))) {
+                                if (!filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
                                 }
                             }),
@@ -51,10 +51,9 @@ class PostForm
                         // This is a VIRTUAL field (not in posts table)
                         // It will be saved in CreatePost/EditPost to post_media pivot.
                         MediaPicker::make('product_media_ids')
-                            ->label('Product Images')
+                            ->label('Product Gallery')
                             ->multiple()
-                            ->maxItems(50)
-                            ->helperText('Select / upload multiple images. Drag to reorder inside the picker.')
+                            ->maxItems(20)
                             ->dehydrated(false),
                     ]),
 
@@ -68,8 +67,7 @@ class PostForm
                         // ✅ Featured Image (single) via Media Browser
                         MediaPicker::make('featured_media_id')
                             ->label('Featured Image')
-                            ->helperText('Select / upload one image.')
-                            ->dehydrated(true),
+                            ->modalHeading('Featured image'),
 
                         Select::make('categories')
                             ->label('Categories')
@@ -84,7 +82,7 @@ class PostForm
                                     ->maxLength(255)
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, callable $set, Get $get) {
-                                        if (! filled($get('slug'))) {
+                                        if (!filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }
                                     }),
@@ -101,7 +99,7 @@ class PostForm
                                     ->nullable()
                                     ->options(function (): array {
                                         $taxonomyId = \App\Models\Taxonomy::where('key', 'category')->value('id');
-                                        if (! $taxonomyId) {
+                                        if (!$taxonomyId) {
                                             return [];
                                         }
 

@@ -21,7 +21,7 @@ class MediaPicker extends Field
     {
         parent::setUp();
 
-        // Ensure state is the right shape after hydration
+        // Ensure state shape is correct after hydration
         $this->afterStateHydrated(function (MediaPicker $component, $state): void {
             if ($component->isMultiple()) {
                 $component->state(array_values(array_filter(array_map('intval', (array) ($state ?? [])))));
@@ -85,16 +85,13 @@ class MediaPicker extends Field
         /** @var Collection<int, Media> $media */
         $media = Media::query()
             ->whereIn('id', $ids)
-            ->get();
-
-        // Preserve order
-        $map = $media->keyBy('id');
+            ->get()
+            ->keyBy('id');
 
         $out = [];
         foreach ($ids as $id) {
-            /** @var Media|null $m */
-            $m = $map->get($id);
-            if (! $m) {
+            $m = $media->get($id);
+            if (!$m) {
                 continue;
             }
 

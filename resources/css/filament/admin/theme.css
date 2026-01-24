@@ -1,0 +1,37 @@
+/* 1) Tailwind v4 (generates utilities for your custom views) */
+@import "tailwindcss";
+
+/* 2) Filament theme LAST so Filament’s table/grid/layout CSS wins */
+@import "../../../../vendor/filament/filament/resources/css/theme.css";
+
+/* 3) Scan your classes */
+@source "../../../../app/Filament/**/*.php";
+@source "../../../../resources/views/filament/**/*.blade.php";
+@source "../../../../resources/views/**/*.blade.php";
+@source "../../../../resources/js/**/*.js";
+
+/* ==========================================================
+   Media grid: keep selection checkboxes as overlays
+   ========================================================== */
+
+.media-grid-table .fi-ta-content-grid .fi-ta-record {
+    position: relative;
+}
+
+/* Checkbox becomes an overlay (no layout shift) */
+.media-grid-table .fi-ta-content-grid .fi-ta-record-checkbox {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 30;
+}
+
+/* Prevent checkbox wrapper from reserving space */
+.media-grid-table .fi-ta-content-grid .fi-ta-record-checkbox {
+    margin: 0 !important;
+}
+
+/* If Filament adds padding because of checkbox column, reset it */
+.media-grid-table .fi-ta-content-grid .fi-ta-record > :first-child {
+    margin-left: 0 !important;
+}

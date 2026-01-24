@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Term extends Model
@@ -27,8 +28,18 @@ class Term extends Model
         return $this->belongsTo(Term::class, 'parent_id');
     }
 
+    public function children(): HasMany
+    {
+        return $this->hasMany(Term::class, 'parent_id')->orderBy('sort_order')->orderBy('name');
+    }
+
     public function posts(): MorphToMany
     {
         return $this->morphedByMany(Post::class, 'termable', 'termables')->withTimestamps();
+    }
+
+    public function media(): MorphToMany
+    {
+        return $this->morphedByMany(Media::class, 'termable', 'termables')->withTimestamps();
     }
 }

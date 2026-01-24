@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Facades\Storage;
 
 class Media extends Model
@@ -43,6 +44,11 @@ class Media extends Model
         return $this->hasMany(MediaVariant::class);
     }
 
+    public function terms(): MorphToMany
+    {
+        return $this->morphToMany(Term::class, 'termable', 'termables')->withTimestamps();
+    }
+
     public function path(): string
     {
         return trim($this->directory, '/') . '/' . $this->filename;
@@ -58,15 +64,73 @@ class Media extends Model
         return str_starts_with((string) $this->mime_type, 'image/');
     }
 
+    public function isVideo(): bool
+    {
+        return str_starts_with((string) $this->mime_type, 'video/');
+    }
+
+    public function isPdf(): bool
+    {
+        return strtolower((string) $this->mime_type) === 'application/pdf';
+    }
+
     public function variantUrl(string $key): ?string
     {
-        $variant = $this->variants->firstWhere('key', $key);
-
+        $variant = $this->variants()->where('key', $key)->first();
         return $variant?->url();
     }
 
     public function thumbUrl(): ?string
     {
-        return $this->variantUrl('thumb') ?? ($this->isImage() ? $this->url() : null);
+        // ✅ best UX: fallback to original while processing or if missing
+        return $this->variantUrl('thumb') ?: ($this->isImage() ? $this->url() : null);
+    }
+
+    // -------------------------
+    // Folder helpers (WP-like)
+    // -------------------------
+
+    protected function folderTaxonomyId(): ?int
+    {
+        return Taxonomy::query()->where('key', 'media_folder')->value('id');
+    }
+
+    public function clearFolderTerms(): void
+    {
+        $taxonomyId = $this->folderTaxonomyId();
+        if (!$taxonomyId) {
+            return;
+        }
+
+        $termIds = Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->pluck('id')
+            ->all();
+
+        if (count($termIds)) {
+            $this->terms()->detach($termIds);
+        }
+    }
+
+    public function syncFolderTerm(int $termId): void
+    {
+        $taxonomyId = $this->folderTaxonomyId();
+        if (!$taxonomyId) {
+            return;
+        }
+
+        // Ensure it's a folder term
+        $isFolderTerm = Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->where('id', $termId)
+            ->exists();
+
+        if (!$isFolderTerm) {
+            return;
+        }
+
+        // WP-like: keep only ONE folder term
+        $this->clearFolderTerms();
+        $this->terms()->syncWithoutDetaching([$termId]);
     }
 }

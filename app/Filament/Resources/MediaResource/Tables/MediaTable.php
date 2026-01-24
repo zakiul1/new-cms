@@ -3,13 +3,14 @@
 namespace App\Filament\Resources\MediaResource\Tables;
 
 use App\Models\Media;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class MediaTable
 {
@@ -19,72 +20,96 @@ class MediaTable
             ->columns([
                 ImageColumn::make('thumb')
                     ->label('')
-                    ->getStateUsing(fn (Media $record) => $record->thumbUrl() ?: $record->url())
-                    ->square()
-                    ->extraImgAttributes(['loading' => 'lazy'])
-                    ->toggleable(),
+                    ->getStateUsing(fn(Media $record) => $record->thumbUrl())
+                    ->square(),
 
                 TextColumn::make('title')
-                    ->label('Title')
                     ->searchable()
                     ->sortable()
-                    ->wrap()
-                    ->getStateUsing(function (Media $record) {
-                        return $record->title ?: ($record->original_filename ?: ('Media #' . $record->id));
-                    }),
+                    ->description(fn(Media $record) => $record->original_filename ?: null),
 
                 TextColumn::make('mime_type')
                     ->label('Type')
-                    ->toggleable(isToggledHiddenByDefault: false)
-                    ->searchable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('size')
                     ->label('Size')
-                    ->alignRight()
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->formatStateUsing(function ($state) {
-                        $bytes = (int) ($state ?? 0);
-                        if ($bytes <= 0) return '—';
+                    ->formatStateUsing(fn($state) => number_format(((int) $state) / 1024, 1) . ' KB')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
-                        $kb = $bytes / 1024;
-                        if ($kb < 1024) {
-                            return number_format($kb, 1) . ' KB';
-                        }
-
-                        $mb = $kb / 1024;
-                        return number_format($mb, 2) . ' MB';
-                    }),
+                TextColumn::make('folders')
+                    ->label('Folder')
+                    ->getStateUsing(function (Media $record) {
+                        $folders = $record->folders()->pluck('name')->all();
+                        return $folders ? implode(', ', $folders) : 'Uncategorized';
+                    })
+                    ->toggleable(),
 
                 TextColumn::make('created_at')
-                    ->label('Uploaded')
                     ->since()
                     ->sortable(),
             ])
             ->filters([
-                SelectFilter::make('mime_group')
+                // ✅ Images / Video / PDF
+                SelectFilter::make('type')
                     ->label('Type')
                     ->options([
-                        'image' => 'Images',
-                        'video' => 'Videos',
-                        'audio' => 'Audio',
-                        'application' => 'Documents',
+                        'images' => 'Images',
+                        'video' => 'Video',
+                        'pdf' => 'PDF',
+                        'other' => 'Other',
                     ])
-                    ->query(function ($query, array $data) {
+                    ->query(function (Builder $query, array $data) {
                         $value = $data['value'] ?? null;
-                        if (! $value) {
+
+                        return match ($value) {
+                            'images' => $query->where('mime_type', 'like', 'image/%'),
+                            'video' => $query->where('mime_type', 'like', 'video/%'),
+                            'pdf' => $query->where('mime_type', '=', 'application/pdf'),
+                            'other' => $query->where(function (Builder $q) {
+                                    $q->where('mime_type', 'not like', 'image/%')
+                                    ->where('mime_type', 'not like', 'video/%')
+                                    ->where('mime_type', '!=', 'application/pdf');
+                                }),
+                            default => $query,
+                        };
+                    }),
+
+                // ✅ Folder filter
+                SelectFilter::make('folder')
+                    ->label('Folder')
+                    ->options(function (): array {
+                        $taxonomyId = Taxonomy::query()->where('key', 'media_folder')->value('id');
+                        if (!$taxonomyId) {
+                            return [];
+                        }
+
+                        return Term::query()
+                            ->where('taxonomy_id', $taxonomyId)
+                            ->orderBy('name')
+                            ->pluck('name', 'id')
+                            ->all();
+                    })
+                    ->query(function (Builder $query, array $data) {
+                        $folderId = (int) ($data['value'] ?? 0);
+                        if ($folderId <= 0) {
                             return $query;
                         }
 
-                        return $query->where('mime_type', 'like', $value . '/%');
+                        return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', $folderId));
                     }),
-            ])
-            ->recordActions([
-                EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
+
+                // ✅ Date range filter
+                Filter::make('date')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('From'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Until'),
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        return $query
+                            ->when($data['from'] ?? null, fn(Builder $q, $date) => $q->whereDate('created_at', '>=', $date))
+                            ->when($data['until'] ?? null, fn(Builder $q, $date) => $q->whereDate('created_at', '<=', $date));
+                    }),
             ])
             ->defaultSort('id', 'desc');
     }

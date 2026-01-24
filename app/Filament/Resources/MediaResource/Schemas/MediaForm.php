@@ -2,67 +2,121 @@
 
 namespace App\Filament\Resources\MediaResource\Schemas;
 
-use App\Models\Media;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Components\Section;
+
+use Filament\Forms\Components\Select;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Str;
+use Filament\Schemas\Components\Section;
 
 class MediaForm
 {
     public static function configure(Schema $schema): Schema
     {
+        $maxMb = (int) config('cms-media.max_upload_mb', 50);
+
         return $schema
             ->columns([
                 'default' => 1,
-                'lg' => 3,
+                'lg' => 1, // full width
             ])
             ->components([
-                // LEFT (2/3)
                 Section::make('Upload')
-                    ->columnSpan([
-                        'default' => 1,
-                        'lg' => 2,
-                    ])
+                    ->columnSpanFull()
                     ->schema([
-                        // ✅ WP-like multi uploader (Create only)
+                        Select::make('folder_term_id')
+                            ->label('Folder (optional)')
+                            ->helperText('Upload into a folder like WordPress. Leave empty for Uncategorized.')
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->options(function (): array {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_folder'],
+                                    ['label' => 'Media Folders', 'hierarchical' => true],
+                                )->id;
+
+                                return Term::query()
+                                    ->where('taxonomy_id', $taxonomyId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->all();
+                            })
+                            ->createOptionForm([
+                                \Filament\Forms\Components\TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, callable $set) {
+                                        $set('slug', Str::slug((string) $state));
+                                    }),
+
+                                \Filament\Forms\Components\TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->maxLength(255),
+
+                                Select::make('parent_id')
+                                    ->label('Parent Folder (optional)')
+                                    ->searchable()
+                                    ->preload()
+                                    ->nullable()
+                                    ->options(function (): array {
+                                        $taxonomyId = Taxonomy::where('key', 'media_folder')->value('id');
+                                        if (!$taxonomyId) {
+                                            return [];
+                                        }
+
+                                        return Term::query()
+                                            ->where('taxonomy_id', $taxonomyId)
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->all();
+                                    }),
+                            ])
+                            ->createOptionUsing(function (array $data) {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_folder'],
+                                    ['label' => 'Media Folders', 'hierarchical' => true],
+                                )->id;
+
+                                $base = filled($data['slug'] ?? null)
+                                    ? Str::slug((string) $data['slug'])
+                                    : Str::slug((string) ($data['name'] ?? ''));
+
+                                $base = $base !== '' ? $base : 'folder';
+
+                                $slug = $base;
+                                $i = 2;
+
+                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                                    $slug = $base . '-' . $i;
+                                    $i++;
+                                }
+
+                                $term = Term::create([
+                                    'taxonomy_id' => $taxonomyId,
+                                    'name' => (string) $data['name'],
+                                    'slug' => $slug,
+                                    'parent_id' => $data['parent_id'] ?? null,
+                                ]);
+
+                                return $term->getKey();
+                            }),
+
                         FileUpload::make('files')
                             ->label('Upload files')
+                            ->required()
                             ->multiple()
-                            ->required(fn (?Media $record) => $record === null)
-                            ->visible(fn (?Media $record) => $record === null) // hide on edit
-                            ->storeFiles(false) // IMPORTANT: keep TemporaryUploadedFile objects
-                            ->maxSize((int) config('cms-media.max_upload_mb', 50) * 1024)
-                            ->helperText('Drag & drop multiple files (WordPress style).'),
-
-                        // simple note on create
-                        Placeholder::make('hint')
-                            ->visible(fn (?Media $record) => $record === null)
-                            ->content('After upload, items will appear in the Media list. Click any item to edit details.'),
-                    ]),
-
-                // RIGHT (1/3) - Metadata (Edit)
-                Section::make('Details')
-                    ->columnSpan([
-                        'default' => 1,
-                        'lg' => 1,
-                    ])
-                    ->visible(fn (?Media $record) => $record !== null) // only on edit
-                    ->schema([
-                        TextInput::make('title')
-                            ->maxLength(255),
-
-                        TextInput::make('alt')
-                            ->label('Alt text')
-                            ->maxLength(255),
-
-                        Textarea::make('caption')
-                            ->rows(3),
-
-                        Textarea::make('description')
-                            ->rows(5),
+                            ->storeFiles(false) // ✅ IMPORTANT: keep TemporaryUploadedFile objects
+                            ->reorderable()
+                            ->appendFiles()
+                            ->imagePreviewHeight('120')
+                            ->panelLayout('grid') // ✅ grid preview (much better than tall list)
+                            ->maxSize($maxMb * 1024)
+                            ->helperText("Drag & drop. Max upload size: {$maxMb} MB each.")
+                            ->columnSpanFull(),
                     ]),
             ]);
     }
