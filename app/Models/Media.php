@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Cms\Media\MediaUploader;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -33,6 +34,21 @@ class Media extends Model
     protected $casts = [
         'meta' => 'array',
     ];
+
+    /**
+     * ✅ Automatically delete original + variants from disk when a Media record is deleted.
+     * Works for: single delete, bulk delete, deleting from Edit page, etc.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (self $media): void {
+            // Delete files from disk (original + variants)
+            app(MediaUploader::class)->deleteFiles($media);
+
+            // Delete variant DB rows (in case you don't have ON DELETE CASCADE)
+            $media->variants()->delete();
+        });
+    }
 
     public function uploader(): BelongsTo
     {
@@ -77,6 +93,7 @@ class Media extends Model
     public function variantUrl(string $key): ?string
     {
         $variant = $this->variants()->where('key', $key)->first();
+
         return $variant?->url();
     }
 
@@ -98,6 +115,7 @@ class Media extends Model
     public function clearFolderTerms(): void
     {
         $taxonomyId = $this->folderTaxonomyId();
+
         if (!$taxonomyId) {
             return;
         }
@@ -115,6 +133,7 @@ class Media extends Model
     public function syncFolderTerm(int $termId): void
     {
         $taxonomyId = $this->folderTaxonomyId();
+
         if (!$taxonomyId) {
             return;
         }

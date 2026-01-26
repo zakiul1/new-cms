@@ -23,12 +23,28 @@ class CreatePage extends CreateRecord
         /** @var Slugger $slugger */
         $slugger = app(Slugger::class);
 
-        // Slug optional:
-        // - if empty => generate from title
-        // - if given => sanitize + auto-rename if duplicate
         $data['slug'] = empty($data['slug'])
             ? $slugger->uniquePostSlug('page', (string) ($data['title'] ?? ''))
             : $slugger->uniqueFromSlug('page', (string) $data['slug']);
+
+        // ✅ Ensure JSON defaults exist
+        $data['meta_json'] = is_array($data['meta_json'] ?? null) ? $data['meta_json'] : [];
+        $data['content_json'] = is_array($data['content_json'] ?? null) ? $data['content_json'] : [];
+
+        $data['meta_json'] = array_replace_recursive([
+            'template' => 'default',
+            'parent_id' => null,
+            'menu_order' => 0,
+            'seo' => [
+                'title' => null,
+                'description' => null,
+            ],
+        ], $data['meta_json']);
+
+        // Ensure editor key exists
+        $data['content_json'] = array_replace_recursive([
+            'html' => $data['content_json']['html'] ?? '',
+        ], $data['content_json']);
 
         return $data;
     }

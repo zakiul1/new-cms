@@ -33,7 +33,9 @@
   },
   "files": [
     "app/Cms/helpers.php",
-    "app/Cms/Hooks/helpers.php"
+    "app/Cms/Hooks/helpers.php",
+    "app/Cms/Themes/theme_helpers.php"
+   
   ]
 },
 

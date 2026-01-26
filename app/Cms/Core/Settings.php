@@ -15,7 +15,7 @@ class Settings
     public function all(): array
     {
         // ✅ prevents crash + avoids repeated information_schema queries
-        if (! $this->settingsTableExists()) {
+        if (!$this->settingsTableExists()) {
             return [];
         }
 
@@ -30,13 +30,13 @@ class Settings
     {
         $all = $this->all();
 
-        if (! array_key_exists($key, $all)) {
+        if (!array_key_exists($key, $all)) {
             return $default;
         }
 
         $value = $all[$key];
 
-        if (! is_string($value)) {
+        if (!is_string($value)) {
             return $value;
         }
 
@@ -61,14 +61,18 @@ class Settings
 
     public function set(string $key, mixed $value): void
     {
-        if (! $this->settingsTableExists()) {
+        if (!$this->settingsTableExists()) {
             return;
         }
 
-        CmsSetting::query()->updateOrCreate(
+        CmsSetting::updateOrCreate(
             ['key' => $key],
-            ['value' => is_string($value) ? $value : json_encode($value)]
+            [
+                'group' => 'theme', // ✅ important
+                'value' => is_array($value) ? json_encode($value) : $value,
+            ]
         );
+
 
         Cache::forget(self::CACHE_KEY);
     }

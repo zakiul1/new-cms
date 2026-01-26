@@ -12,16 +12,8 @@ class EditPost extends EditRecord
 {
     protected static string $resource = PostResource::class;
 
-    /**
-     * Holds repeater rows from the form:
-     * [
-     *   ['media_id' => 12],
-     *   ['media_id' => 25],
-     * ]
-     *
-     * @var array<int, array<string, mixed>>
-     */
-    protected array $productGalleryItems = [];
+    /** @var int[] */
+    protected array $productMediaIds = [];
 
     public function getMaxContentWidth(): Width
     {
@@ -30,30 +22,25 @@ class EditPost extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // ✅ Load existing product images into repeater rows in correct pivot sort order
-        $ids = $this->record
+        // SAFEST load (works even if pluck('media.id') behaves weird)
+        $data['product_media_ids'] = $this->record
             ->productMedia()
-            ->orderBy('post_media.sort_order') // ensure correct order
-            ->pluck('media.id')
-            ->map(fn ($id) => (int) $id)
+            ->orderBy('post_media.sort_order')
+            ->get()
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
             ->all();
-
-        $data['product_gallery_items'] = array_map(
-            fn (int $id) => ['media_id' => $id],
-            $ids
-        );
 
         return $data;
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // ✅ Grab virtual repeater field (NOT in posts table)
-        $this->productGalleryItems = is_array($data['product_gallery_items'] ?? null)
-            ? $data['product_gallery_items']
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
             : [];
 
-        unset($data['product_gallery_items']);
+        unset($data['product_media_ids']);
 
         $data['type'] = 'post';
 
@@ -74,49 +61,34 @@ class EditPost extends EditRecord
 
     private function syncProductGallery(): void
     {
-        if (! $this->record) {
+        if (!$this->record) {
             return;
         }
 
-        // Extract IDs in the exact order of repeater rows
-        $ids = [];
-        foreach ($this->productGalleryItems as $row) {
-            $id = (int) ($row['media_id'] ?? 0);
-            if ($id > 0) {
-                $ids[] = $id;
-            }
-        }
-
-        // Remove duplicates but keep first occurrence order
+        // unique, keep order
         $seen = [];
-        $orderedUnique = [];
-        foreach ($ids as $id) {
-            if (isset($seen[$id])) {
+        $ids = [];
+        foreach ($this->productMediaIds as $id) {
+            if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
             $seen[$id] = true;
-            $orderedUnique[] = $id;
+            $ids[] = $id;
         }
 
-        // ✅ If none selected, remove ONLY product links (productMedia() is scoped)
-        if ($orderedUnique === []) {
+        if ($ids === []) {
             $this->record->productMedia()->detach();
             return;
         }
 
-        // Build sync payload with ordering + role
         $sync = [];
-        foreach ($orderedUnique as $i => $id) {
+        foreach ($ids as $i => $id) {
             $sync[$id] = [
                 'role' => 'product',
                 'sort_order' => $i,
             ];
         }
 
-        /**
-         * IMPORTANT:
-         * productMedia() MUST be scoped to role=product, otherwise sync() may affect other roles.
-         */
         $this->record->productMedia()->sync($sync);
     }
 

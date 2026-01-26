@@ -11,16 +11,8 @@ class CreatePost extends CreateRecord
 {
     protected static string $resource = PostResource::class;
 
-    /**
-     * Holds repeater rows from the form:
-     * [
-     *   ['media_id' => 12],
-     *   ['media_id' => 25],
-     * ]
-     *
-     * @var array<int, array<string, mixed>>
-     */
-    protected array $productGalleryItems = [];
+    /** @var int[] */
+    protected array $productMediaIds = [];
 
     public function getMaxContentWidth(): Width
     {
@@ -29,14 +21,12 @@ class CreatePost extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        // ✅ Grab virtual repeater field (NOT in posts table)
-        $this->productGalleryItems = is_array($data['product_gallery_items'] ?? null)
-            ? $data['product_gallery_items']
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
             : [];
 
-        unset($data['product_gallery_items']);
+        unset($data['product_media_ids']);
 
-        // core post defaults
         $data['type'] = 'post';
 
         if (empty($data['author_id']) && auth()->check()) {
@@ -62,51 +52,34 @@ class CreatePost extends CreateRecord
 
     private function syncProductGallery(): void
     {
-        if (! $this->record) {
+        if (!$this->record) {
             return;
         }
 
-        // Extract IDs in the exact order of repeater rows
-        $ids = [];
-        foreach ($this->productGalleryItems as $row) {
-            $id = (int) ($row['media_id'] ?? 0);
-            if ($id > 0) {
-                $ids[] = $id;
-            }
-        }
-
-        // Remove duplicates but keep first occurrence order
+        // unique, keep order
         $seen = [];
-        $orderedUnique = [];
-        foreach ($ids as $id) {
-            if (isset($seen[$id])) {
+        $ids = [];
+        foreach ($this->productMediaIds as $id) {
+            if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
             $seen[$id] = true;
-            $orderedUnique[] = $id;
+            $ids[] = $id;
         }
 
-        // ✅ Remove ONLY product-role items if empty
-        if ($orderedUnique === []) {
-            // productMedia() relationship should already be scoped to role=product
+        if ($ids === []) {
             $this->record->productMedia()->detach();
             return;
         }
 
-        // Build sync payload with ordering
         $sync = [];
-        foreach ($orderedUnique as $i => $id) {
+        foreach ($ids as $i => $id) {
             $sync[$id] = [
                 'role' => 'product',
                 'sort_order' => $i,
             ];
         }
 
-        /**
-         * IMPORTANT:
-         * - productMedia() should be a relationship scoped to pivot role=product
-         * - so sync() will only manage that subset and won't touch other pivot roles.
-         */
         $this->record->productMedia()->sync($sync);
     }
 }

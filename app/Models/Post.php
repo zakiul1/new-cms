@@ -7,9 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-
-use App\Models\Media;
-
+use Illuminate\Support\Facades\DB;
 
 class Post extends Model
 {
@@ -56,27 +54,59 @@ class Post extends Model
     {
         return $this->terms()->whereHas('taxonomy', fn($q) => $q->where('key', 'tag'));
     }
+
     public function featuredMedia(): BelongsTo
-{
-    return $this->belongsTo(Media::class, 'featured_media_id');
-}
+    {
+        return $this->belongsTo(Media::class, 'featured_media_id');
+    }
 
-public function productMedia(): BelongsToMany
-{
-    return $this->belongsToMany(Media::class, 'post_media')
-        ->withPivot(['role', 'sort_order'])
-        ->wherePivot('role', 'product')
-        ->orderBy('post_media.sort_order')
-        ->withTimestamps();
-}
-public function galleryMedia(): BelongsToMany
-{
-    return $this->belongsToMany(Media::class, 'post_media')
-        ->withPivot(['role', 'sort_order'])
-        ->wherePivot('role', 'gallery')
-        ->orderBy('post_media.sort_order')
-        ->withTimestamps();
-}
+    /**
+     * ✅ Base pivot relation (WRITE HERE)
+     */
+    public function mediaPivot(): BelongsToMany
+    {
+        return $this->belongsToMany(Media::class, 'post_media')
+            ->withPivot(['role', 'sort_order'])
+            ->withTimestamps();
+    }
 
+    /**
+     * ✅ Read relations (OK)
+     */
+    public function productMedia(): BelongsToMany
+    {
+        return $this->mediaPivot()
+            ->wherePivot('role', 'product')
+            ->orderBy('post_media.sort_order');
+    }
 
+    public function galleryMedia(): BelongsToMany
+    {
+        return $this->mediaPivot()
+            ->wherePivot('role', 'gallery')
+            ->orderBy('post_media.sort_order');
+    }
+
+    /**
+     * ✅ Sync media for a role (product/gallery) with sort_order
+     */
+    public function syncMediaRole(string $role, array $mediaIds): void
+    {
+        $role = trim($role);
+        $mediaIds = array_values(array_filter(array_map('intval', $mediaIds)));
+
+        DB::transaction(function () use ($role, $mediaIds) {
+            DB::table('post_media')
+                ->where('post_id', $this->id)
+                ->where('role', $role)
+                ->delete();
+
+            foreach ($mediaIds as $i => $id) {
+                $this->mediaPivot()->attach($id, [
+                    'role' => $role,
+                    'sort_order' => $i + 1,
+                ]);
+            }
+        });
+    }
 }

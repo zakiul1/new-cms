@@ -5,30 +5,24 @@
     $record = $getRecord();
 
     $title = (string) ($record->title ?: ($record->original_filename ?: 'Media #' . $record->id));
-    $thumb = $record->thumbUrl();
+    $thumb = $record->thumbUrl() ?: $record->url();
 
     $sizeKb = number_format(((int) $record->size) / 1024, 1);
     $timeText = optional($record->created_at)->diffForHumans() ?: '';
 
-    // tiny label for the corner badge (optional)
     $type = (string) ($record->mime_type ?: 'application/octet-stream');
     $typeLabel = strtoupper((string) strtok($type, '/'));
+
+    $editUrl = \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $record]);
 @endphp
 
 <div class="w-full min-w-0 max-w-full">
-    {{-- Premium tile: no shadow, clean border, consistent size --}}
-    <div
-        class="group flex w-full min-w-0 max-w-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {{-- Square thumb --}}
-        <div class="relative w-full aspect-square overflow-hidden bg-gray-100">
-            @if ($thumb)
-                <img src="{{ $thumb }}" alt="" loading="lazy"
-                    class="absolute inset-0 h-full w-full object-contain p-3" />
-            @else
-                <div class="flex h-full w-full items-center justify-center text-xs text-gray-400">
-                    Processing…
-                </div>
-            @endif
+    {{-- ✅ WHOLE TILE IS SQUARE --}}
+    <div class="group relative aspect-square w-full overflow-hidden rounded-xl bg-white ">
+        {{-- Top: image region (always square-ish inside tile) --}}
+        <div class="relative h-[72%] w-full overflow-hidden bg-gray-100">
+            <img src="{{ $thumb }}" alt="" loading="lazy"
+                class="absolute inset-0 h-full w-full object-cover" />
 
             {{-- Type badge --}}
             <div
@@ -36,32 +30,30 @@
                 {{ $typeLabel }}
             </div>
 
-            {{-- Hover actions (won't break layout, stays inside) --}}
+            {{-- Hover actions --}}
             <div class="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-                <div class="absolute inset-0 bg-black/5"></div>
+                <div class="absolute inset-0 bg-black/10"></div>
 
                 <div class="pointer-events-auto absolute right-2 top-2 flex gap-2">
-                    {{-- NOTE: clicking tile already opens Preview via recordAction('preview') --}}
-                    {{-- These buttons are only for quick actions inside tile --}}
-                    <button type="button"
+                    <a href="{{ $editUrl }}"
                         class="rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-800"
-                        onclick="event.stopPropagation();" title="Preview">
-                        Preview
-                    </button>
+                        onclick="event.stopPropagation();">
+                        Edit
+                    </a>
 
                     <a href="{{ $record->url() }}" target="_blank" rel="noopener"
                         class="rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-800"
-                        onclick="event.stopPropagation();" title="Open file">
+                        onclick="event.stopPropagation();">
                         View
                     </a>
                 </div>
             </div>
         </div>
 
-        {{-- Meta (always contained, always same rhythm) --}}
-        <div class="px-2 py-2 min-w-0">
+        {{-- Bottom: meta region (fixed height, never grows) --}}
+        <div class="h-[28%] w-full px-2 py-2 min-w-0">
             <div class="truncate text-xs font-semibold text-gray-900" title="{{ $title }}">
-                {{ Str::limit($title, 34) }}
+                {{ Str::limit($title, 40) }}
             </div>
 
             <div class="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-gray-500 min-w-0">

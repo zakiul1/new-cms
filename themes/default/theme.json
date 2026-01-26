@@ -1,5 +1,12 @@
 {
   "name": "Default Theme",
   "slug": "default",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "author": "Your team",
+  "description": "Default CMS theme",
+  "screenshot": "dist/preview.png",
+  "assets": {
+    "styles": ["dist/theme.css"],
+    "scripts": [{ "src": "dist/theme.js", "defer": true }]
+  }
 }

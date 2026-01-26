@@ -1,17 +1,8 @@
-<!doctype html>
-<html lang="en">
+@extends('theme::layouts.app')
 
-<head>
-    <meta charset="utf-8">
-    <title>CMS Home</title>
-    {!! cms_assets()->renderStyles() !!}
-</head>
+@section('title', 'CMS Home')
 
-<body>
+@section('content')
     <h1>It works ✅</h1>
     <p>Active theme: <strong>{{ app(\App\Cms\Themes\ThemeManager::class)->activeSlug() }}</strong></p>
-
-    {!! cms_assets()->renderScripts() !!}
-</body>
-
-</html>
+@endsection

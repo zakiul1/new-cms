@@ -108,10 +108,10 @@ class MediaUploader
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
-        // Remove old variants files + records
-        $media->loadMissing('variants');
+        // ✅ Remove old variants files + records (SAFE ALWAYS)
+        $variants = $media->variants()->get();
 
-        foreach ($media->variants as $variant) {
+        foreach ($variants as $variant) {
             $variantPath = trim((string) $variant->directory, '/') . '/' . (string) $variant->filename;
             Storage::disk((string) $variant->disk)->delete($variantPath);
         }
@@ -130,7 +130,6 @@ class MediaUploader
             'width' => $w,
             'height' => $h,
             'sha1' => $sha1,
-            // keep title as-is (user may have edited)
         ]);
 
         // Regenerate variants if image
@@ -140,6 +139,7 @@ class MediaUploader
 
         return $media->refresh();
     }
+
 
     /**
      * Optional helper: delete original + variants from disk.

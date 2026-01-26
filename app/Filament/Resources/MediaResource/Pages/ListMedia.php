@@ -136,7 +136,39 @@ class ListMedia extends ListRecords
                         ->options(fn() => $this->folderOptions())
                         ->searchable()
                         ->preload()
-                        ->nullable(),
+                        ->nullable()
+                        ->createOptionForm([
+                            TextInput::make('name')
+                                ->label('Folder name')
+                                ->required()
+                                ->maxLength(255),
+
+                            Select::make('parent_id')
+                                ->label('Parent (optional)')
+                                ->searchable()
+                                ->preload()
+                                ->options(fn() => $this->folderOptions())
+                                ->nullable(),
+                        ])
+                        ->createOptionUsing(function (array $data): int {
+                            $taxonomy = Taxonomy::ensure('media_folder', 'Media Folders', true);
+
+                            $term = Term::create([
+                                'taxonomy_id' => $taxonomy->id,
+                                'name' => (string) $data['name'],
+                                'parent_id' => filled($data['parent_id'] ?? null) ? (int) $data['parent_id'] : null,
+                            ]);
+
+                            return (int) $term->id;
+                        })
+                        ->helperText('You can create a folder here, or manage folders from “Media Folders”.'),
+
+                    Action::make('folders')
+                        ->label('Folders')
+                        ->icon('heroicon-o-folder')
+                        ->color('gray')
+                        ->url(\App\Filament\Resources\MediaFolderResource::getUrl('index'))
+                        ->openUrlInNewTab(),
 
                     FileUpload::make('files')
                         ->label('Drop files here')
@@ -191,7 +223,7 @@ class ListMedia extends ListRecords
                     $this->resetTable();
                 }),
 
-            CreateAction::make()->label('Add New'),
+            /*   CreateAction::make()->label('Add New'), */
         ];
     }
 
@@ -414,18 +446,17 @@ class ListMedia extends ListRecords
                     'default' => 2,
                     'sm' => 3,
                     'md' => 4,
-                    'lg' => 6,
-                    'xl' => 6,
-                    '2xl' => 6,
+                    'lg' => 5,
+                    'xl' => 5,
+                    '2xl' => 5,
                 ])
-                // clicking tile opens preview
                 ->recordAction('preview')
                 ->actions([
                     $this->previewAction(),
                 ])
-                // only show bulk actions + selection when Select mode is enabled
                 ->bulkActions($this->selectMode ? $bulkActions : []);
         }
+
 
         // ✅ LIST MODE
         return $table

@@ -2,36 +2,23 @@
     /** @var \App\Models\Media $record */
 
     $url = $record->url();
-
-    // ✅ Cache-bust so after "Replace file" you see the new image instantly
-    $version = optional($record->updated_at)->timestamp ?: time();
-
-    // Prefer thumb, fallback to original
     $thumb = $record->thumbUrl() ?: $url;
 
     $type = (string) ($record->mime_type ?: 'application/octet-stream');
-    $typeBadge = strtoupper(strtok($type, '/'));
-
     $sizeKb = number_format(((int) $record->size) / 1024, 1);
+
     $dims = $record->width && $record->height ? "{$record->width} × {$record->height}" : '—';
+
+    // ✅ cache buster (changes after replace because updated_at changes)
+    $v = optional($record->updated_at)->timestamp ?: time();
 @endphp
 
 <div class="space-y-4">
-    {{-- ✅ Preview (fixed height, no overflow, premium + badge) --}}
     <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <div class="relative h-[340px] w-full overflow-hidden rounded-lg bg-white">
-            {{-- type + dimensions badge --}}
-            <div
-                class="absolute left-3 top-3 z-10 rounded-md border border-gray-200 bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-700">
-                {{ $typeBadge }}
-                @if ($dims !== '—')
-                    <span class="ml-2 text-gray-400">{{ $dims }}</span>
-                @endif
-            </div>
-
+        <div class="h-[340px] w-full overflow-hidden rounded-lg bg-white">
             @if ($record->isImage())
-                <img src="{{ $thumb }}?v={{ $version }}" alt=""
-                    class="absolute inset-0 h-full w-full object-contain p-4" loading="lazy" decoding="async" />
+                <img src="{{ $thumb }}?v={{ $v }}" alt="" class="h-full w-full object-contain"
+                    loading="lazy" />
             @else
                 <div class="flex h-full w-full items-center justify-center text-sm text-gray-600">
                     Preview not available for this file type.
@@ -40,7 +27,6 @@
         </div>
     </div>
 
-    {{-- Info --}}
     <div class="rounded-xl border border-gray-200 bg-white p-3">
         <div class="text-sm font-semibold text-gray-900">File info</div>
 

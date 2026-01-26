@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Posts\Schemas;
 
 use App\Filament\Forms\Components\MediaPicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -47,14 +48,15 @@ class PostForm
                         Textarea::make('excerpt')
                             ->rows(6),
 
-                        // ✅ WP-like Product Gallery (multiple) via Media Browser
-                        // This is a VIRTUAL field (not in posts table)
-                        // It will be saved in CreatePost/EditPost to post_media pivot.
-                        MediaPicker::make('product_media_ids')
-                            ->label('Product Gallery')
-                            ->multiple()
-                            ->maxItems(20)
-                            ->dehydrated(false),
+                        // ✅ Editor
+                        // NOTE: RichEditor has NO minHeight() in Filament v5.
+                        // Use extraAttributes for height.
+                        RichEditor::make('content_json')
+                            ->label('Content')
+                            ->columnSpanFull()
+                            ->extraAttributes([
+                                'style' => 'min-height: 420px;',
+                            ]),
                     ]),
 
                 // RIGHT (1/3)
@@ -64,10 +66,16 @@ class PostForm
                         'lg' => 1,
                     ])
                     ->schema([
-                        // ✅ Featured Image (single) via Media Browser
                         MediaPicker::make('featured_media_id')
                             ->label('Featured Image')
                             ->modalHeading('Featured image'),
+
+                        // ✅ Product Gallery (multiple) — RIGHT under featured image
+                        MediaPicker::make('product_media_ids')
+                            ->label('Product Gallery')
+                            ->multiple()
+                            ->maxItems(20),
+                        // IMPORTANT: do NOT use ->dehydrated(false)
 
                         Select::make('categories')
                             ->label('Categories')
