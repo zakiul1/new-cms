@@ -288,7 +288,7 @@ class ListMedia extends ListRecords
                     ->label('')
                     ->content(function (Media $record): string {
                         return view('filament.media.preview-pane', [
-                            'record' => $record->loadMissing(['variants', 'terms']),
+                            'record' => $record->loadMissing(['variantRecords', 'terms']),
                         ])->render();
                     })
                     ->columnSpanFull(),
@@ -374,7 +374,8 @@ class ListMedia extends ListRecords
         $bulkActions = $this->buildBulkActions();
 
         $table = $table
-            ->modifyQueryUsing(fn(Builder $query) => $query->with(['variants', 'terms']))
+           ->modifyQueryUsing(fn(Builder $query) => $query->with(['variantRecords', 'terms']))
+
             ->defaultSort('id', 'desc')
             ->searchDebounce(400)
             ->persistSearchInSession()

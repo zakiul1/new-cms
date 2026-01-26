@@ -1,6 +1,21 @@
 {
-  "name": "Hello Plugin",
-  "slug": "hello",
-  "version": "1.0.0",
-  "bootstrap": "bootstrap.php"
+    "name": "Hello Plugin",
+    "slug": "hello",
+    "version": "1.0.0",
+    "bootstrap": "bootstrap.php",
+    "description": "Demo plugin with shortcode + settings",
+    "author": "Md Jakiul Islam",
+    "assets": {
+        "styles": ["dist/plugin.css"],
+        "scripts": [
+            { "src": "dist/plugin.js", "defer": true }
+        ]
+    },
+    "settings": {
+        "group": "plugin:hello",
+        "fields": [
+            { "key": "enabled", "type": "toggle", "label": "Enable Hello Plugin", "default": true },
+            { "key": "message", "type": "text", "label": "Default Message", "default": "Hello from plugin!" }
+        ]
+    }
 }

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Storage;
 
 class MediaVariant extends Model
 {
+    protected $table = 'media_variants';
+
     protected $fillable = [
         'media_id',
         'key',
@@ -20,6 +22,13 @@ class MediaVariant extends Model
         'height',
     ];
 
+    protected $casts = [
+        'media_id' => 'integer',
+        'size' => 'integer',
+        'width' => 'integer',
+        'height' => 'integer',
+    ];
+
     public function media(): BelongsTo
     {
         return $this->belongsTo(Media::class);
@@ -27,11 +36,16 @@ class MediaVariant extends Model
 
     public function path(): string
     {
-        return trim($this->directory, '/') . '/' . $this->filename;
+        $dir = trim((string) $this->directory, '/');
+        $file = ltrim((string) $this->filename, '/');
+
+        return $dir === '' ? $file : "{$dir}/{$file}";
     }
 
-    public function url(): string
-    {
-        return Storage::disk($this->disk)->url($this->path());
-    }
+   public function url(): string
+{
+    $disk = (string) ($this->disk ?: 'public');
+    return Storage::disk($disk)->url($this->path());
+}
+
 }

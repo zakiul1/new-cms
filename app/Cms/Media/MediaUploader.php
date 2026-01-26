@@ -42,15 +42,14 @@ class MediaUploader
         // Compute width/height for images
         [$w, $h] = $this->imageSizeIfAny($file, $mime);
 
-        // ✅ Dedupe: if same file already exists, reuse record
+        // ✅ Dedupe
         if ((bool) config('cms-media.dedupe', true) && $sha1) {
             $existing = Media::query()
                 ->where('sha1', $sha1)
                 ->where('size', $sizeBytes)
                 ->first();
 
-            // If record exists and file is present, reuse it
-            if ($existing && Storage::disk((string) $existing->disk)->exists($existing->path())) {
+            if ($existing && Storage::disk((string) ($existing->disk ?: 'public'))->exists($existing->path())) {
                 return $existing;
             }
         }
@@ -82,13 +81,13 @@ class MediaUploader
     }
 
     /**
-     * ✅ Replace the original file but keep the same Media record (WP-like).
+     * ✅ Replace original file but keep same Media record (WP-like)
      *
      * @param  UploadedFile|TemporaryUploadedFile  $file
      */
     public function replace(Media $media, UploadedFile $file): Media
     {
-        $disk = (string) $media->disk;
+        $disk = (string) ($media->disk ?: 'public');
         $dir = trim((string) $media->directory, '/');
         $maxMb = (int) config('cms-media.max_upload_mb', 50);
 
@@ -104,21 +103,24 @@ class MediaUploader
         $sha1 = $this->sha1OfUploadedFile($file);
         [$w, $h] = $this->imageSizeIfAny($file, $mime);
 
-        // Store new original first (safety)
+        // Store new original first
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
-        // ✅ Remove old variants files + records (SAFE ALWAYS)
-        $variants = $media->variants()->get();
+        // ✅ Remove old variant files + records
+        $variantRows = $media->variantRecords()->get();
 
-        foreach ($variants as $variant) {
-            $variantPath = trim((string) $variant->directory, '/') . '/' . (string) $variant->filename;
-            Storage::disk((string) $variant->disk)->delete($variantPath);
+        foreach ($variantRows as $variant) {
+            $variantPath = trim((string) $variant->directory, '/')
+                . '/'
+                . ltrim((string) $variant->filename, '/');
+
+            Storage::disk((string) ($variant->disk ?: 'public'))->delete($variantPath);
         }
 
-        $media->variants()->delete();
+        $media->variantRecords()->delete();
 
-        // Remove old original AFTER new save succeeded
+        // Remove old original AFTER new stored
         Storage::disk($disk)->delete($oldPath);
 
         // Update DB
@@ -132,7 +134,6 @@ class MediaUploader
             'sha1' => $sha1,
         ]);
 
-        // Regenerate variants if image
         if ($media->isImage()) {
             $this->dispatchVariantsJob($media->id, true);
         }
@@ -140,23 +141,22 @@ class MediaUploader
         return $media->refresh();
     }
 
-
     /**
-     * Optional helper: delete original + variants from disk.
-     * You can call this before deleting the DB record.
+     * Delete original + variants from disk.
      */
     public function deleteFiles(Media $media): void
     {
-        $media->loadMissing('variants');
+        $variantRows = $media->variantRecords()->get();
 
-        // delete variants
-        foreach ($media->variants as $variant) {
-            $variantPath = trim((string) $variant->directory, '/') . '/' . (string) $variant->filename;
-            Storage::disk((string) $variant->disk)->delete($variantPath);
+        foreach ($variantRows as $variant) {
+            $variantPath = trim((string) $variant->directory, '/')
+                . '/'
+                . ltrim((string) $variant->filename, '/');
+
+            Storage::disk((string) ($variant->disk ?: 'public'))->delete($variantPath);
         }
 
-        // delete original
-        Storage::disk((string) $media->disk)->delete($media->path());
+        Storage::disk((string) ($media->disk ?: 'public'))->delete($media->path());
     }
 
     private function dispatchVariantsJob(int $mediaId, bool $force): void
@@ -165,7 +165,6 @@ class MediaUploader
 
         $job = GenerateMediaVariants::dispatch($mediaId, $force);
 
-        // If queue enabled, respect configured connection/queue name.
         if ($queueEnabled) {
             $connection = (string) config('cms-media.queue.connection', config('queue.default'));
             $queue = (string) config('cms-media.queue.queue', 'media');

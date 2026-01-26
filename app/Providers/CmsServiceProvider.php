@@ -5,10 +5,13 @@ namespace App\Providers;
 use App\Cms\Assets\AssetManager;
 use App\Cms\Content\Blocks\BlockRegistry;
 use App\Cms\Content\Blocks\BlockRenderer;
+use App\Cms\Content\Shortcodes\ShortcodeParser;
+use App\Cms\Content\Shortcodes\ShortcodeRegistry;
 use App\Cms\Core\SafeMode;
 use App\Cms\Core\Settings;
 use App\Cms\Hooks\Hooks;
 use App\Cms\Hooks\HookPoints;
+use App\Cms\Plugins\PluginManifestReader;
 use App\Cms\Plugins\PluginManager;
 use App\Cms\Themes\ThemeInstaller;
 use App\Cms\Themes\ThemeManifestReader;
@@ -28,9 +31,18 @@ class CmsServiceProvider extends ServiceProvider
         $this->app->singleton(SafeMode::class);
 
         // Plugins
+        $this->app->singleton(PluginManifestReader::class);
         $this->app->singleton(PluginManager::class);
+        $this->app->singleton(\App\Cms\Plugins\PluginPublisher::class);
+        $this->app->singleton(\App\Cms\Plugins\PluginInstaller::class);
+        $this->app->singleton(\App\Cms\Plugins\PluginUninstaller::class);
+        $this->app->singleton(\App\Cms\Plugins\PluginLifecycle::class);
+        $this->app->singleton(\App\Cms\Plugins\PluginSettingsSchema::class);
 
-        // Themes (Part 1–4)
+
+
+
+        // Themes
         $this->app->singleton(ThemeManifestReader::class);
         $this->app->singleton(ThemePublisher::class);
         $this->app->singleton(ThemeInstaller::class);
@@ -39,48 +51,67 @@ class CmsServiceProvider extends ServiceProvider
         // Blocks
         $this->app->singleton(BlockRegistry::class);
         $this->app->singleton(BlockRenderer::class);
+
+        // Shortcodes
+        $this->app->singleton(ShortcodeRegistry::class);
+        $this->app->singleton(ShortcodeParser::class);
+
+      $this->app->singleton(PluginPublisher::class);
+
+
     }
 
     public function boot(): void
     {
-        // ✅ CRITICAL: avoid DB/settings/theme/plugin boot during artisan/composer scripts
-        if ($this->app->runningInConsole()) {
-            return;
-        }
-
         /** @var Hooks $hooks */
         $hooks = $this->app->make(Hooks::class);
 
-        /** @var SafeMode $safeMode */
-        $safeMode = $this->app->make(SafeMode::class);
-
-        // Request exists in HTTP only (we already skipped console)
-        $request = $this->app->make('request');
-
-        // Safe mode from request/session (only valid in HTTP)
-        $safeMode->maybeEnableFromRequest($request);
-
-        // Booting hook
+        // Booting hook (safe in console)
         $hooks->doAction(HookPoints::CMS_BOOT);
 
-        // Plugins (skip if safe mode)
-        if (!$safeMode->isEnabled($request)) {
-            $this->app->make(PluginManager::class)->bootEnabledPlugins();
-        }
+        // Content pipeline (shortcodes)
+        $this->registerContentPipeline($hooks);
 
-        // Theme (loads views + ensures active theme valid + republishes dist if missing)
+        // ✅ IMPORTANT: Plugins are booted EARLY in AppServiceProvider::register()
+        // so they can register routes via CMS_ROUTES.
+        // DO NOT boot plugins here.
+
+        // Theme: boot views / publish dist if missing
         $this->app->make(ThemeManager::class)->bootActiveTheme();
-        $this->app->make(ThemeManager::class)->enqueueActiveThemeAssets();
 
-
-        // Enqueue assets hook
-        $hooks->doAction(HookPoints::CMS_ENQUEUE_ASSETS);
-
-        // Register core blocks (HTTP only)
-        $this->registerCoreBlocks($this->app);
+        // Core blocks (HTTP only)
+        if (!$this->app->runningInConsole()) {
+            $this->registerCoreBlocks($this->app);
+        }
 
         // Booted hook
         $hooks->doAction(HookPoints::CMS_BOOTED);
+    }
+
+    private function registerContentPipeline(Hooks $hooks): void
+    {
+        /** @var ShortcodeRegistry $shortcodes */
+        $shortcodes = $this->app->make(ShortcodeRegistry::class);
+
+        // Built-in shortcodes
+        $shortcodes->register('year', fn () => (string) now()->year);
+
+        $shortcodes->register('button', function (array $attrs, ?string $content) {
+            $url = (string) ($attrs['url'] ?? '#');
+            $label = $content ?: (string) ($attrs['label'] ?? 'Click');
+            $blank = !empty($attrs['blank']);
+            $target = $blank ? ' target="_blank" rel="noopener"' : '';
+
+            return '<a href="'.e($url).'"'.$target.' class="btn">'.e($label).'</a>';
+        });
+
+        // Apply shortcodes through CMS_THE_CONTENT pipeline
+        $hooks->addFilter(HookPoints::CMS_THE_CONTENT, function ($html, $ctx = []) {
+            return app(ShortcodeParser::class)->render(
+                (string) $html,
+                is_array($ctx) ? $ctx : []
+            );
+        }, 20, 2);
     }
 
     private function registerCoreBlocks(Application $app): void
@@ -90,14 +121,14 @@ class CmsServiceProvider extends ServiceProvider
 
         $registry->register(
             'paragraph',
-            fn(array $data) => view('cms.blocks.paragraph', [
+            fn (array $data) => view('cms.blocks.paragraph', [
                 'text' => (string) ($data['text'] ?? ''),
             ])->render()
         );
 
         $registry->register(
             'heading',
-            fn(array $data) => view('cms.blocks.heading', [
+            fn (array $data) => view('cms.blocks.heading', [
                 'text' => (string) ($data['text'] ?? ''),
                 'level' => (int) ($data['level'] ?? 2),
             ])->render()

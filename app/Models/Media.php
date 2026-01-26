@@ -29,24 +29,26 @@ class Media extends Model
         'caption',
         'description',
         'meta',
+        // If you keep the json column:
+        'variants',
+        'processed_at',
     ];
 
     protected $casts = [
         'meta' => 'array',
+        // If you keep the json column:
+        'variants' => 'array',
+        'processed_at' => 'datetime',
     ];
 
-    /**
-     * ✅ Automatically delete original + variants from disk when a Media record is deleted.
-     * Works for: single delete, bulk delete, deleting from Edit page, etc.
-     */
     protected static function booted(): void
     {
         static::deleting(function (self $media): void {
             // Delete files from disk (original + variants)
             app(MediaUploader::class)->deleteFiles($media);
 
-            // Delete variant DB rows (in case you don't have ON DELETE CASCADE)
-            $media->variants()->delete();
+            // Delete variant DB rows
+            $media->variantRecords()->delete();
         });
     }
 
@@ -55,9 +57,15 @@ class Media extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    public function variants(): HasMany
+    /**
+     * ✅ IMPORTANT:
+     * We renamed this because you also have a column called "variants".
+     * So $media->variants would return the column value (null/array),
+     * not the relationship collection.
+     */
+    public function variantRecords(): HasMany
     {
-        return $this->hasMany(MediaVariant::class);
+        return $this->hasMany(MediaVariant::class, 'media_id');
     }
 
     public function terms(): MorphToMany
@@ -67,12 +75,13 @@ class Media extends Model
 
     public function path(): string
     {
-        return trim($this->directory, '/') . '/' . $this->filename;
+        return trim($this->directory, '/') . '/' . ltrim($this->filename, '/');
     }
 
     public function url(): string
     {
-        return Storage::disk($this->disk)->url($this->path());
+        $disk = (string) ($this->disk ?: 'public');
+        return Storage::disk($disk)->url($this->path());
     }
 
     public function isImage(): bool
@@ -92,14 +101,13 @@ class Media extends Model
 
     public function variantUrl(string $key): ?string
     {
-        $variant = $this->variants()->where('key', $key)->first();
-
+        $variant = $this->variantRecords()->where('key', $key)->first();
         return $variant?->url();
     }
 
     public function thumbUrl(): ?string
     {
-        // ✅ best UX: fallback to original while processing or if missing
+        // ✅ fallback to original if thumb missing
         return $this->variantUrl('thumb') ?: ($this->isImage() ? $this->url() : null);
     }
 
@@ -138,7 +146,6 @@ class Media extends Model
             return;
         }
 
-        // Ensure it's a folder term
         $isFolderTerm = Term::query()
             ->where('taxonomy_id', $taxonomyId)
             ->where('id', $termId)
@@ -148,7 +155,6 @@ class Media extends Model
             return;
         }
 
-        // WP-like: keep only ONE folder term
         $this->clearFolderTerms();
         $this->terms()->syncWithoutDetaching([$termId]);
     }

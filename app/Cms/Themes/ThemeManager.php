@@ -122,7 +122,8 @@ class ThemeManager
 
     public function activeSlug(): string
     {
-        $slug = (string) $this->settings->get('active_theme', 'default');
+        // ✅ active theme is core config
+        $slug = (string) $this->settings->get('active_theme', 'default', 'core');
         return $slug !== '' ? $slug : 'default';
     }
 
@@ -139,13 +140,15 @@ class ThemeManager
         }
 
         if (isset($themes['default'])) {
-            $this->settings->set('active_theme', 'default');
+            // ✅ group core
+            $this->settings->set('active_theme', 'default', 'core');
             return 'default';
         }
 
         if (!empty($themes)) {
             $first = array_key_first($themes);
-            $this->settings->set('active_theme', $first);
+            // ✅ group core
+            $this->settings->set('active_theme', $first, 'core');
             return $first;
         }
 
@@ -169,6 +172,11 @@ class ThemeManager
             $slug = $this->ensureActiveThemeValid();
         } catch (\Throwable) {
             $slug = array_key_first($themes);
+        }
+
+        // ✅ console-safe: do not touch request()/auth() in artisan
+        if (app()->runningInConsole()) {
+            return $slug;
         }
 
         // allow preview theme in customizer
@@ -264,7 +272,8 @@ class ThemeManager
             throw new RuntimeException("Theme not found: {$slug}");
         }
 
-        $this->settings->set('active_theme', $slug);
+        // ✅ group core
+        $this->settings->set('active_theme', $slug, 'core');
 
         // publish assets when activated
         $this->publisher->publish($slug);

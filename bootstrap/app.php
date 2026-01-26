@@ -11,8 +11,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // ✅ CMS enqueue middleware (runs after routing, before response is returned)
+        $middleware->web(append: [
+            \App\Http\Middleware\CmsEnqueueAssetsMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
-    })->create();
+    })
+    ->create();
