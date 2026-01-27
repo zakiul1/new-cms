@@ -11,8 +11,14 @@ use App\Cms\Core\SafeMode;
 use App\Cms\Core\Settings;
 use App\Cms\Hooks\Hooks;
 use App\Cms\Hooks\HookPoints;
+use App\Cms\Plugins\PluginFileManager;
+use App\Cms\Plugins\PluginInstaller;
+use App\Cms\Plugins\PluginLifecycle;
 use App\Cms\Plugins\PluginManifestReader;
 use App\Cms\Plugins\PluginManager;
+use App\Cms\Plugins\PluginPublisher;
+use App\Cms\Plugins\PluginSettingsSchema;
+use App\Cms\Plugins\PluginUninstaller;
 use App\Cms\Themes\ThemeInstaller;
 use App\Cms\Themes\ThemeManifestReader;
 use App\Cms\Themes\ThemeManager;
@@ -33,11 +39,13 @@ class CmsServiceProvider extends ServiceProvider
         // Plugins
         $this->app->singleton(PluginManifestReader::class);
         $this->app->singleton(PluginManager::class);
-        $this->app->singleton(\App\Cms\Plugins\PluginPublisher::class);
-        $this->app->singleton(\App\Cms\Plugins\PluginInstaller::class);
-        $this->app->singleton(\App\Cms\Plugins\PluginUninstaller::class);
-        $this->app->singleton(\App\Cms\Plugins\PluginLifecycle::class);
-        $this->app->singleton(\App\Cms\Plugins\PluginSettingsSchema::class);
+        $this->app->singleton(PluginPublisher::class);
+        $this->app->singleton(PluginInstaller::class);
+        $this->app->singleton(PluginUninstaller::class);
+        $this->app->singleton(PluginLifecycle::class);
+        $this->app->singleton(PluginSettingsSchema::class);
+        $this->app->singleton(PluginPublisher::class);
+        $this->app->singleton(PluginFileManager::class);
 
 
 
@@ -56,7 +64,8 @@ class CmsServiceProvider extends ServiceProvider
         $this->app->singleton(ShortcodeRegistry::class);
         $this->app->singleton(ShortcodeParser::class);
 
-      $this->app->singleton(PluginPublisher::class);
+
+
 
 
     }
@@ -94,7 +103,7 @@ class CmsServiceProvider extends ServiceProvider
         $shortcodes = $this->app->make(ShortcodeRegistry::class);
 
         // Built-in shortcodes
-        $shortcodes->register('year', fn () => (string) now()->year);
+        $shortcodes->register('year', fn() => (string) now()->year);
 
         $shortcodes->register('button', function (array $attrs, ?string $content) {
             $url = (string) ($attrs['url'] ?? '#');
@@ -102,7 +111,7 @@ class CmsServiceProvider extends ServiceProvider
             $blank = !empty($attrs['blank']);
             $target = $blank ? ' target="_blank" rel="noopener"' : '';
 
-            return '<a href="'.e($url).'"'.$target.' class="btn">'.e($label).'</a>';
+            return '<a href="' . e($url) . '"' . $target . ' class="btn">' . e($label) . '</a>';
         });
 
         // Apply shortcodes through CMS_THE_CONTENT pipeline
@@ -121,14 +130,14 @@ class CmsServiceProvider extends ServiceProvider
 
         $registry->register(
             'paragraph',
-            fn (array $data) => view('cms.blocks.paragraph', [
+            fn(array $data) => view('cms.blocks.paragraph', [
                 'text' => (string) ($data['text'] ?? ''),
             ])->render()
         );
 
         $registry->register(
             'heading',
-            fn (array $data) => view('cms.blocks.heading', [
+            fn(array $data) => view('cms.blocks.heading', [
                 'text' => (string) ($data['text'] ?? ''),
                 'level' => (int) ($data['level'] ?? 2),
             ])->render()

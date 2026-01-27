@@ -34,7 +34,8 @@
   "files": [
     "app/Cms/helpers.php",
     "app/Cms/Hooks/helpers.php",
-    "app/Cms/Themes/theme_helpers.php"
+    "app/Cms/Themes/theme_helpers.php",
+     "app/Cms/helpers_plugin_settings.php"
    
   ]
 },

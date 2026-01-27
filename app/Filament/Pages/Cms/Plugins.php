@@ -34,7 +34,7 @@ class Plugins extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->records(fn (): Collection => $this->pluginRecords())
+            ->records(fn(): Collection => $this->pluginRecords())
             ->columns([
                 TextColumn::make('name')->searchable(),
                 TextColumn::make('slug')->label('Slug')->searchable(),
@@ -44,8 +44,8 @@ class Plugins extends Page implements HasTable
             ])
             ->recordActions([
                 Action::make('toggle')
-                    ->label(fn (array $record) => $record['enabled'] ? 'Disable' : 'Enable')
-                    ->icon(fn (array $record) => $record['enabled'] ? 'heroicon-o-pause' : 'heroicon-o-play')
+                    ->label(fn(array $record) => $record['enabled'] ? 'Disable' : 'Enable')
+                    ->icon(fn(array $record) => $record['enabled'] ? 'heroicon-o-pause' : 'heroicon-o-play')
                     ->action(function (array $record) {
                         $plugins = app(PluginManager::class);
 
@@ -63,25 +63,32 @@ class Plugins extends Page implements HasTable
                 Action::make('publish')
                     ->label('Publish assets')
                     ->icon('heroicon-o-arrow-up-tray')
-                    ->visible(fn (array $record) => (bool) $record['has_assets'])
+                    ->visible(fn(array $record) => (bool) $record['has_assets'])
                     ->action(function (array $record) {
                         app(PluginPublisher::class)->publish($record['slug']);
                         Notification::make()->title('Assets published')->success()->send();
                     }),
                 Action::make('settings')
-    ->label('Settings')
-    ->icon('heroicon-o-cog-6-tooth')
-    ->visible(fn (array $record) => !empty(data_get($record, 'raw.settings.fields', [])))
-    ->url(fn (array $record) => \App\Filament\Pages\Cms\PluginSettings::getUrl() . '?slug=' . $record['slug'])
+                    ->label('Settings')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->visible(fn(array $record) => !empty(data_get($record, 'raw.settings.fields', [])))
+                    ->url(fn(array $record) => \App\Filament\Pages\Cms\PluginSettings::getUrl() . '?slug=' . $record['slug'])
 
-,
+                ,
+                Action::make('editor')
+                    ->label('Edit Files')
+                    ->icon('heroicon-o-code-bracket')
+                    ->url(fn(array $record) => \App\Filament\Pages\Cms\PluginEditor::getUrl() . '?slug=' . $record['slug'])
+                ,
+
+
 
 
                 Action::make('details')
                     ->label('Details')
                     ->icon('heroicon-o-information-circle')
                     ->modalHeading('Plugin details')
-                    ->modalContent(fn (array $record) => view(
+                    ->modalContent(fn(array $record) => view(
                         'filament.pages.cms.partials.plugin-details',
                         ['json' => json_encode($record['raw'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}']
                     ))

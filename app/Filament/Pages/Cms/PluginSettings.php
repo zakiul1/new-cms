@@ -15,9 +15,9 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-
 use RuntimeException;
+
+use Filament\Schemas\Schema;
 
 class PluginSettings extends Page implements HasForms
 {
@@ -27,7 +27,10 @@ class PluginSettings extends Page implements HasForms
     protected static string|\UnitEnum|null $navigationGroup = 'CMS';
     protected static ?string $title = 'Plugin Settings';
 
+    // ✅ do not use $slug (Page has static $slug)
     public string $pluginSlug = '';
+
+    // Form state
     public array $data = [];
 
     public function getView(): string
@@ -35,38 +38,26 @@ class PluginSettings extends Page implements HasForms
         return 'filament.pages.cms.plugin-settings';
     }
 
-    // ✅ Register the form name so $this->form exists
+    // ✅ this creates $this->form
     protected function getForms(): array
     {
-        return [
-            'form',
-        ];
+        return ['form'];
     }
 
+    // ✅ IMPORTANT: do NOT show in sidebar (needs ?slug=...)
     public static function shouldRegisterNavigation(): bool
     {
-        return true;
+        return false;
     }
 
     public function mount(): void
     {
         $this->pluginSlug = (string) request()->query('slug', '');
 
+        // If opened without slug, bounce back to Plugins page with a warning
         if ($this->pluginSlug === '') {
-            $plugins = app(PluginManager::class)->all();
-
-            foreach ($plugins as $slug => $manifest) {
-                $raw = is_array($manifest->raw ?? null) ? $manifest->raw : [];
-                $fields = $raw['settings']['fields'] ?? null;
-
-                if (is_array($fields) && !empty($fields)) {
-                    $this->redirect(static::getUrl() . '?slug=' . $slug);
-                    return;
-                }
-            }
-
             Notification::make()
-                ->title('No plugin settings available yet')
+                ->title('Missing plugin slug.')
                 ->warning()
                 ->send();
 
@@ -74,28 +65,28 @@ class PluginSettings extends Page implements HasForms
             return;
         }
 
+        // Load saved values into $this->data
         $this->fillFormFromStorage();
 
-        // ✅ IMPORTANT: fill the Filament form state too
+        // ✅ Also fill Filament form state
         $this->form->fill($this->data);
     }
 
-    public function form(Schema $schema): Schema
-{
-    $config = $this->schemaOrFail();
+    public function form(Schema $form): Schema
+    {
+        $config = $this->schemaOrFail();
 
-    return $schema
-        ->statePath('data')
-        ->schema($this->toFilamentFields($config['fields']));
-}
-
+        return $form
+            ->statePath('data')
+            ->schema($this->toFilamentFields($config['fields']));
+    }
 
     protected function getHeaderActions(): array
     {
         return [
             Action::make('save')
                 ->label('Save')
-                ->action(fn () => $this->save()),
+                ->action(fn() => $this->save()),
         ];
     }
 
@@ -104,8 +95,13 @@ class PluginSettings extends Page implements HasForms
         $schema = $this->schemaOrFail();
         $settings = app(Settings::class);
 
+        // ✅ Always read latest state from Filament form
+        $state = $this->form->getState();
+        $this->data = is_array($state) ? $state : [];
+
         foreach ($schema['fields'] as $f) {
             $key = $f['key'];
+
             $settings->set(
                 $key,
                 $this->data[$key] ?? ($f['default'] ?? null),
@@ -131,11 +127,14 @@ class PluginSettings extends Page implements HasForms
         $this->data = $state;
     }
 
+    /**
+     * @return array{group:string,fields:array<int,array<string,mixed>>}
+     */
     private function schemaOrFail(): array
     {
         $plugins = app(PluginManager::class);
 
-        // ⚠️ You must have this method in PluginManager
+        // ✅ PluginManager must have manifest($slug)
         $manifest = $plugins->manifest($this->pluginSlug);
 
         if (!$manifest) {
@@ -160,18 +159,13 @@ class PluginSettings extends Page implements HasForms
             $label = $f['label'] ?? $key;
             $helper = $f['helper'] ?? '';
             $required = (bool) ($f['required'] ?? false);
-
             $type = $f['type'] ?? 'text';
 
             if ($type === 'toggle') {
                 $c = Toggle::make($key)->label($label);
             } elseif ($type === 'select') {
                 $opts = $f['options'] ?? [];
-                if (is_array($opts)) {
-                    $opts = array_combine($opts, $opts) ?: [];
-                } else {
-                    $opts = [];
-                }
+                $opts = is_array($opts) ? (array_combine($opts, $opts) ?: []) : [];
                 $c = Select::make($key)->label($label)->options($opts);
             } elseif ($type === 'number') {
                 $c = TextInput::make($key)->label($label)->numeric();

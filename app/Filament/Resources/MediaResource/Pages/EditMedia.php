@@ -58,7 +58,7 @@ class EditMedia extends EditRecord
                                 }
 
                                 $html = view('filament.media.edit-preview', [
-                                    'record' => $record->loadMissing(['variants', 'terms']),
+                                    'record' => $record->loadMissing(['terms']),
                                 ])->render();
 
                                 return new HtmlString($html);

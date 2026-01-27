@@ -28,31 +28,37 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->maxContentWidth(Width::Full)
             ->login()
+            ->maxContentWidth(Width::Full)
             ->colors([
                 'primary' => Color::Amber,
             ])
 
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
+            ->discoverResources(
+                in: app_path('Filament/Resources'),
+                for: 'App\\Filament\\Resources'
+            )
 
-            // ✅ REMOVE auto-discover pages so deleted pages don't keep showing
-            // ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
-
-            // ✅ Register only Dashboard here (or any other pages you explicitly want)
+            // ✅ Explicit pages (no auto discover)
             ->pages([
                 Dashboard::class,
                 \App\Filament\Pages\Themes::class,
+
+                // CMS
                 \App\Filament\Pages\Cms\Plugins::class,
                 \App\Filament\Pages\Cms\PluginSettings::class,
-
+                \App\Filament\Pages\Cms\PluginEditor::class,
             ])
 
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
+            ->discoverWidgets(
+                in: app_path('Filament/Widgets'),
+                for: 'App\\Filament\\Widgets'
+            )
             ->widgets([
                 AccountWidget::class,
                 FilamentInfoWidget::class,
             ])
+
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -64,7 +70,9 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+
             ->viteTheme('resources/css/filament/admin/theme.css')
+
             ->authMiddleware([
                 Authenticate::class,
             ]);
