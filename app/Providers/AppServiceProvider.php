@@ -7,6 +7,7 @@ use App\Cms\Plugins\PluginManager;
 use App\Livewire\MediaBrowser;
 use App\Models\Post;
 use App\Observers\PostObserver;
+use App\Observers\PostSearchObserver;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
@@ -19,9 +20,11 @@ class AppServiceProvider extends ServiceProvider
     {
         // ✅ Boot enabled plugins EARLY so they can register routes via CMS_ROUTES hook.
         $this->app->booting(function () {
-            // In console we still want plugin routes available for route:cache
+            $pluginManager = $this->app->make(PluginManager::class);
+
+            // In console we still want plugin routes available for route:cache etc.
             if ($this->app->runningInConsole()) {
-                $this->app->make(PluginManager::class)->bootEnabledPlugins();
+                $pluginManager->bootEnabledPlugins();
                 return;
             }
 
@@ -31,7 +34,7 @@ class AppServiceProvider extends ServiceProvider
             $safeMode->maybeEnableFromRequest($request);
 
             if (!$safeMode->isEnabled($request)) {
-                $this->app->make(PluginManager::class)->bootEnabledPlugins();
+                $pluginManager->bootEnabledPlugins();
             }
         });
     }
@@ -41,8 +44,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // ✅ Model observers
         Post::observe(PostObserver::class);
 
+        // ✅ Search index observer (only if you created it)
+        if (class_exists(PostSearchObserver::class)) {
+            Post::observe(PostSearchObserver::class);
+        }
+
+        // ✅ Livewire components
         Livewire::component('media-browser', MediaBrowser::class);
     }
 }

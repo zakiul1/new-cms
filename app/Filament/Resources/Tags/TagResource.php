@@ -23,6 +23,9 @@ class TagResource extends Resource
     protected static ?string $navigationLabel = 'Tags';
     protected static ?int $navigationSort = 40;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Appearance';
+
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()

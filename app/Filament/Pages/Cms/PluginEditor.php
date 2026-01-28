@@ -24,8 +24,9 @@ class PluginEditor extends Page implements HasForms
     protected static ?string $slug = 'plugin-editor';
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-code-bracket';
-    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
+    protected static string|\UnitEnum|null $navigationGroup = 'Appearance';
     protected static ?string $title = 'Plugin Editor';
+
 
     public string $pluginSlug = '';
     public string $filePath = '';

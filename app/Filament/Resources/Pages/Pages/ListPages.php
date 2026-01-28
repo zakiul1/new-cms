@@ -16,11 +16,11 @@ class ListPages extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
-
+            // LEFT
             Action::make('publishAssets')
                 ->label('Publish Assets')
                 ->icon('heroicon-o-arrow-up-tray')
+                ->color('gray')
                 ->requiresConfirmation()
                 ->action(function () {
                     Artisan::call('cms:publish-assets', ['--clean' => true]);
@@ -31,6 +31,12 @@ class ListPages extends ListRecords
                         ->body(trim(Artisan::output()))
                         ->send();
                 }),
+
+            // RIGHT
+            CreateAction::make()
+                ->label('Create Page')
+                ->icon('heroicon-o-plus')
+                ->color('info'),
         ];
     }
 

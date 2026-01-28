@@ -20,7 +20,7 @@ class MediaFolderResource extends Resource
     // ✅ Filament v5 expects: UnitEnum|string|null
     protected static \UnitEnum|string|null $navigationGroup = 'Media';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 51;
 
     public static function getEloquentQuery(): Builder
     {

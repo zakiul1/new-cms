@@ -24,8 +24,9 @@ class PluginSettings extends Page implements HasForms
     use InteractsWithForms;
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-cog-6-tooth';
-    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
+    protected static string|\UnitEnum|null $navigationGroup = 'Appearance';
     protected static ?string $title = 'Plugin Settings';
+
 
     // ✅ do not use $slug (Page has static $slug)
     public string $pluginSlug = '';

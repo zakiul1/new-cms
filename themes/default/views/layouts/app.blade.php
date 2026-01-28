@@ -5,7 +5,75 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>@yield('title', 'CMS')</title>
+    @php
+        // $seo is passed from ContentRouterController (post/page)
+        // fallback values if $seo isn't present (home/other pages)
+$seoTitle = $seo['title'] ?? trim((string) view()->yieldContent('title', 'CMS'));
+$seoDesc = $seo['description'] ?? null;
+$seoCanonical = $seo['canonical'] ?? null;
+$seoRobots = $seo['robots'] ?? null;
+
+$og = $seo['og'] ?? [];
+$ogTitle = $og['title'] ?? $seoTitle;
+$ogDesc = $og['description'] ?? $seoDesc;
+$ogType = $og['type'] ?? 'website';
+$ogUrl = $og['url'] ?? $seoCanonical;
+
+// Optional: if later you add og:image support
+$ogImage = $og['image'] ?? null;
+
+// Twitter (basic)
+$tw = $seo['twitter'] ?? [];
+$twCard = $tw['card'] ?? 'summary_large_image';
+$twTitle = $tw['title'] ?? $ogTitle;
+$twDesc = $tw['description'] ?? $ogDesc;
+$twImage = $tw['image'] ?? $ogImage;
+
+// Optional JSON-LD block
+$jsonld = $seo['jsonld'] ?? null;
+    @endphp
+
+    <title>{{ $seoTitle }}</title>
+
+    @if (!empty($seoDesc))
+        <meta name="description" content="{{ $seoDesc }}">
+    @endif
+
+    @if (!empty($seoCanonical))
+        <link rel="canonical" href="{{ $seoCanonical }}">
+    @endif
+
+    @if (!empty($seoRobots))
+        <meta name="robots" content="{{ $seoRobots }}">
+    @endif
+
+    {{-- Open Graph --}}
+    <meta property="og:title" content="{{ $ogTitle }}">
+    @if (!empty($ogDesc))
+        <meta property="og:description" content="{{ $ogDesc }}">
+    @endif
+    <meta property="og:type" content="{{ $ogType }}">
+    @if (!empty($ogUrl))
+        <meta property="og:url" content="{{ $ogUrl }}">
+    @endif
+    @if (!empty($ogImage))
+        <meta property="og:image" content="{{ $ogImage }}">
+    @endif
+
+    {{-- Twitter --}}
+    <meta name="twitter:card" content="{{ $twCard }}">
+    <meta name="twitter:title" content="{{ $twTitle }}">
+    @if (!empty($twDesc))
+        <meta name="twitter:description" content="{{ $twDesc }}">
+    @endif
+    @if (!empty($twImage))
+        <meta name="twitter:image" content="{{ $twImage }}">
+    @endif
+
+    {{-- Optional JSON-LD (future premium ready) --}}
+    @if (is_array($jsonld))
+        <script type="application/ld+json">{!! json_encode($jsonld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
+    @endif
 
     {!! cms_assets()->renderStyles('frontend') !!}
     {!! theme_customizer_css() !!}

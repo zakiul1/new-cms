@@ -10,6 +10,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 
@@ -34,9 +35,15 @@ class PostForm
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, callable $set, Get $get) {
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                // slug fill (existing behavior)
                                 if (!filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
+                                }
+
+                                // ✅ SEO title fill (only if empty)
+                                if (!filled($get('meta_json.seo.title'))) {
+                                    $set('meta_json.seo.title', (string) $state);
                                 }
                             }),
 
@@ -46,17 +53,71 @@ class PostForm
                             ->maxLength(255),
 
                         Textarea::make('excerpt')
-                            ->rows(6),
+                            ->rows(3)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                // ✅ SEO description fill (only if empty)
+                                if (!filled($get('meta_json.seo.description'))) {
+                                    $text = trim((string) $state);
+                                    if ($text !== '') {
+                                        $set('meta_json.seo.description', Str::limit($text, 160, ''));
+                                    }
+                                }
+                            }),
 
                         // ✅ Editor
-                        // NOTE: RichEditor has NO minHeight() in Filament v5.
-                        // Use extraAttributes for height.
                         RichEditor::make('content_json')
                             ->label('Content')
                             ->columnSpanFull()
                             ->extraAttributes([
                                 'style' => 'min-height: 420px;',
                             ]),
+
+                        // ✅ SEO (Premium-feel)
+                        Section::make('SEO (Premium)')
+                            ->description('Control how this page appears in Google and when shared on social media.')
+                            ->collapsible()
+                            ->collapsed()
+                            ->schema([
+                                TextInput::make('meta_json.seo.title')
+                                    ->label('SEO Title')
+                                    ->helperText('Recommended: ~50–60 characters.')
+                                    ->maxLength(70)
+                                    ->live(onBlur: true),
+
+                                Textarea::make('meta_json.seo.description')
+                                    ->label('Meta Description')
+                                    ->helperText('Recommended: ~150–160 characters.')
+                                    ->rows(3)
+                                    ->maxLength(200)
+                                    ->live(onBlur: true),
+
+                                TextInput::make('meta_json.seo.canonical')
+                                    ->label('Canonical URL (optional)')
+                                    ->placeholder('https://example.com/your-page')
+                                    ->helperText('Leave empty to auto-use the current URL.')
+                                    ->maxLength(255),
+
+                                Select::make('meta_json.seo.robots')
+                                    ->label('Robots')
+                                    ->helperText('Default: index, follow')
+                                    ->options([
+                                        '' => 'Default (index, follow)',
+                                        'index, follow' => 'index, follow',
+                                        'noindex, follow' => 'noindex, follow',
+                                        'index, nofollow' => 'index, nofollow',
+                                        'noindex, nofollow' => 'noindex, nofollow',
+                                    ])
+                                    ->default(''),
+
+                                // If you prefer MediaPicker here, you can swap to MediaPicker
+                                TextInput::make('meta_json.seo.og_image')
+                                    ->label('OpenGraph Image (optional)')
+                                    ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
+                                    ->placeholder('https://example.com/og.jpg')
+                                    ->maxLength(255),
+                            ])
+                            ->columnSpanFull(),
                     ]),
 
                 // RIGHT (1/3)
@@ -70,12 +131,10 @@ class PostForm
                             ->label('Featured Image')
                             ->modalHeading('Featured image'),
 
-                        // ✅ Product Gallery (multiple) — RIGHT under featured image
                         MediaPicker::make('product_media_ids')
                             ->label('Product Gallery')
                             ->multiple()
                             ->maxItems(20),
-                        // IMPORTANT: do NOT use ->dehydrated(false)
 
                         Select::make('categories')
                             ->label('Categories')
@@ -89,7 +148,7 @@ class PostForm
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(function ($state, callable $set, Get $get) {
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                         if (!filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }

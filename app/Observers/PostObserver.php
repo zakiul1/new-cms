@@ -7,39 +7,65 @@ use App\Models\PostRevision;
 use App\Models\Redirect;
 use App\Models\SlugHistory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class PostObserver
 {
     public function updating(Post $post): void
     {
-        // Create a revision if key content fields change (Phase 2 requirement) :contentReference[oaicite:7]{index=7}
-        if ($post->isDirty(['title', 'content_json'])) {
-            PostRevision::query()->create([
-                'post_id' => $post->id,
-                'title' => (string) $post->getOriginal('title'),
-                'content_json' => $post->getOriginal('content_json'),
-                'author_id' => Auth::id(),
-            ]);
-        }
+        $needsRevision = $post->isDirty(['title', 'content_json']);
+        $slugChanged = $post->isDirty('slug');
 
-        // If slug changed, store history + redirect (blueprint slug history + redirect models) :contentReference[oaicite:8]{index=8}
-        if ($post->isDirty('slug')) {
-            $oldSlug = (string) $post->getOriginal('slug');
+        $oldTitle = (string) $post->getOriginal('title');
+        $oldContent = $post->getOriginal('content_json');
 
-            SlugHistory::query()->create([
-                'entity_type' => 'post',
+        $oldSlug = (string) $post->getOriginal('slug');
+        $newSlug = (string) $post->slug;
+
+        $type = (string) ($post->type ?? 'post'); // post|page
+
+        DB::afterCommit(function () use ($post, $needsRevision, $slugChanged, $oldTitle, $oldContent, $oldSlug, $newSlug, $type) {
+            // 1) Revision
+            if ($needsRevision) {
+                PostRevision::query()->create([
+                    'post_id' => $post->id,
+                    'title' => $oldTitle,
+                    'content_json' => $oldContent,
+                    'author_id' => Auth::id(),
+                ]);
+            }
+
+            // 2) Slug history + redirect
+            if (!$slugChanged) {
+                return;
+            }
+
+            $oldSlug = trim($oldSlug, '/');
+            $newSlug = trim($newSlug, '/');
+
+            if ($oldSlug === '' || $newSlug === '' || $oldSlug === $newSlug) {
+                return;
+            }
+
+            // Store history (avoid duplicates)
+            SlugHistory::query()->firstOrCreate([
+                'entity_type' => $type,  // ✅ post or page
                 'entity_id' => $post->id,
                 'old_slug' => $oldSlug,
             ]);
 
-            // Redirect old path -> new path
-            $from = '/' . ltrim($oldSlug, '/');
-            $to = '/' . ltrim((string) $post->slug, '/');
+            // ✅ Your routing is /{slug} for BOTH posts and pages
+            $from = '/' . $oldSlug;
+            $to = '/' . $newSlug;
+
+            if ($from === $to) {
+                return;
+            }
 
             Redirect::query()->updateOrCreate(
                 ['from_path' => $from],
                 ['to_path' => $to, 'status_code' => 301]
             );
-        }
+        });
     }
 }

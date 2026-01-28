@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Filament\Pages\Cms;
-
+use UnitEnum;
 use BackedEnum;
 use App\Cms\Plugins\PluginInstaller;
 use App\Cms\Plugins\PluginManager;
@@ -18,13 +18,16 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 
+
+
 class Plugins extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-puzzle-piece';
-    protected static string|\UnitEnum|null $navigationGroup = 'CMS';
-    protected static ?string $title = 'Plugins';
+    protected static string|UnitEnum|null $navigationGroup = 'Appearance';
+    protected static ?string $navigationLabel = 'Plugins'; // optional
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-puzzle-piece'; // optional
+    protected static ?int $navigationSort = 30; // optional
 
     public function getView(): string
     {

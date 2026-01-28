@@ -10,7 +10,6 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Support\Enums\Width;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -29,7 +28,10 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->maxContentWidth(Width::Full)
+
+            // ✅ Full width for all admin pages (most compatible)
+            ->maxContentWidth('full')
+
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -39,15 +41,21 @@ class AdminPanelProvider extends PanelProvider
                 for: 'App\\Filament\\Resources'
             )
 
-            // ✅ Explicit pages (no auto discover)
             ->pages([
                 Dashboard::class,
+
+                // Appearance
                 \App\Filament\Pages\Themes::class,
+                \App\Filament\Pages\Appearance\Menus::class,
+                \App\Filament\Pages\Appearance\Widgets::class, // ✅ WP Widgets Builder
 
                 // CMS
                 \App\Filament\Pages\Cms\Plugins::class,
                 \App\Filament\Pages\Cms\PluginSettings::class,
                 \App\Filament\Pages\Cms\PluginEditor::class,
+                \App\Filament\Pages\Cms\Search::class,
+                \App\Filament\Pages\Cms\Backups::class,
+
             ])
 
             ->discoverWidgets(

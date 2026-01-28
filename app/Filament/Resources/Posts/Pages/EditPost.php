@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Posts\Pages;
 
 use App\Cms\Content\Slugger;
 use App\Filament\Resources\Posts\PostResource;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
@@ -22,7 +23,6 @@ class EditPost extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        // SAFEST load (works even if pluck('media.id') behaves weird)
         $data['product_media_ids'] = $this->record
             ->productMedia()
             ->orderBy('post_media.sort_order')
@@ -65,9 +65,9 @@ class EditPost extends EditRecord
             return;
         }
 
-        // unique, keep order
         $seen = [];
         $ids = [];
+
         foreach ($this->productMediaIds as $id) {
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
@@ -96,6 +96,19 @@ class EditPost extends EditRecord
     {
         return [
             DeleteAction::make(),
+            Action::make('back')
+                ->label('Back')
+                ->color('gray')
+                ->icon('heroicon-o-arrow-left')
+                ->url($this->getResource()::getUrl('index')),
+            Action::make('save')
+                ->label('Save changes')
+                ->icon('heroicon-o-check')
+                ->color('info')
+                ->action(fn() => $this->save())
+                ->keyBindings(['mod+s']),
+
+
         ];
     }
 }
