@@ -5,6 +5,7 @@ use App\Http\Controllers\Cms\ContentRouterController;
 use App\Http\Controllers\ThemeCustomizerController;
 use App\Http\Controllers\Cms\SitemapController;
 use App\Http\Controllers\Cms\RobotsController;
+use App\Http\Controllers\Cms\CategoryArchiveController;
 use App\Cms\Hooks\HookPoints;
 
 // ✅ Let plugins register routes BEFORE the catch-all
@@ -19,6 +20,11 @@ Route::middleware(['web', 'auth'])
     ->get('/customizer', [ThemeCustomizerController::class, 'index'])
     ->name('cms.customizer');
 
+// ✅ Category archive (example: /category/product)
+Route::get('/category/{slug}', [CategoryArchiveController::class, 'show'])
+    ->where('slug', '.*')
+    ->name('cms.category.archive');
+
 // ✅ Home (theme home)
 Route::get('/', fn() => view('home'));
 
@@ -27,7 +33,6 @@ require base_path('routes/cms_preview.php');
 
 /**
  * ✅ POSTS route (important if your permalink rule is /blog/{slug})
- * This also makes redirects and slug history consistent with PostObserver::pathFor()
  */
 Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')

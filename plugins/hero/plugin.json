@@ -1,0 +1,20 @@
+{
+    "name": "Hero Slider",
+    "slug": "hero",
+    "version": "1.0.0",
+    "bootstrap": "bootstrap.php",
+    "assets": {
+        "styles": ["dist/hero.css"],
+        "scripts": [{ "src": "dist/hero.js", "defer": true }]
+    },
+    "settings": {
+        "group": "plugin:hero",
+        "title": "Hero Slider",
+        "description": "Home hero content",
+        "fields": [
+            { "key": "enabled", "label": "Enable Hero", "type": "toggle", "default": true },
+            { "key": "headline", "label": "Headline", "type": "text", "default": "YOUR RELIABLE PARTNER IN GARMENT MANUFACTURING" },
+            { "key": "subtext", "label": "Sub Text", "type": "textarea", "default": "Expertise in samples, production, and quality control — delivering excellence worldwide." }
+        ]
+    }
+}

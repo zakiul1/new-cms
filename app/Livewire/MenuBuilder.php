@@ -4,7 +4,9 @@ namespace App\Livewire;
 
 use App\Cms\Menus\MenuItemFactory;
 use App\Models\Menu;
+use App\Models\MenuAssignment;
 use App\Models\MenuItem;
+use App\Models\MenuLocation;
 use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
@@ -19,6 +21,9 @@ class MenuBuilder extends Component
     public string $newMenuName = '';
     public bool $isRenaming = false;
     public string $renameValue = '';
+
+    // ✅ Location assignment
+    public ?string $activeLocationKey = null;
 
     // Left panel search
     public string $searchPosts = '';
@@ -42,16 +47,26 @@ class MenuBuilder extends Component
     // Autosave status
     public array $savedAt = [];    // timestamps by id
 
-    public function mount(): void
-    {
-        $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
-        $this->reload();
-    }
+   public function mount(): void
+{
+    $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
+
+    $this->activeLocationKey = $this->activeMenuId
+        ? MenuAssignment::query()->where('menu_id', $this->activeMenuId)->value('location_key')
+        : null;
+
+    $this->reload();
+}
+
 
     public function render()
     {
         return view('livewire.menu-builder', [
             'menus' => Menu::query()->orderBy('name')->get(),
+
+            // ✅ REQUIRED for location dropdown
+            'locations' => MenuLocation::query()->orderBy('label')->get(),
+
             'posts' => $this->queryPosts('post'),
             'pages' => $this->queryPosts('page'),
             'taxonomies' => Taxonomy::query()->orderBy('label')->get(),
@@ -67,6 +82,11 @@ class MenuBuilder extends Component
     {
         $this->activeMenuId = $menuId;
         $this->isRenaming = false;
+
+        $this->activeLocationKey = MenuAssignment::query()
+            ->where('menu_id', $this->activeMenuId)
+            ->value('location_key');
+
         $this->reload();
     }
 
@@ -79,8 +99,13 @@ class MenuBuilder extends Component
         }
 
         $menu = Menu::query()->create(['name' => $name]);
+
         $this->newMenuName = '';
         $this->activeMenuId = (int) $menu->id;
+
+        // ✅ reset location selection for new menu
+        $this->activeLocationKey = null;
+
         $this->reload();
     }
 
@@ -165,6 +190,9 @@ class MenuBuilder extends Component
             }
 
             $this->activeMenuId = (int) $new->id;
+
+            // ✅ copied menu starts unassigned (optional)
+            $this->activeLocationKey = null;
         });
 
         $this->reload();
@@ -177,13 +205,58 @@ class MenuBuilder extends Component
         }
 
         DB::transaction(function () {
+            // remove assignments too (cleanup)
+            MenuAssignment::query()->where('menu_id', $this->activeMenuId)->delete();
+
             MenuItem::query()->where('menu_id', $this->activeMenuId)->delete();
             Menu::query()->whereKey($this->activeMenuId)->delete();
         });
 
         $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
+
+        $this->activeLocationKey = $this->activeMenuId
+            ? MenuAssignment::query()->where('menu_id', $this->activeMenuId)->value('location_key')
+            : null;
+
         $this->reload();
     }
+
+    // -------------------------
+    // ✅ Location assignment
+    // -------------------------
+
+  public function assignLocation(string $locationKey): void
+{
+    if (!$this->activeMenuId) {
+        return;
+    }
+
+    $locationKey = trim($locationKey);
+
+    // ✅ Unassign: remove any assignment for this menu
+    if ($locationKey === '') {
+        MenuAssignment::query()
+            ->where('menu_id', $this->activeMenuId)
+            ->delete();
+
+        $this->activeLocationKey = null;
+        return;
+    }
+
+    // ✅ If this menu was assigned to another location, remove it first (1 menu = 1 location)
+    MenuAssignment::query()
+        ->where('menu_id', $this->activeMenuId)
+        ->where('location_key', '!=', $locationKey)
+        ->delete();
+
+    // ✅ Assign location (1 location = 1 menu)
+    MenuAssignment::query()->updateOrCreate(
+        ['location_key' => $locationKey],
+        ['menu_id' => $this->activeMenuId],
+    );
+
+    $this->activeLocationKey = $locationKey;
+}
 
     // -------------------------
     // Left panel add actions
@@ -207,7 +280,7 @@ class MenuBuilder extends Component
             return;
         }
 
-        $ids = array_values(array_filter(array_map('intval', $this->selectedTermIds), fn($v) => $v > 0));
+        $ids = array_values(array_filter(array_map('intval', $this->selectedTermIds), fn ($v) => $v > 0));
         if ($ids === []) {
             return;
         }
@@ -317,73 +390,6 @@ class MenuBuilder extends Component
             return;
         }
 
-        // Normalize visibility
-        $vis = $row['visibility'] ?? [];
-        if (!is_array($vis)) {
-            $vis = [];
-        }
-
-        $vis = array_merge([
-            'auth' => 'any',   // any|guest|auth
-            'roles' => [],
-        ], $vis);
-
-        if (isset($vis['roles_csv']) && is_string($vis['roles_csv'])) {
-            $roles = array_filter(array_map('trim', explode(',', $vis['roles_csv'])));
-            $vis['roles'] = array_values($roles);
-            unset($vis['roles_csv']);
-        }
-
-        if (!is_array($vis['roles'] ?? null)) {
-            $vis['roles'] = [];
-        }
-
-        $auth = $vis['auth'] ?? 'any';
-        if (!in_array($auth, ['any', 'guest', 'auth'], true)) {
-            $auth = 'any';
-        }
-        $vis['auth'] = $auth;
-
-        $storeVisibility = $vis;
-        if (($storeVisibility['auth'] ?? 'any') === 'any' && ($storeVisibility['roles'] ?? []) === []) {
-            $storeVisibility = null;
-        }
-
-        // Normalize data (mega)
-        $data = $row['data'] ?? [];
-        if (!is_array($data)) {
-            $data = [];
-        }
-
-        $mega = (isset($data['mega']) && is_array($data['mega'])) ? $data['mega'] : [];
-        $mega = array_merge([
-            'enabled' => false,
-            'columns' => null,
-        ], $mega);
-
-        $mega['enabled'] = (bool) ($mega['enabled'] ?? false);
-
-        $columns = $mega['columns'] ?? null;
-        if ($columns !== null) {
-            $columns = (int) $columns;
-            if (!in_array($columns, [2, 3, 4], true)) {
-                $columns = null;
-            }
-        }
-        $mega['columns'] = $columns;
-
-        $data['mega'] = $mega;
-
-        $storeData = $data;
-        if (
-            count($storeData) === 1 &&
-            isset($storeData['mega']) &&
-            is_array($storeData['mega']) &&
-            ($storeData['mega']['enabled'] ?? false) === false
-        ) {
-            $storeData = null;
-        }
-
         // Persist
         MenuItem::query()
             ->where('menu_id', $this->activeMenuId)
@@ -400,8 +406,9 @@ class MenuBuilder extends Component
                 'icon' => $row['icon'] ?? null,
                 'description' => $row['description'] ?? null,
 
-                'visibility' => $storeVisibility,
-                'data' => $storeData,
+                // keep your existing structure:
+                'visibility' => $row['visibility'] ?? null,
+                'data' => $row['data'] ?? null,
             ]);
 
         $this->savedAt[$id] = time();
@@ -434,7 +441,6 @@ class MenuBuilder extends Component
             $this->collapsed[$id] = $this->collapsed[$id] ?? false;
         }
 
-        // triggers JS to re-init Sortable lists
         $this->dispatch('menu-builder-init');
     }
 
@@ -452,33 +458,6 @@ class MenuBuilder extends Component
         $out = [];
 
         foreach ($rows as $r) {
-            $visibility = is_array($r->visibility) ? $r->visibility : [];
-            $visibility = array_merge([
-                'auth' => 'any',
-                'roles' => [],
-            ], $visibility);
-
-            if (!is_array($visibility['roles'] ?? null)) {
-                $visibility['roles'] = [];
-            }
-
-            $visibility['roles_csv'] = implode(
-                ', ',
-                array_values(array_filter(array_map('trim', $visibility['roles'])))
-            );
-
-            $data = is_array($r->data) ? $r->data : [];
-            $mega = (isset($data['mega']) && is_array($data['mega'])) ? $data['mega'] : [];
-
-            $mega = array_merge([
-                'enabled' => false,
-                'columns' => null,
-            ], $mega);
-
-            $mega['enabled'] = (bool) ($mega['enabled'] ?? false);
-            $mega['columns'] = $mega['columns'] ?? null;
-            $data['mega'] = $mega;
-
             $out[(int) $r->id] = [
                 'label' => (string) ($r->label ?? ''),
                 'url' => (string) ($r->url ?? ''),
@@ -491,8 +470,8 @@ class MenuBuilder extends Component
                 'icon' => $r->icon,
                 'description' => $r->description,
 
-                'visibility' => $visibility,
-                'data' => $data,
+                'visibility' => is_array($r->visibility) ? $r->visibility : [],
+                'data' => is_array($r->data) ? $r->data : [],
             ];
         }
 
@@ -510,7 +489,7 @@ class MenuBuilder extends Component
             ->orderBy('parent_id')
             ->orderBy('sort_order')
             ->get()
-            ->groupBy(fn(MenuItem $i) => $i->parent_id ?: 0);
+            ->groupBy(fn (MenuItem $i) => $i->parent_id ?: 0);
 
         $build = function (int $parentId) use (&$build, $items): array {
             $children = $items->get($parentId, collect());
@@ -543,7 +522,6 @@ class MenuBuilder extends Component
                 continue;
             }
 
-            // ensure item belongs to this menu
             $exists = MenuItem::query()
                 ->where('menu_id', $this->activeMenuId)
                 ->whereKey($id)
@@ -592,7 +570,7 @@ class MenuBuilder extends Component
             return;
         }
 
-        $ids = array_values(array_filter(array_map('intval', $ids), fn($v) => $v > 0));
+        $ids = array_values(array_filter(array_map('intval', $ids), fn ($v) => $v > 0));
         if ($ids === []) {
             return;
         }

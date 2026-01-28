@@ -25,8 +25,10 @@
 
         <div class="my-5 border-t"></div>
 
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div class="w-full lg:max-w-md">
+        {{-- ✅ Menu Select + ✅ Location Assign --}}
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+            {{-- Select menu --}}
+            <div class="lg:col-span-5">
                 <div class="text-xs text-gray-500 mb-1">Select menu to edit</div>
                 <x-filament::input.wrapper>
                     <select class="fi-input w-full" wire:change="selectMenu($event.target.value)">
@@ -39,7 +41,31 @@
                 </x-filament::input.wrapper>
             </div>
 
-            <div class="flex flex-wrap gap-2">
+            {{-- ✅ Location dropdown --}}
+            <div class="lg:col-span-4">
+                <div class="text-xs text-gray-500 mb-1">Menu location</div>
+                <x-filament::input.wrapper>
+                  <select class="fi-input w-full"
+    wire:model="activeLocationKey"
+    wire:change="assignLocation($event.target.value)">
+    <option value="">— Not assigned —</option>
+
+    @foreach ($locations as $loc)
+        <option value="{{ $loc->key }}">
+            {{ $loc->label }} ({{ $loc->key }})
+        </option>
+    @endforeach
+</select>
+
+                </x-filament::input.wrapper>
+
+                <div class="text-xs text-gray-400 mt-1">
+                    Assign this menu to a theme location (ex: primary, footer).
+                </div>
+            </div>
+
+            {{-- Actions --}}
+            <div class="lg:col-span-3 flex flex-wrap gap-2 justify-start lg:justify-end">
                 @if (!$isRenaming)
                     <x-filament::button color="gray" wire:click="startRename">
                         Rename
@@ -89,8 +115,7 @@
                         <summary class="cursor-pointer font-medium">Pages</summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchPages"
-                                    placeholder="Search pages..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchPages" placeholder="Search pages..." />
                             </x-filament::input.wrapper>
 
                             <div class="max-h-60 overflow-auto border rounded-lg p-2">
@@ -112,8 +137,7 @@
                         <summary class="cursor-pointer font-medium">Posts</summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchPosts"
-                                    placeholder="Search posts..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchPosts" placeholder="Search posts..." />
                             </x-filament::input.wrapper>
 
                             <div class="max-h-60 overflow-auto border rounded-lg p-2">
@@ -135,8 +159,7 @@
                         <summary class="cursor-pointer font-medium">Categories / Terms</summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchTerms"
-                                    placeholder="Search terms..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchTerms" placeholder="Search terms..." />
                             </x-filament::input.wrapper>
 
                             <div class="max-h-60 overflow-auto border rounded-lg p-2">
@@ -193,7 +216,6 @@
                 <div class="my-4 border-t"></div>
 
                 <div id="menu-tree-root" class="space-y-2">
-                    {{-- ✅ MUST pass all arrays used by the partial --}}
                     @include('livewire.partials.menu-tree', [
                         'nodes' => $tree,
                         'collapsed' => $collapsed,
@@ -205,7 +227,8 @@
         </div>
     </div>
 
-    @once
+    {{-- keep your scripts section same --}}
+     @once
         @push('scripts')
             <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
             <script>
@@ -279,5 +302,4 @@
             </script>
         @endpush
     @endonce
-
 </div>

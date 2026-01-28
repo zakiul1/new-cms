@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,29 +7,25 @@
     @php
         // $seo is passed from ContentRouterController (post/page)
         // fallback values if $seo isn't present (home/other pages)
-$seoTitle = $seo['title'] ?? trim((string) view()->yieldContent('title', 'CMS'));
-$seoDesc = $seo['description'] ?? null;
-$seoCanonical = $seo['canonical'] ?? null;
-$seoRobots = $seo['robots'] ?? null;
+        $seoTitle = $seo['title'] ?? trim((string) view()->yieldContent('title', 'CMS'));
+        $seoDesc = $seo['description'] ?? null;
+        $seoCanonical = $seo['canonical'] ?? null;
+        $seoRobots = $seo['robots'] ?? null;
 
-$og = $seo['og'] ?? [];
-$ogTitle = $og['title'] ?? $seoTitle;
-$ogDesc = $og['description'] ?? $seoDesc;
-$ogType = $og['type'] ?? 'website';
-$ogUrl = $og['url'] ?? $seoCanonical;
+        $og = $seo['og'] ?? [];
+        $ogTitle = $og['title'] ?? $seoTitle;
+        $ogDesc = $og['description'] ?? $seoDesc;
+        $ogType = $og['type'] ?? 'website';
+        $ogUrl = $og['url'] ?? $seoCanonical;
+        $ogImage = $og['image'] ?? null;
 
-// Optional: if later you add og:image support
-$ogImage = $og['image'] ?? null;
+        $tw = $seo['twitter'] ?? [];
+        $twCard = $tw['card'] ?? 'summary_large_image';
+        $twTitle = $tw['title'] ?? $ogTitle;
+        $twDesc = $tw['description'] ?? $ogDesc;
+        $twImage = $tw['image'] ?? $ogImage;
 
-// Twitter (basic)
-$tw = $seo['twitter'] ?? [];
-$twCard = $tw['card'] ?? 'summary_large_image';
-$twTitle = $tw['title'] ?? $ogTitle;
-$twDesc = $tw['description'] ?? $ogDesc;
-$twImage = $tw['image'] ?? $ogImage;
-
-// Optional JSON-LD block
-$jsonld = $seo['jsonld'] ?? null;
+        $jsonld = $seo['jsonld'] ?? null;
     @endphp
 
     <title>{{ $seoTitle }}</title>
@@ -70,161 +65,65 @@ $jsonld = $seo['jsonld'] ?? null;
         <meta name="twitter:image" content="{{ $twImage }}">
     @endif
 
-    {{-- Optional JSON-LD (future premium ready) --}}
+    {{-- Optional JSON-LD --}}
     @if (is_array($jsonld))
-        <script type="application/ld+json">{!! json_encode($jsonld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
+        <script type="application/ld+json">
+            {!! json_encode($jsonld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+        </script>
     @endif
 
     {!! cms_assets()->renderStyles('frontend') !!}
     {!! theme_customizer_css() !!}
 
+    {{-- Header + menu CSS (theme-wide) --}}
     <style>
-        /* Header uses CSS vars from theme_customizer_css() */
-        .cms-header {
+        .cms-container{ max-width: var(--cms-container, 1100px); margin:0 auto; padding:0 16px; }
+
+        .cms-header{
             background: var(--cms-header-bg, #ffffff);
             color: var(--cms-header-text, #111827);
-            border-bottom: 1px solid rgba(0, 0, 0, .06);
+            border-bottom: 1px solid rgba(0,0,0,.06);
             z-index: 50;
         }
+        .cms-header a{ color: inherit; text-decoration:none; }
 
-        /* sticky on/off controlled by inline style class below */
-        .cms-header a {
-            color: inherit;
-            text-decoration: none;
-        }
+        .cms-header-inner{ display:flex; align-items:center; gap:16px; padding:14px 0; }
+        .cms-header-left,.cms-header-center,.cms-header-right{ display:flex; align-items:center; gap:14px; }
 
-        .cms-container {
-            max-width: var(--cms-container, 1100px);
-            margin: 0 auto;
-            padding: 0 16px;
-        }
+        .cms-header-nav{ display:flex; align-items:center; gap:14px; font-size:14px; opacity:.95; }
 
-        .cms-header-inner {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 14px 0;
-        }
+        /* MenuRenderer outputs ul/li; keep it inline */
+        .cms-header-nav .cms-menu{ list-style:none; display:flex; gap:14px; margin:0; padding:0; }
+        .cms-header-nav .cms-menu__link{ font-size:14px; opacity:.95; }
 
-        .cms-header-left,
-        .cms-header-center,
-        .cms-header-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .cms-header-nav {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 14px;
-            opacity: .95;
-        }
-
-        .cms-logo img {
-            width: var(--cms-logo-width, 140px);
-            height: auto;
-            display: block;
-        }
-
-        .cms-site-title {
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            font-size: 18px;
-        }
+        .cms-logo img{ width: var(--cms-logo-width, 140px); height:auto; display:block; }
+        .cms-site-title{ font-weight:800; letter-spacing:-0.02em; font-size:18px; }
 
         /* Layout modes */
-        .cms-layout-left .cms-header-inner {
-            justify-content: space-between;
-        }
-
-        .cms-layout-center .cms-header-inner {
-            justify-content: center;
-            flex-direction: column;
-            gap: 10px;
-            padding: 16px 0;
-        }
-
-        .cms-layout-split .cms-header-inner {
-            justify-content: space-between;
-        }
-
-        .cms-layout-split .cms-header-center {
-            justify-content: center;
-            flex: 1;
-        }
-
-        .cms-layout-split .cms-header-left,
-        .cms-layout-split .cms-header-right {
-            min-width: 140px;
-        }
+        .cms-layout-left .cms-header-inner{ justify-content:space-between; }
+        .cms-layout-center .cms-header-inner{ justify-content:center; flex-direction:column; gap:10px; padding:16px 0; }
+        .cms-layout-split .cms-header-inner{ justify-content:space-between; }
+        .cms-layout-split .cms-header-center{ justify-content:center; flex:1; }
+        .cms-layout-split .cms-header-left,.cms-layout-split .cms-header-right{ min-width:140px; }
     </style>
 </head>
 
-@php
-    $o = theme_options();
-    $layout = $o['header_layout'] ?? 'left'; // left|center|split
-    $sticky = !empty($o['header_sticky']);
-
-    $logo = $o['logo_path'] ?? null;
-    $logoUrl = $logo ? \Illuminate\Support\Facades\Storage::disk('public')->url($logo) : null;
-
-    $layoutClass = match ($layout) {
-        'center' => 'cms-layout-center',
-        'split' => 'cms-layout-split',
-        default => 'cms-layout-left',
-    };
-@endphp
-
 <body>
-    {{-- ✅ Premium Header --}}
-    <header class="cms-header {{ $layoutClass }}" style="{{ $sticky ? 'position:sticky;top:0;' : '' }}">
-        <div class="cms-container">
-            <div class="cms-header-inner">
-                {{-- LEFT --}}
-                <div class="cms-header-left">
-                    @if ($layout !== 'center')
-                        <a href="{{ url('/') }}" class="cms-logo">
-                            @if ($logoUrl)
-                                <img src="{{ $logoUrl }}" alt="Logo">
-                            @else
-                                <span class="cms-site-title">CMS</span>
-                            @endif
-                        </a>
-                    @endif
-                </div>
+    {{-- ✅ Header partial --}}
+    @include('theme::partials.header')
 
-                {{-- CENTER --}}
-                <div class="cms-header-center">
-                    @if ($layout === 'center')
-                        <a href="{{ url('/') }}" class="cms-logo">
-                            @if ($logoUrl)
-                                <img src="{{ $logoUrl }}" alt="Logo">
-                            @else
-                                <span class="cms-site-title">CMS</span>
-                            @endif
-                        </a>
-                    @endif
-
-                    {{-- menu placeholder (later: dynamic menu) --}}
-                    <nav class="cms-header-nav">
-                        <a href="{{ url('/') }}">Home</a>
-                    </nav>
-                </div>
-
-                {{-- RIGHT --}}
-                <div class="cms-header-right">
-                    {{-- keep empty for now (later: search, CTA, login) --}}
-                </div>
-            </div>
-        </div>
-    </header>
+    {{-- ✅ Plugin hook: top-of-page sections (Hero etc.) --}}
+    {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.front.top', '') !!}
 
     {{-- Page content --}}
     @yield('content')
 
+    {{-- ✅ Plugin hook: before footer --}}
+    {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.front.bottom', '') !!}
+
+    {{-- ✅ Footer partial --}}
+    @include('theme::partials.footer')
+
     {!! cms_assets()->renderScripts('frontend') !!}
 </body>
-
 </html>

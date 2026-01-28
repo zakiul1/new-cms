@@ -7,6 +7,9 @@ use App\Models\Post;
 use App\Models\Redirect;
 use App\Models\SlugHistory;
 use Illuminate\Http\Request;
+use App\Models\Term;
+use App\Models\Taxonomy;
+
 
 class ContentRouterController extends Controller
 {
