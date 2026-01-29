@@ -19,7 +19,11 @@ class SidebarRenderer
     public function render(string $areaKey, array $ctx = []): string
     {
         $ver = $this->versions->get('widget_area', $areaKey);
-        $cacheKey = "cms:sidebar:area:{$areaKey}:v{$ver}";
+
+        // ✅ global render version (theme/plugins/customizer publish)
+        $renderVer = $this->versions->getRender();
+
+        $cacheKey = "cms:sidebar:area:{$areaKey}:v{$ver}:r{$renderVer}";
 
         return (string) Cache::remember($cacheKey, now()->addMinutes(30), function () use ($areaKey, $ctx) {
             $placements = WidgetPlacement::query()

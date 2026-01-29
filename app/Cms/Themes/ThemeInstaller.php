@@ -16,6 +16,15 @@ final class ThemeInstaller
     ) {
     }
 
+    /**
+     * Install theme zip and return a UI-safe manifest array.
+     *
+     * @return array{
+     *   name:string,slug:string,version:string,
+     *   author:?string,description:?string,parent:?string,
+     *   templates:array,menus:array,sidebars:array,assets:array,raw:array
+     * }
+     */
     public function installFromZip(UploadedFile $zip): array
     {
         if (Str::lower($zip->getClientOriginalExtension()) !== 'zip') {
@@ -49,9 +58,11 @@ final class ThemeInstaller
         $this->assertNoSymlinksAndNoTraversal($staging);
 
         $themeRoot = $this->detectThemeRoot($staging);
-        $manifest = $this->reader->read($themeRoot); // validates required fields + slug
 
-        $slug = $manifest['slug'];
+        // ✅ returns ThemeManifest DTO
+        $manifest = $this->reader->read($themeRoot);
+        $slug = $manifest->slug;
+
         $themesPath = rtrim(config('cms.themes_path'), '/');
         $target = "{$themesPath}/{$slug}";
 
@@ -73,7 +84,20 @@ final class ThemeInstaller
         // publish dist -> public/themes/{slug}/dist
         $this->publisher->publish($slug);
 
-        return $manifest;
+        // ✅ return array for UI
+        return [
+            'name' => $manifest->name,
+            'slug' => $manifest->slug,
+            'version' => $manifest->version,
+            'author' => $manifest->author,
+            'description' => $manifest->description,
+            'parent' => $manifest->parent,
+            'templates' => $manifest->templates,
+            'menus' => $manifest->menus,
+            'sidebars' => $manifest->sidebars,
+            'assets' => $manifest->assets,
+            'raw' => $manifest->raw,
+        ];
     }
 
     private function validateZipEntries(ZipArchive $zip): void
@@ -91,7 +115,6 @@ final class ThemeInstaller
 
             $name = (string) $stat['name'];
 
-            // block absolute + traversal
             if (str_starts_with($name, '/') || str_contains($name, '../') || str_contains($name, '..\\')) {
                 throw new RuntimeException('ZIP contains invalid paths.');
             }

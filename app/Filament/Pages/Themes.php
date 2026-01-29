@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Themes\ThemeInstaller;
 use App\Cms\Themes\ThemeManager;
 use Filament\Actions\Action;
@@ -9,6 +10,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Arr;
+use Throwable;
 
 class Themes extends Page
 {
@@ -16,7 +18,6 @@ class Themes extends Page
     protected static ?string $navigationLabel = 'Themes';
     protected static \UnitEnum|string|null $navigationGroup = 'Appearance';
 
-    // ✅ MUST be non-static in your Filament build
     protected string $view = 'filament.pages.themes';
 
     /** Livewire state */
@@ -32,7 +33,7 @@ class Themes extends Page
 
     private function reload(ThemeManager $themes): void
     {
-        $this->themes = $themes->discoverForUi(); // arrays only (Livewire-safe)
+        $this->themes = $themes->discoverForUi();
         $this->active = $themes->activeSlug();
     }
 
@@ -41,7 +42,6 @@ class Themes extends Page
     {
         $items = $this->themes;
 
-        // Search
         $q = trim(mb_strtolower($this->search));
         if ($q !== '') {
             $items = array_filter($items, function ($t) use ($q) {
@@ -58,7 +58,6 @@ class Themes extends Page
             });
         }
 
-        // Filter
         if ($this->filter === 'active') {
             $items = array_filter($items, fn($t) => ($t['slug'] ?? '') === $this->active);
         } elseif ($this->filter === 'updates') {
@@ -85,7 +84,7 @@ class Themes extends Page
                         ->disk('local')
                         ->directory('cms/tmp/uploads')
                         ->acceptedFileTypes(['application/zip', 'application/x-zip-compressed'])
-                        ->maxSize((int) (config('cms.max_zip_size_bytes') / 1024)), // KB
+                        ->maxSize((int) (config('cms.max_zip_size_bytes') / 1024)),
                 ])
                 ->action(function (array $data, ThemeInstaller $installer, ThemeManager $themes) {
                     $path = Arr::get($data, 'zip');
@@ -138,16 +137,35 @@ class Themes extends Page
         ];
     }
 
-    public function activateTheme(string $slug, ThemeManager $themes): void
+    public function activateTheme(string $slug): void
     {
-        $themes->activate($slug);
+        try {
+            /** @var ThemeManager $themes */
+            $themes = app(ThemeManager::class);
 
-        Notification::make()
-            ->title('Theme activated')
-            ->body("Active theme: {$slug}")
-            ->success()
-            ->send();
+            $themes->activate($slug);
 
-        $this->reload($themes);
+            // invalidate menu/widget/theme HTML caches
+            app(CmsCacheVersions::class)->bumpRender();
+
+            Notification::make()
+                ->title('Theme activated')
+                ->body("Active theme: {$slug}")
+                ->success()
+                ->send();
+
+            $this->reload($themes);
+        } catch (Throwable $e) {
+            logger()->error('Theme activate failed', [
+                'slug' => $slug,
+                'error' => $e->getMessage(),
+            ]);
+
+            Notification::make()
+                ->title('Activate failed')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
     }
 }

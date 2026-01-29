@@ -79,7 +79,7 @@ class PageForm
                                 TextInput::make('meta_json.seo.title')
                                     ->label('SEO Title')
                                     ->helperText('Recommended: ~50–60 characters.')
-                                    ->maxLength(70)
+                                    ->maxLength(140)
                                     ->live(onBlur: true),
 
                                 Textarea::make('meta_json.seo.description')
@@ -123,6 +123,14 @@ class PageForm
                         'lg' => 1,
                     ])
                     ->schema([
+                        Select::make('status')
+                            ->options([
+                                'draft' => 'Draft',
+                                'published' => 'Published',
+                                'scheduled' => 'Scheduled',
+                            ])
+                            ->default('draft')
+                            ->required(),
                         Select::make('meta_json.template')
                             ->label('Template')
                             ->options([
@@ -232,14 +240,7 @@ class PageForm
                             ->preload()
                             ->searchable(),
 
-                        Select::make('status')
-                            ->options([
-                                'draft' => 'Draft',
-                                'published' => 'Published',
-                                'scheduled' => 'Scheduled',
-                            ])
-                            ->default('draft')
-                            ->required(),
+
 
                         DateTimePicker::make('published_at')
                             ->label('Publish At')

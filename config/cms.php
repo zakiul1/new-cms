@@ -10,4 +10,22 @@ return [
     'max_zip_size_bytes' => 50 * 1024 * 1024,            // 50MB
     'max_zip_files' => 5000,
     'max_uncompressed_bytes' => 200 * 1024 * 1024,       // 200MB
+
+
+    'response_cache' => [
+        'enabled' => env('CMS_RESPONSE_CACHE', false),
+        'ttl_seconds' => env('CMS_RESPONSE_CACHE_TTL', 300),
+
+        // Prefix matches (start of URL path)
+        'exclude_paths' => [
+            '/filament',
+            '/admin',
+            '/api',
+            '/livewire',
+            '/storage',
+            '/themes',
+            '/plugins',
+        ],
+    ],
+
 ];

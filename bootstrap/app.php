@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\AnonymousResponseCache;
+use App\Http\Middleware\ApplyRedirects;
+use App\Http\Middleware\CmsEnqueueAssetsMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,12 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // ✅ Redirects should run BEFORE controllers
         $middleware->web(prepend: [
-            \App\Http\Middleware\ApplyRedirects::class,
+            ApplyRedirects::class,
         ]);
 
         // ✅ Assets should run AFTER controllers (needs Response)
         $middleware->web(append: [
-            \App\Http\Middleware\CmsEnqueueAssetsMiddleware::class,
+            CmsEnqueueAssetsMiddleware::class,
+            AnonymousResponseCache::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

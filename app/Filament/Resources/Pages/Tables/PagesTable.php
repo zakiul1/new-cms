@@ -19,8 +19,10 @@ class PagesTable
                     ->label('Title')
                     ->searchable()
                     ->sortable()
-                    ->wrap()
-                    ->url(fn($record) => route('filament.admin.resources.pages.edit', ['record' => $record])),
+                    ->wrap(false)
+                    ->limit(50) // trims and adds "…"
+                    ->tooltip(fn($record) => $record->title) // full title on hover
+                    ->extraAttributes(['class' => 'max-w-[420px] truncate']),
 
                 TextColumn::make('status')
                     ->badge()

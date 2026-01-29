@@ -29,26 +29,21 @@ class Media extends Model
         'caption',
         'description',
         'meta',
-        // If you keep the json column:
-        'variants',
         'processed_at',
     ];
 
     protected $casts = [
         'meta' => 'array',
-        // If you keep the json column:
-        'variants' => 'array',
         'processed_at' => 'datetime',
     ];
 
     protected static function booted(): void
     {
         static::deleting(function (self $media): void {
-            // Delete files from disk (original + variants)
+            // Delete physical files (original + variants)
             app(MediaUploader::class)->deleteFiles($media);
 
-            // Delete variant DB rows
-            $media->variantRecords()->delete();
+            // DB variant rows are removed by FK cascade (media_variants.media_id)
         });
     }
 
@@ -57,12 +52,6 @@ class Media extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    /**
-     * ✅ IMPORTANT:
-     * We renamed this because you also have a column called "variants".
-     * So $media->variants would return the column value (null/array),
-     * not the relationship collection.
-     */
     public function variantRecords(): HasMany
     {
         return $this->hasMany(MediaVariant::class, 'media_id');
@@ -75,12 +64,12 @@ class Media extends Model
 
     public function path(): string
     {
-        return trim($this->directory, '/') . '/' . ltrim($this->filename, '/');
+        return trim((string) $this->directory, '/') . '/' . ltrim((string) $this->filename, '/');
     }
 
     public function url(): string
     {
-        $disk = (string) ($this->disk ?: 'public');
+        $disk = (string) ($this->disk ?: config('cms-media.disk', 'public'));
         return Storage::disk($disk)->url($this->path());
     }
 
@@ -99,16 +88,55 @@ class Media extends Model
         return strtolower((string) $this->mime_type) === 'application/pdf';
     }
 
-    public function variantUrl(string $key): ?string
+    /**
+     * Get variant URL with preferred format (webp) and fallback (jpeg).
+     *
+     * @param string      $key           thumb|medium|large
+     * @param string|null $preferFormat  webp|jpeg|png|avif (default from config)
+     */
+    public function variantUrl(string $key, ?string $preferFormat = null): ?string
     {
-        $variant = $this->variantRecords()->where('key', $key)->first();
-        return $variant?->url();
+        $preferFormat ??= (string) config('cms-media.variant_format', 'webp');
+        $preferFormat = strtolower($preferFormat);
+
+        $fallback = match ($preferFormat) {
+            'webp' => 'jpeg',
+            'jpeg', 'jpg' => 'webp',
+            default => 'jpeg',
+        };
+
+        // Prefer using loaded relationship (no extra queries in grids)
+        $this->loadMissing('variantRecords');
+
+        $variants = $this->variantRecords;
+
+        // 1) preferred format
+        $v = $variants->firstWhere(
+            fn($x) =>
+            (string) ($x->key ?? '') === $key
+            && strtolower((string) ($x->format ?? '')) === $preferFormat
+        );
+
+        // 2) fallback format
+        if (!$v) {
+            $v = $variants->firstWhere(
+                fn($x) =>
+                (string) ($x->key ?? '') === $key
+                && strtolower((string) ($x->format ?? '')) === $fallback
+            );
+        }
+
+        // 3) any format (for old data or partial rows)
+        if (!$v) {
+            $v = $variants->firstWhere('key', $key);
+        }
+
+        return $v?->url();
     }
 
-    public function thumbUrl(): ?string
+    public function thumbUrl(?string $preferFormat = null): ?string
     {
-        // ✅ fallback to original if thumb missing
-        return $this->variantUrl('thumb') ?: ($this->isImage() ? $this->url() : null);
+        return $this->variantUrl('thumb', $preferFormat) ?: ($this->isImage() ? $this->url() : null);
     }
 
     // -------------------------
@@ -123,7 +151,6 @@ class Media extends Model
     public function clearFolderTerms(): void
     {
         $taxonomyId = $this->folderTaxonomyId();
-
         if (!$taxonomyId) {
             return;
         }
@@ -141,7 +168,6 @@ class Media extends Model
     public function syncFolderTerm(int $termId): void
     {
         $taxonomyId = $this->folderTaxonomyId();
-
         if (!$taxonomyId) {
             return;
         }

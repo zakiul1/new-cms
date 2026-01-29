@@ -9,7 +9,7 @@ if (!function_exists('theme_options')) {
         /** @var ThemeManager $tm */
         $tm = app(ThemeManager::class);
 
-        // If customizer preview is open, allow preview_theme override
+        // Allow ?preview_theme=slug override only for logged-in users
         $previewSlug = (string) request()->query('preview_theme', '');
         if ($slug === null && $previewSlug !== '' && auth()->check()) {
             $slug = $previewSlug;
@@ -18,19 +18,59 @@ if (!function_exists('theme_options')) {
         // fallback to active
         $slug ??= $tm->activeSlug();
 
-        // If in customizer preview mode, use draft from session (admin only)
-        if (request()->boolean('customizer') && auth()->check()) {
-            $draft = session()->get("theme_customizer.draft.{$slug}", []);
-            if (is_array($draft) && !empty($draft)) {
-                return $draft;
-            }
-        }
+        // ✅ Defaults (so theme never breaks if a key is missing)
+        $defaults = [
+            // base
+            'primary' => '#f59e0b',
+            'accent' => '#0ea5e9',
+            'background' => '#ffffff',
+            'text' => '#111827',
+            'font_family' => 'system',
+            'base_font_size' => 16,
+            'container_width' => 'default',
+            'rounded' => true,
+            'shadows' => true,
+            'custom_css' => '',
+
+            // header
+            'header_layout' => 'left',
+            'header_sticky' => true,
+            'header_bg' => '#ffffff',
+            'header_text' => '#111827',
+            'logo_width' => 140,
+
+            // ✅ media-based (new)
+            'logo_media_id' => null,
+            'favicon_media_id' => null,
+
+            // backward compatibility (old)
+            'logo_path' => null,
+        ];
 
         /** @var Settings $settings */
         $settings = app(Settings::class);
 
+        // Saved from DB
         $saved = $settings->get("theme_options.{$slug}", []);
-        return is_array($saved) ? $saved : [];
+        $saved = is_array($saved) ? $saved : [];
+
+        // ✅ Draft from session (only when customizer preview is on, logged in)
+        // Require customizer=1 AND (preview_theme is present OR slug was explicitly passed)
+        $useDraft = request()->boolean('customizer')
+            && auth()->check()
+            && ($previewSlug !== '' || $slug !== $tm->activeSlug());
+
+        if ($useDraft) {
+            $draft = session()->get("theme_customizer.draft.{$slug}", []);
+            $draft = is_array($draft) ? $draft : [];
+
+            // Merge: defaults <- saved <- draft
+            // so draft wins but missing keys still come from saved/defaults
+            return array_replace_recursive($defaults, $saved, $draft);
+        }
+
+        // Normal mode: defaults <- saved
+        return array_replace_recursive($defaults, $saved);
     }
 }
 

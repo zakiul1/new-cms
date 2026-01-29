@@ -14,12 +14,12 @@ class MenuCacheObserver
 
     public function saved(MenuItem $item): void
     {
-        $this->bumpMenuLocations();
+        $this->bumpLocationsForMenuId((int) $item->menu_id);
     }
 
     public function deleted(MenuItem $item): void
     {
-        $this->bumpMenuLocations();
+        $this->bumpLocationsForMenuId((int) $item->menu_id);
     }
 
     public function assignmentSaved(MenuAssignment $assignment): void
@@ -27,10 +27,43 @@ class MenuCacheObserver
         $this->versions->bump('menu_location', (string) $assignment->location_key);
     }
 
-    protected function bumpMenuLocations(): void
+    /**
+     * ✅ Admin/utility: bump ALL menu locations (safe)
+     */
+    public function bumpAllMenuLocations(): void
     {
-        // Safe approach: bump all existing locations that have assignments
-        $keys = MenuAssignment::query()->pluck('location_key')->unique()->values();
+        $keys = MenuAssignment::query()
+            ->pluck('location_key')
+            ->unique()
+            ->values();
+
+        foreach ($keys as $k) {
+            $this->versions->bump('menu_location', (string) $k);
+        }
+    }
+
+    /**
+     * Bump only the locations that point to a specific menu.
+     */
+    protected function bumpLocationsForMenuId(int $menuId): void
+    {
+        if ($menuId <= 0) {
+            // fallback safety
+            $this->bumpAllMenuLocations();
+            return;
+        }
+
+        $keys = MenuAssignment::query()
+            ->where('menu_id', $menuId)
+            ->pluck('location_key')
+            ->unique()
+            ->values();
+
+        // if nothing is assigned, no need to bump, but keep safety fallback
+        if ($keys->isEmpty()) {
+            return;
+        }
+
         foreach ($keys as $k) {
             $this->versions->bump('menu_location', (string) $k);
         }

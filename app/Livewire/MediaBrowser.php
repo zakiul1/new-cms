@@ -46,20 +46,20 @@ class MediaBrowser extends Component
 
     public function toggle(int $id): void
     {
-        if (! $this->multiple) {
+        if (!$this->multiple) {
             $this->selectedIds = [$id];
             return;
         }
 
         if (in_array($id, $this->selectedIds, true)) {
-            $this->selectedIds = array_values(array_filter($this->selectedIds, fn ($x) => $x !== $id));
+            $this->selectedIds = array_values(array_filter($this->selectedIds, fn($x) => $x !== $id));
             return;
         }
 
         $this->selectedIds[] = $id;
         $this->selectedIds = array_values(array_unique($this->selectedIds));
 
-        if (! is_null($this->maxItems)) {
+        if (!is_null($this->maxItems)) {
             $this->selectedIds = array_slice($this->selectedIds, 0, $this->maxItems);
         }
     }
@@ -79,7 +79,7 @@ class MediaBrowser extends Component
         $uploader = app(MediaUploader::class);
 
         foreach ($this->uploads as $file) {
-            if (! $file instanceof UploadedFile) {
+            if (!$file instanceof UploadedFile) {
                 continue;
             }
 
@@ -95,7 +95,9 @@ class MediaBrowser extends Component
 
     public function render(): View
     {
-        $q = Media::query()->orderByDesc('id');
+        $q = Media::query()
+            ->with('variantRecords')   // ✅ IMPORTANT: prevents N+1 in thumbnail grid
+            ->orderByDesc('id');
 
         if (trim($this->search) !== '') {
             $s = trim($this->search);

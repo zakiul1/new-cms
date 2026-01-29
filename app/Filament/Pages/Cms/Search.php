@@ -17,6 +17,7 @@ class Search extends Page
     protected static string|UnitEnum|null $navigationGroup = 'CMS';
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-magnifying-glass';
     protected static ?string $title = 'Search';
+    protected static ?int $navigationSort = 999;
 
     public string $q = '';
     public ?string $type = null; // post|page|null

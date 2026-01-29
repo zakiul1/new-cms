@@ -1,12 +1,13 @@
 <?php
 
+use App\Http\Controllers\ThemeCustomizerController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Cms\ContentRouterController;
-use App\Http\Controllers\ThemeCustomizerController;
 use App\Http\Controllers\Cms\SitemapController;
 use App\Http\Controllers\Cms\RobotsController;
 use App\Http\Controllers\Cms\CategoryArchiveController;
 use App\Cms\Hooks\HookPoints;
+use App\Livewire\ThemeCustomizer;
 
 // ✅ Let plugins register routes BEFORE the catch-all
 do_action(HookPoints::CMS_ROUTES);
@@ -41,6 +42,6 @@ Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
 /**
  * ✅ Catch-all last (pages + anything else)
  */
-Route::get('/{slug}', [ContentRouterController::class, 'show'])
+/* Route::get('/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')
-    ->name('cms.catchall');
+    ->name('cms.catchall'); */

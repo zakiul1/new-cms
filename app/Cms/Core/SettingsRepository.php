@@ -18,16 +18,47 @@ class SettingsRepository
                     ->where('key', $key)
                     ->first();
 
-                return $row?->value ?? $default;
+                // ✅ If not found, return default
+                if (!$row) {
+                    return $default;
+                }
+
+                $value = $row->value;
+
+                // ✅ If DB stored null/empty, still fallback to default
+                if ($value === null) {
+                    return $default;
+                }
+
+                // ✅ If value is JSON string, decode (arrays/settings)
+                if (is_string($value)) {
+                    $trim = trim($value);
+
+                    if ($trim !== '' && ($trim[0] === '{' || $trim[0] === '[')) {
+                        $decoded = json_decode($trim, true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            return $decoded;
+                        }
+                    }
+                }
+
+                return $value;
             }
         );
     }
 
     public function set(string $group, string $key, mixed $value): void
     {
+        // ✅ Store arrays/objects as JSON to keep DB consistent
+        $stored = $value;
+
+        if (is_array($value) || is_object($value)) {
+            $stored = json_encode($value, JSON_UNESCAPED_UNICODE);
+        }
+
         CmsSetting::query()->updateOrCreate(
             ['group' => $group, 'key' => $key],
-            ['value' => $value]
+            ['value' => $stored]
         );
 
         Cache::forget($this->cacheKey($group, $key));

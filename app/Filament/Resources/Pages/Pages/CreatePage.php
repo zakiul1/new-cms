@@ -5,10 +5,29 @@ namespace App\Filament\Resources\Pages\Pages;
 use App\Cms\Content\Slugger;
 use App\Filament\Resources\Pages\PageResource;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Actions\Action;
 
 class CreatePage extends CreateRecord
 {
     protected static string $resource = PageResource::class;
+
+
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            $this->getCancelFormAction(),
+            // Create
+            $this->getCreateAnotherFormAction(),
+            $this->getCreateFormAction(),      // Create & create another (optional)
+            // Cancel (optional)
+        ];
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return static::$resource::getUrl('index');
+    }
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {

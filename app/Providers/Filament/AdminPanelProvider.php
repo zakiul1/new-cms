@@ -6,6 +6,7 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -29,11 +30,20 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
 
-            // ✅ Full width for all admin pages (most compatible)
             ->maxContentWidth('full')
 
             ->colors([
                 'primary' => Color::Amber,
+            ])
+
+            // ✅ Sidebar group order
+            ->navigationGroups([
+                NavigationGroup::make()->label('Appearance')->collapsed(),
+                NavigationGroup::make()->label('Media')->collapsed(),
+
+                NavigationGroup::make()->label('CMS')->collapsed(),
+                NavigationGroup::make()->label('SEO')->collapsed(),
+                NavigationGroup::make()->label('Tools')->collapsed(),
             ])
 
             ->discoverResources(
@@ -47,7 +57,10 @@ class AdminPanelProvider extends PanelProvider
                 // Appearance
                 \App\Filament\Pages\Themes::class,
                 \App\Filament\Pages\Appearance\Menus::class,
-                \App\Filament\Pages\Appearance\Widgets::class, // ✅ WP Widgets Builder
+                \App\Filament\Pages\Appearance\Widgets::class,
+
+                // Media (✅ add your Media page/resource if it's a Page)
+                // \App\Filament\Pages\Media\MediaLibrary::class,
 
                 // CMS
                 \App\Filament\Pages\Cms\Plugins::class,
@@ -56,6 +69,8 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Cms\Search::class,
                 \App\Filament\Pages\Cms\Backups::class,
 
+                // ✅ CMS Settings page (you forgot to register it)
+                \App\Filament\Pages\ManageCmsSettings::class,
             ])
 
             ->discoverWidgets(

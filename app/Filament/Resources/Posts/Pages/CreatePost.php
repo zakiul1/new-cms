@@ -13,6 +13,21 @@ class CreatePost extends CreateRecord
 
     /** @var int[] */
     protected array $productMediaIds = [];
+    protected function getHeaderActions(): array
+    {
+        return [
+            $this->getCancelFormAction(),
+            // Create
+            $this->getCreateAnotherFormAction(),
+            $this->getCreateFormAction(),      // Create & create another (optional)
+            // Cancel (optional)
+        ];
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return static::$resource::getUrl('index');
+    }
 
     public function getMaxContentWidth(): Width
     {

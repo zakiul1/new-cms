@@ -25,6 +25,7 @@ use App\Cms\Plugins\PluginUninstaller;
 use App\Cms\Themes\ThemeInstaller;
 use App\Cms\Themes\ThemeManifestReader;
 use App\Cms\Themes\ThemeManager;
+use App\Cms\Themes\ThemeOptions;
 use App\Cms\Themes\ThemePublisher;
 use App\Cms\Widgets\SidebarRegistry;
 use App\Cms\Widgets\SidebarRenderer;
@@ -66,6 +67,8 @@ class CmsServiceProvider extends ServiceProvider
         $this->app->singleton(ThemePublisher::class);
         $this->app->singleton(ThemeInstaller::class);
         $this->app->singleton(ThemeManager::class);
+        $this->app->singleton(ThemeOptions::class);
+
 
         // Blocks
         $this->app->singleton(BlockRegistry::class);
@@ -138,6 +141,7 @@ class CmsServiceProvider extends ServiceProvider
         $registered = true;
 
         $hooks->addAction(HookPoints::CMS_REGISTER_MENUS, function () {
+            app(MenuRegistry::class)->register('topbar', 'Top Bar Menu');
             app(MenuRegistry::class)->register('primary', 'Primary Menu');
             app(MenuRegistry::class)->register('footer', 'Footer Menu');
         }, 5, 0);

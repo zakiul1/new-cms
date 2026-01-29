@@ -2,33 +2,31 @@
 
 namespace App\Livewire;
 
+use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Core\Settings;
+use App\Cms\Themes\ThemeManager;
+use App\Models\Media;
 use App\Models\Post;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Livewire\Component;
-use Livewire\WithFileUploads;
+use Livewire\WithPagination;
 
 class ThemeCustomizer extends Component
 {
-    use WithFileUploads;
+    use WithPagination;
 
     public string $theme = 'default';
 
     // home | post | page
     public string $preview = 'home';
 
-    // selected item id (when preview = post/page)
     public ?int $previewId = null;
 
-    // search in panels (accordion UI)
     public string $panelSearch = '';
 
     // desktop | tablet | mobile
     public string $device = 'desktop';
-
-    // temp upload
-    public $logoUpload = null;
 
     public array $data = [];
 
@@ -40,14 +38,34 @@ class ThemeCustomizer extends Component
     /** @var array<int, array{id:int,title:string,slug:string}> */
     public array $pageOptions = [];
 
-    public function mount(string $theme = 'default', Settings $settings): void
+    // -----------------------------
+    // Media picker modal state (CUSTOM)
+    // -----------------------------
+    public bool $mediaPickerOpen = false;
+    public string $mediaSearch = '';
+    public string $mediaTargetKey = ''; // e.g. "logo_media_id"
+    public string $mediaType = 'image'; // image | any
+
+    public function mount(?string $theme = 'default'): void
     {
+        abort_unless(auth()->check(), 403);
+
+        /** @var ThemeManager $themes */
+        $themes = app(ThemeManager::class);
+
+        /** @var Settings $settings */
+        $settings = app(Settings::class);
+
         $this->theme = $theme ?: 'default';
+
+        $all = $themes->all();
+        if (!isset($all[$this->theme])) {
+            $this->theme = $themes->activeSlug();
+        }
 
         $saved = $settings->get("theme_options.{$this->theme}", []);
 
         $defaults = [
-            // base
             'primary' => '#f59e0b',
             'accent' => '#0ea5e9',
             'background' => '#ffffff',
@@ -59,13 +77,20 @@ class ThemeCustomizer extends Component
             'shadows' => true,
             'custom_css' => '',
 
-            // ✅ Header (premium)
             'header_layout' => 'left', // left | center | split
             'header_sticky' => true,
             'header_bg' => '#ffffff',
             'header_text' => '#111827',
-            'logo_path' => null,       // stored in public disk
-            'logo_width' => 140,       // px
+
+            // media references
+            'logo_media_id' => null,
+            'favicon_media_id' => null,
+
+            // backward compatibility
+            'logo_path' => null,
+
+            // optional if used in UI
+            'logo_width' => 140,
         ];
 
         $draft = session()->get("theme_customizer.draft.{$this->theme}", []);
@@ -75,7 +100,6 @@ class ThemeCustomizer extends Component
 
         $this->data = array_merge($defaults, $source);
 
-        // Load preview items (latest 10)
         $this->postOptions = Post::query()
             ->where('type', 'post')
             ->where('status', 'published')
@@ -102,7 +126,6 @@ class ThemeCustomizer extends Component
             ])
             ->all();
 
-        // Default selected item
         if ($this->preview === 'post' && $this->previewId === null) {
             $this->previewId = $this->postOptions[0]['id'] ?? null;
         }
@@ -117,8 +140,6 @@ class ThemeCustomizer extends Component
     public function updated($name, $value): void
     {
         if (str_starts_with($name, 'data.') || in_array($name, ['preview', 'previewId', 'device'], true)) {
-
-            // If preview type changed, choose default item for that type
             if ($name === 'preview') {
                 if ($this->preview === 'post') {
                     $this->previewId = $this->postOptions[0]['id'] ?? null;
@@ -134,51 +155,112 @@ class ThemeCustomizer extends Component
         }
     }
 
-    /** ✅ Handles logo upload automatically when user selects a file */
-    public function updatedLogoUpload(): void
+    // ---------------------------------------
+    // Media Picker (CUSTOM)
+    // ---------------------------------------
+
+    public function openMediaPicker(string $targetKey, string $type = 'image'): void
     {
-        if (!$this->logoUpload) {
+        $this->mediaTargetKey = $targetKey;
+        $this->mediaType = $type;
+        $this->mediaSearch = '';
+        $this->mediaPickerOpen = true;
+
+        $this->resetPage('mediaPage');
+    }
+
+    public function closeMediaPicker(): void
+    {
+        $this->mediaPickerOpen = false;
+        $this->mediaSearch = '';
+        $this->mediaTargetKey = '';
+        $this->mediaType = 'image';
+
+        $this->resetPage('mediaPage');
+    }
+
+    public function updatedMediaSearch(): void
+    {
+        $this->resetPage('mediaPage');
+    }
+
+    public function selectMedia(int $mediaId): void
+    {
+        if ($this->mediaTargetKey === '') {
             return;
         }
 
-        $this->validate([
-            'logoUpload' => 'image|max:2048', // 2MB
-        ]);
-
-        /** @var UploadedFile $file */
-        $file = $this->logoUpload;
-
-        // store on "public" disk
-        $path = $file->store("themes-assets/{$this->theme}/logo", 'public');
-
-        // delete old logo if exists
-        $old = $this->data['logo_path'] ?? null;
-        if (is_string($old) && $old !== '' && $old !== $path) {
-            Storage::disk('public')->delete($old);
+        $m = Media::query()->whereKey($mediaId)->first();
+        if (!$m) {
+            return;
         }
 
-        $this->data['logo_path'] = $path;
+        if ($this->mediaType === 'image' && !$m->isImage()) {
+            return;
+        }
 
-        // clear temp upload
-        $this->logoUpload = null;
+        $this->data[$this->mediaTargetKey] = (int) $m->id;
 
         $this->saveDraft();
         $this->refreshPreview();
+        $this->closeMediaPicker();
     }
 
-    public function removeLogo(): void
+    public function clearMedia(string $targetKey): void
     {
-        $path = $this->data['logo_path'] ?? null;
-
-        if (is_string($path) && $path !== '') {
-            Storage::disk('public')->delete($path);
-        }
-
-        $this->data['logo_path'] = null;
-
+        $this->data[$targetKey] = null;
         $this->saveDraft();
         $this->refreshPreview();
     }
+
+    public function getMediaPickerProperty(): ?LengthAwarePaginator
+    {
+        if (!$this->mediaPickerOpen) {
+            return null;
+        }
+
+        $q = trim($this->mediaSearch);
+
+        $query = Media::query()
+            ->with('variantRecords')
+            ->latest('id');
+
+        if ($this->mediaType === 'image') {
+            $query->where('mime_type', 'like', 'image/%');
+        }
+
+        if ($q !== '') {
+            $query->where(function ($qq) use ($q) {
+                $qq->where('title', 'like', "%{$q}%")
+                    ->orWhere('original_filename', 'like', "%{$q}%")
+                    ->orWhere('filename', 'like', "%{$q}%");
+            });
+        }
+
+        return $query->paginate(24, ['*'], 'mediaPage');
+    }
+
+    public function getSelectedMediaProperty(): Collection
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', [
+            $this->data['logo_media_id'] ?? null,
+            $this->data['favicon_media_id'] ?? null,
+        ]))));
+
+        if (!$ids) {
+            return collect();
+        }
+
+        return Media::query()
+            ->with('variantRecords')
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+    }
+
+    // ---------------------------------------
+    // Preview
+    // ---------------------------------------
 
     public function refreshPreview(): void
     {
@@ -191,19 +273,30 @@ class ThemeCustomizer extends Component
         session()->put("theme_customizer.draft.{$this->theme}", $this->data);
     }
 
-    public function publish(Settings $settings): void
+    public function publish(): void
     {
+        /** @var Settings $settings */
+        $settings = app(Settings::class);
+
+        /** @var CmsCacheVersions $versions */
+        $versions = app(CmsCacheVersions::class);
+
         $settings->set("theme_options.{$this->theme}", $this->data);
 
         session()->forget("theme_customizer.draft.{$this->theme}");
         $this->saveDraft();
 
+        $versions->bumpRender();
+
         session()->flash('customizer_notice', 'Published successfully.');
         $this->refreshPreview();
     }
 
-    public function resetDraft(Settings $settings): void
+    public function resetDraft(): void
     {
+        /** @var Settings $settings */
+        $settings = app(Settings::class);
+
         session()->forget("theme_customizer.draft.{$this->theme}");
 
         $saved = $settings->get("theme_options.{$this->theme}", []);
@@ -217,14 +310,10 @@ class ThemeCustomizer extends Component
 
     public function getPreviewUrlProperty(): string
     {
-        // Home
         if ($this->preview === 'home') {
-            return url('/')
-                . '?customizer=1&preview_theme=' . urlencode($this->theme)
-                . '&_t=' . $this->cacheBust;
+            return url('/') . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust;
         }
 
-        // Post
         if ($this->preview === 'post') {
             $id = $this->previewId ?: ($this->postOptions[0]['id'] ?? null);
             if (!$id) {
@@ -237,14 +326,11 @@ class ThemeCustomizer extends Component
                 $slug = $p?->slug;
             }
 
-            if ($slug) {
-                return url('/posts/' . $slug)
-                    . '?customizer=1&preview_theme=' . urlencode($this->theme)
-                    . '&_t=' . $this->cacheBust;
-            }
+            return $slug
+                ? url('/posts/' . $slug) . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust
+                : url('/') . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust;
         }
 
-        // Page
         if ($this->preview === 'page') {
             $id = $this->previewId ?: ($this->pageOptions[0]['id'] ?? null);
             if (!$id) {
@@ -257,17 +343,12 @@ class ThemeCustomizer extends Component
                 $slug = $p?->slug;
             }
 
-            if ($slug) {
-                return url('/pages/' . $slug)
-                    . '?customizer=1&preview_theme=' . urlencode($this->theme)
-                    . '&_t=' . $this->cacheBust;
-            }
+            return $slug
+                ? url('/pages/' . $slug) . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust
+                : url('/') . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust;
         }
 
-        // fallback
-        return url('/')
-            . '?customizer=1&preview_theme=' . urlencode($this->theme)
-            . '&_t=' . $this->cacheBust;
+        return url('/') . '?customizer=1&preview_theme=' . urlencode($this->theme) . '&_t=' . $this->cacheBust;
     }
 
     public function getIframeWidthClassProperty(): string
@@ -279,9 +360,43 @@ class ThemeCustomizer extends Component
         };
     }
 
+    // ---------------------------------------
+    // Helpers for views (logo/favicon URLs)
+    // ---------------------------------------
+
+    public function getLogoUrlProperty(): ?string
+    {
+        $id = $this->data['logo_media_id'] ?? null;
+        if ($id) {
+            $m = Media::query()->with('variantRecords')->whereKey((int) $id)->first();
+            return $m ? ($m->variantUrl('medium') ?: $m->url()) : null;
+        }
+
+        $path = $this->data['logo_path'] ?? null;
+        if (is_string($path) && $path !== '') {
+            return asset('storage/' . ltrim($path, '/'));
+        }
+
+        return null;
+    }
+
+    public function getFaviconUrlProperty(): ?string
+    {
+        $id = $this->data['favicon_media_id'] ?? null;
+        if (!$id) {
+            return null;
+        }
+
+        $m = Media::query()->with('variantRecords')->whereKey((int) $id)->first();
+        return $m?->url();
+    }
+
     public function render()
     {
-        return view('livewire.theme-customizer')
-            ->layout('layouts.customizer');
+        return view('livewire.theme-customizer', [
+            'mediaPicker' => $this->mediaPicker, // ✅ paginator or null
+            'logoUrl' => $this->logoUrl,
+            'faviconUrl' => $this->faviconUrl,
+        ]);
     }
 }

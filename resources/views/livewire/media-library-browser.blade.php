@@ -57,18 +57,18 @@
 
                 {{-- Selected strip (like WP) --}}
                 @if (count($selected))
-                    @php
-                        $selectedMedia = \App\Models\Media::whereIn('id', $selected)->get()->keyBy('id');
-                    @endphp
                     <div class="flex flex-wrap gap-2 p-2 border rounded-lg bg-gray-50">
                         @foreach ($selected as $sid)
                             @php
-                                $m = $selectedMedia->get((int) $sid);
+                                $m = $selectedMedia?->get((int) $sid);
                                 if (!$m) {
                                     continue;
                                 }
-                                $thumb = $m->thumbUrl() ?: $m->url();
+
+                                // ✅ prefer jpeg in admin picker
+                                $thumb = $m->thumbUrl('jpeg') ?: $m->url();
                             @endphp
+
                             <button type="button" class="relative group" wire:click="setActive({{ (int) $m->id }})">
                                 <img src="{{ $thumb }}" class="w-14 h-14 object-cover rounded-md border"
                                     alt="">
@@ -95,9 +95,14 @@
                     @foreach ($media as $item)
                         @php
                             $label = $item->title ?: ($item->original_filename ?: 'Media #' . $item->id);
-                            $thumb = $item->thumbUrl() ?: $item->url();
+
+                            // ✅ prefer jpeg in admin picker
+                            $thumb = $item->thumbUrl('jpeg') ?: $item->url();
+
                             $isSelected = in_array((int) $item->id, $selected, true);
                             $isActive = (int) $activeId === (int) $item->id;
+
+                            $processing = $item->isImage() && is_null($item->processed_at);
                         @endphp
 
                         <button type="button"
@@ -105,6 +110,13 @@
                             wire:click="toggle({{ (int) $item->id }})">
                             <div class="relative">
                                 <img src="{{ $thumb }}" class="w-full h-28 object-cover" alt="">
+
+                                @if ($processing)
+                                    <div
+                                        class="absolute top-2 left-2 bg-gray-900/70 text-white text-[10px] px-2 py-0.5 rounded">
+                                        Processing…
+                                    </div>
+                                @endif
 
                                 <div
                                     class="absolute top-2 right-2 w-5 h-5 rounded-full border bg-white flex items-center justify-center text-xs
@@ -125,7 +137,6 @@
                         Showing {{ $media->count() }} items
                     </div>
 
-                    {{-- Use default pagination view (prevents “view not found”) --}}
                     <div>
                         {{ $media->links() }}
                     </div>
@@ -138,12 +149,10 @@
                     <div class="text-sm font-semibold">Attachment details</div>
 
                     @if ($activeId)
-                        @php
-                            $active = \App\Models\Media::find($activeId);
-                        @endphp
-
                         @if ($active)
-                            @php $preview = $active->thumbUrl() ?: $active->url(); @endphp
+                            @php
+                                $preview = $active->thumbUrl('jpeg') ?: $active->url();
+                            @endphp
 
                             <img src="{{ $preview }}" class="w-full h-48 object-cover rounded-lg border"
                                 alt="">

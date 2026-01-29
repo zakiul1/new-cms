@@ -20,7 +20,11 @@ class PostsTable
                 TextColumn::make('title')
                     ->label('Title')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap(false)
+                    ->limit(50) // trims and adds "…"
+                    ->tooltip(fn($record) => $record->title) // full title on hover
+                    ->extraAttributes(['class' => 'max-w-[420px] truncate']),
 
                 TextColumn::make('categories.name')
                     ->label('Categories')

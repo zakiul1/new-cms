@@ -2,7 +2,7 @@
 
 namespace App\Cms\Themes;
 
-use App\Cms\Core\Settings;
+use App\Cms\Core\SettingsRepository;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\View;
@@ -11,7 +11,7 @@ use RuntimeException;
 class ThemeManager
 {
     public function __construct(
-        private Settings $settings,
+        private SettingsRepository $settings,
         private ThemeManifestReader $reader,
         private ThemePublisher $publisher,
         private CacheRepository $cache,
@@ -55,7 +55,7 @@ class ThemeManager
 
             foreach (File::directories($base) as $dir) {
                 try {
-                    $manifest = $this->reader->read($dir); // ThemeManifest object
+                    $manifest = $this->reader->read($dir);
                     $slug = $manifest->slug;
 
                     $themes[$slug] = [
@@ -105,7 +105,6 @@ class ThemeManager
                     'sidebars' => $m->sidebars,
                     'assets' => $m->assets,
 
-                    // premium UI
                     'screenshot' => $m->raw['screenshot'] ?? null,
                     'latest_version' => $m->raw['latest_version'] ?? null,
                 ],
@@ -122,8 +121,8 @@ class ThemeManager
 
     public function activeSlug(): string
     {
-        // ✅ active theme is core config
-        $slug = (string) $this->settings->get('active_theme', 'default', 'core');
+        // ✅ SAME source used by ManageCmsSettings
+        $slug = (string) $this->settings->get('core', 'active_theme', 'default');
         return $slug !== '' ? $slug : 'default';
     }
 
@@ -140,15 +139,13 @@ class ThemeManager
         }
 
         if (isset($themes['default'])) {
-            // ✅ group core
-            $this->settings->set('active_theme', 'default', 'core');
+            $this->settings->set('core', 'active_theme', 'default');
             return 'default';
         }
 
         if (!empty($themes)) {
             $first = array_key_first($themes);
-            // ✅ group core
-            $this->settings->set('active_theme', $first, 'core');
+            $this->settings->set('core', 'active_theme', $first);
             return $first;
         }
 
@@ -157,8 +154,6 @@ class ThemeManager
 
     /**
      * Decide which theme should be booted for THIS request.
-     * - normal: active theme
-     * - customizer preview: ?preview_theme=slug (only for logged-in users)
      */
     private function getBootSlugForRequest(): ?string
     {
@@ -167,19 +162,16 @@ class ThemeManager
             return null;
         }
 
-        // base slug = active (validated fallback)
         try {
             $slug = $this->ensureActiveThemeValid();
         } catch (\Throwable) {
             $slug = array_key_first($themes);
         }
 
-        // ✅ console-safe: do not touch request()/auth() in artisan
         if (app()->runningInConsole()) {
             return $slug;
         }
 
-        // allow preview theme in customizer
         $preview = (string) request()->query('preview_theme', '');
         if ($preview !== '' && auth()->check() && isset($themes[$preview])) {
             $slug = $preview;
@@ -188,10 +180,6 @@ class ThemeManager
         return $slug;
     }
 
-    /**
-     * Enqueue active (or preview) theme assets from theme.json assets.
-     * Safe: never crashes.
-     */
     public function enqueueActiveThemeAssets(): void
     {
         try {
@@ -240,7 +228,7 @@ class ThemeManager
                         }
 
                         if (is_bool($item[$key]) && $item[$key] === true) {
-                            $attrs[$key] = $key; // defer="defer"
+                            $attrs[$key] = $key;
                         } elseif (is_string($item[$key]) && $item[$key] !== '') {
                             $attrs[$key] = $item[$key];
                         }
@@ -260,7 +248,6 @@ class ThemeManager
             }
         } catch (\Throwable $e) {
             logger()->warning('enqueueActiveThemeAssets failed', ['error' => $e->getMessage()]);
-            return;
         }
     }
 
@@ -272,19 +259,13 @@ class ThemeManager
             throw new RuntimeException("Theme not found: {$slug}");
         }
 
-        // ✅ group core
-        $this->settings->set('active_theme', $slug, 'core');
+        // ✅ SAME storage as ManageCmsSettings
+        $this->settings->set('core', 'active_theme', $slug);
 
-        // publish assets when activated
         $this->publisher->publish($slug);
-
-        // clear discovery cache so UI shows latest info
         $this->forgetDiscoveryCache();
     }
 
-    /**
-     * Boot the active theme (or preview theme for customizer).
-     */
     public function bootActiveTheme(): void
     {
         $themes = $this->discoverKeyed();
@@ -299,15 +280,26 @@ class ThemeManager
             return;
         }
 
-        $themesBase = rtrim((string) config('cms.themes_path'), DIRECTORY_SEPARATOR);
-        $themeViews = $themesBase . DIRECTORY_SEPARATOR . $slug . DIRECTORY_SEPARATOR . 'views';
+        /** @var ThemeManifest $m */
+        $m = $themes[$slug]['manifest'];
 
-        if (is_dir($themeViews)) {
-            View::addLocation($themeViews);
-            View::addNamespace('theme', $themeViews);
+        $themesBase = rtrim((string) config('cms.themes_path'), DIRECTORY_SEPARATOR);
+
+        $childViews = $themesBase . DIRECTORY_SEPARATOR . $slug . DIRECTORY_SEPARATOR . 'views';
+        if (is_dir($childViews)) {
+            View::addLocation($childViews);
+            View::addNamespace('theme', $childViews);
         }
 
-        // publish dist if missing
+        $parent = (string) ($m->parent ?? '');
+        if ($parent !== '' && isset($themes[$parent])) {
+            $parentViews = $themesBase . DIRECTORY_SEPARATOR . $parent . DIRECTORY_SEPARATOR . 'views';
+            if (is_dir($parentViews)) {
+                View::addLocation($parentViews);
+                View::addNamespace('theme_parent', $parentViews);
+            }
+        }
+
         $publicBase = rtrim((string) config('cms.themes_public_path'), DIRECTORY_SEPARATOR);
         $publicDist = $publicBase . DIRECTORY_SEPARATOR . $slug . DIRECTORY_SEPARATOR . 'dist';
 

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\File;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class GenerateMediaVariants implements ShouldQueue
@@ -30,23 +31,29 @@ class GenerateMediaVariants implements ShouldQueue
             return;
         }
 
-        $disk = (string) $media->disk;
-        $format = strtolower((string) config('cms-media.variant_format', 'webp')); // webp|avif|jpeg|png
+        $disk = (string) ($media->disk ?: config('cms-media.disk', 'public'));
         $sizes = (array) config('cms-media.image_variants', []);
 
-        $quality = (int) (config("cms-media.quality.{$format}") ?? 82);
-        if (in_array($format, ['jpg', 'jpeg'], true)) {
-            $quality = (int) (config('cms-media.quality.jpeg') ?? 85);
-        }
-
-        $sourcePath = $media->path();
-        $sourceAbs = Storage::disk($disk)->path($sourcePath);
-
-        if (!is_file($sourceAbs) || !is_readable($sourceAbs)) {
+        if (empty($sizes)) {
             return;
         }
 
-        $bytes = @file_get_contents($sourceAbs);
+        $primary = strtolower((string) config('cms-media.variant_format', 'webp')); // usually webp
+        $alsoJpegFallback = true;
+
+        $formats = [$primary];
+        if ($alsoJpegFallback && !in_array($primary, ['jpeg', 'jpg'], true)) {
+            $formats[] = 'jpeg';
+        }
+
+        $sourcePath = $media->path();
+
+        if (!Storage::disk($disk)->exists($sourcePath)) {
+            return;
+        }
+
+        // Read file bytes (simple + portable)
+        $bytes = Storage::disk($disk)->get($sourcePath);
         if (!is_string($bytes) || $bytes === '') {
             return;
         }
@@ -55,6 +62,8 @@ class GenerateMediaVariants implements ShouldQueue
         if (!$img) {
             return;
         }
+
+        $generatedAny = false;
 
         try {
             $srcW = imagesx($img);
@@ -68,30 +77,19 @@ class GenerateMediaVariants implements ShouldQueue
                 $key = (string) $key;
                 $maxWidth = (int) $maxWidth;
 
-                if ($maxWidth <= 0) {
+                if ($key === '' || $maxWidth <= 0) {
                     continue;
                 }
 
-                if (!$this->force) {
-                    if (MediaVariant::query()->where('media_id', $media->id)->where('key', $key)->exists()) {
-                        continue;
-                    }
-                } else {
-                    // delete existing variant record + file (force regenerate)
-                    $existing = MediaVariant::query()
-                        ->where('media_id', $media->id)
-                        ->where('key', $key)
-                        ->first();
+                // WP-like: don't upscale, except thumb if you want
+                $allowUpscale = ($key === 'thumb');
 
-                    if ($existing) {
-                        Storage::disk($existing->disk)->delete(trim($existing->directory, '/') . '/' . $existing->filename);
-                        $existing->delete();
-                    }
+                // If not upscaling and original is already smaller than target -> skip (keeps storage clean)
+                if (!$allowUpscale && $srcW <= $maxWidth) {
+                    continue;
                 }
 
-                $allowUpscale = ($key === 'thumb');
                 [$newW, $newH] = $this->fitWidth($srcW, $srcH, $maxWidth, $allowUpscale);
-
                 if ($newW <= 0 || $newH <= 0) {
                     continue;
                 }
@@ -119,69 +117,126 @@ class GenerateMediaVariants implements ShouldQueue
 
                 $variantDir = rtrim((string) $media->directory, '/') . '/variants';
                 $baseName = pathinfo((string) $media->filename, PATHINFO_FILENAME);
-                $variantName = "{$baseName}-{$key}.{$format}";
 
-                $tmp = tempnam(sys_get_temp_dir(), 'cmsv_');
-                if ($tmp === false) {
-                    imagedestroy($resized);
-                    continue;
+                foreach ($formats as $format) {
+                    $format = strtolower((string) $format);
+
+                    if ($format === 'webp' && !function_exists('imagewebp')) {
+                        Log::warning('WebP requested but GD imagewebp() not available', ['media_id' => $media->id]);
+                        continue;
+                    }
+
+                    // If not forcing, skip existing row
+                    if (!$this->force) {
+                        $exists = MediaVariant::query()
+                            ->where('media_id', $media->id)
+                            ->where('key', $key)
+                            ->where('format', $format)
+                            ->exists();
+
+                        if ($exists) {
+                            continue;
+                        }
+                    } else {
+                        // Force: delete old record + old file (if any)
+                        $existing = MediaVariant::query()
+                            ->where('media_id', $media->id)
+                            ->where('key', $key)
+                            ->where('format', $format)
+                            ->first();
+
+                        if ($existing) {
+                            Storage::disk((string) ($existing->disk ?: $disk))->delete($existing->path());
+                            $existing->delete();
+                        }
+                    }
+
+                    $ext = ($format === 'jpeg') ? 'jpg' : $format;
+                    $variantName = "{$baseName}-{$key}.{$ext}";
+
+                    $tmp = tempnam(sys_get_temp_dir(), 'cmsv_');
+                    if ($tmp === false) {
+                        continue;
+                    }
+
+                    $quality = $this->qualityFor($format);
+
+                    $written = $this->writeVariant($resized, $tmp, $format, $quality);
+                    if (!$written) {
+                        @unlink($tmp);
+                        continue;
+                    }
+
+                    // Store to disk
+                    $stored = Storage::disk($disk)->putFileAs($variantDir, new File($tmp), $variantName);
+                    @unlink($tmp);
+
+                    if (!$stored) {
+                        continue;
+                    }
+
+                    $storedPath = rtrim($variantDir, '/') . '/' . $variantName;
+                    $storedSize = (int) (Storage::disk($disk)->size($storedPath) ?: 0);
+
+                    MediaVariant::query()->updateOrCreate(
+                        ['media_id' => $media->id, 'key' => $key, 'format' => $format],
+                        [
+                            'disk' => $disk,
+                            'directory' => $variantDir,
+                            'filename' => $variantName,
+                            'mime_type' => $this->mimeForFormat($format),
+                            'size' => $storedSize,
+                            'width' => $newW,
+                            'height' => $newH,
+                        ]
+                    );
+
+                    $generatedAny = true;
                 }
-
-                $written = $this->writeVariant($resized, $tmp, $format, $quality);
 
                 imagedestroy($resized);
-
-                if (!$written) {
-                    @unlink($tmp);
-                    continue;
-                }
-
-                $stored = Storage::disk($disk)->putFileAs($variantDir, new File($tmp), $variantName);
-
-                @unlink($tmp);
-
-                if (!$stored) {
-                    continue;
-                }
-
-                $variantAbs = Storage::disk($disk)->path($variantDir . '/' . $variantName);
-
-                MediaVariant::query()->updateOrCreate(
-                    ['media_id' => $media->id, 'key' => $key],
-                    [
-                        'disk' => $disk,
-                        'directory' => $variantDir,
-                        'filename' => $variantName,
-                        'mime_type' => $this->mimeForFormat($format),
-                        'size' => @filesize($variantAbs) ?: 0,
-                        'width' => $newW,
-                        'height' => $newH,
-                    ]
-                );
             }
         } finally {
             imagedestroy($img);
+        }
+
+        if ($generatedAny) {
+            $media->forceFill(['processed_at' => now()])->save();
         }
     }
 
     private function writeVariant($gd, string $path, string $format, int $quality): bool
     {
-        $format = strtolower($format);
-
         return match ($format) {
-            'webp' => function_exists('imagewebp') ? (bool) @imagewebp($gd, $path, $this->clamp($quality, 1, 100)) : false,
-            'jpg', 'jpeg' => (bool) @imagejpeg($gd, $path, $this->clamp($quality, 1, 100)),
+            'webp' => function_exists('imagewebp')
+            ? (bool) @imagewebp($gd, $path, $this->clamp($quality, 1, 100))
+            : false,
+
+            'jpeg', 'jpg' => (bool) @imagejpeg($gd, $path, $this->clamp($quality, 1, 100)),
+
             'png' => (bool) @imagepng($gd, $path, 6),
-            default => function_exists('imagewebp') ? (bool) @imagewebp($gd, $path, $this->clamp($quality, 1, 100)) : false,
+
+            default => false,
+        };
+    }
+
+    private function qualityFor(string $format): int
+    {
+        return match ($format) {
+            'webp' => (int) (config('cms-media.quality.webp') ?? 82),
+            'jpeg', 'jpg' => (int) (config('cms-media.quality.jpeg') ?? 85),
+            'png' => (int) (config('cms-media.quality.png') ?? 90),
+            default => 82,
         };
     }
 
     private function mimeForFormat(string $format): string
     {
-        return match (strtolower($format)) {
-            'jpg', 'jpeg' => 'image/jpeg',
+        return match ($format) {
+            'jpeg', 'jpg' => 'image/jpeg',
             'png' => 'image/png',
-            default => 'image/webp',
+            'webp' => 'image/webp',
+            default => 'application/octet-stream',
         };
     }
 
@@ -192,10 +247,6 @@ class GenerateMediaVariants implements ShouldQueue
         }
 
         if (!$allowUpscale && $w <= $maxW) {
-            return [$w, $h];
-        }
-
-        if ($allowUpscale && $w <= $maxW) {
             return [$w, $h];
         }
 

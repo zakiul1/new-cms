@@ -1,3 +1,7 @@
+@php
+    use Illuminate\Support\Js;
+@endphp
+
 <x-filament::page>
     {{-- Toolbar --}}
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -38,7 +42,7 @@
                 $hasUpdate = $latest !== '' && $current !== '' && version_compare($latest, $current, '>');
             @endphp
 
-            <div
+            <div wire:key="theme-{{ $slug }}"
                 class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 {{-- Preview --}}
                 <div class="relative aspect-[16/10] bg-gray-100 dark:bg-gray-800">
@@ -91,12 +95,11 @@
                     {{-- Actions --}}
                     <div class="mt-4 flex items-center justify-between gap-2">
                         <div class="flex items-center gap-2">
-                            <x-filament::button size="sm" color="gray"
-                                wire:click="mountAction('details', { slug: @js($slug) })">
+                            <x-filament::button size="sm" color="gray" type="button"
+                                wire:click="mountAction('details', { slug: {{ Js::from($slug) }} })">
                                 Details
                             </x-filament::button>
 
-                            {{-- ✅ WP-style: customize ANY theme (active or not) --}}
                             <x-filament::button size="sm" tag="a" color="gray"
                                 href="{{ url('/customizer?theme=' . $slug) }}">
                                 Customize
@@ -105,8 +108,9 @@
 
                         <div>
                             @if ($active !== $slug)
-                                <x-filament::button size="sm"
-                                    wire:click="activateTheme(@js($slug))">
+                                <x-filament::button size="sm" type="button"
+                                    wire:click="activateTheme({{ Js::from($slug) }})" wire:loading.attr="disabled"
+                                    wire:target="activateTheme">
                                     Activate
                                 </x-filament::button>
                             @else

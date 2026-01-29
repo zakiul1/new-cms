@@ -8,5 +8,12 @@
   "assets": {
     "styles": ["dist/theme.css"],
     "scripts": [{ "src": "dist/theme.js", "defer": true }]
-  }
+  },
+  "options_schema": [
+  { "key": "logo", "label": "Site Logo", "type": "media" },
+  { "key": "favicon", "label": "Favicon", "type": "media" },
+  { "key": "primary_color", "label": "Primary Color", "type": "color", "default": "#f59e0b" },
+  { "key": "footer_text", "label": "Footer Text", "type": "text", "default": "© [year] My Site" }
+]
+
 }

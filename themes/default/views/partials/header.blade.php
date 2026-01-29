@@ -9,11 +9,31 @@
     $bg = $o['header_bg'] ?? '#ffffff';
     $text = $o['header_text'] ?? '#111827';
 
-    // Logo
-    $logo = $o['logo_path'] ?? null;
-    $logoUrl = $logo ? \Illuminate\Support\Facades\Storage::disk('public')->url($logo) : null;
+    // Logo width
     $logoWidth = (int) ($o['logo_width'] ?? 140);
-    if ($logoWidth <= 0) $logoWidth = 140;
+    if ($logoWidth <= 0) {
+        $logoWidth = 140;
+    }
+
+    // ✅ Logo (NEW): media id first, fallback to old logo_path
+    $logoUrl = null;
+
+    $logoMediaId = (int) ($o['logo_media_id'] ?? 0);
+    if ($logoMediaId > 0) {
+        $m = \App\Models\Media::query()->whereKey($logoMediaId)->first();
+        if ($m && $m->isImage()) {
+            $logoUrl = $m->url();
+        }
+    }
+
+    // Backward compatibility (old customizer)
+    if (!$logoUrl) {
+        $logoPath = $o['logo_path'] ?? null;
+        $logoUrl =
+            is_string($logoPath) && $logoPath !== ''
+                ? \Illuminate\Support\Facades\Storage::disk('public')->url($logoPath)
+                : null;
+    }
 
     $layoutClass = match ($layout) {
         'center' => 'cms-layout-center',
@@ -25,14 +45,12 @@
     $menuHtml = app(\App\Cms\Menus\MenuRenderer::class)->renderLocation('primary');
 @endphp
 
-<header
-    class="cms-header {{ $layoutClass }}"
+<header class="cms-header {{ $layoutClass }}"
     style="
         background: {{ $bg }};
         color: {{ $text }};
         {{ $sticky ? 'position:sticky;top:0;' : '' }}
-    "
->
+    ">
     <div class="cms-container">
         <div class="cms-header-inner">
             {{-- LEFT --}}
@@ -42,11 +60,8 @@
                 @if ($layout !== 'center')
                     <a href="{{ url('/') }}" class="cms-logo" aria-label="Home">
                         @if ($logoUrl)
-                            <img
-                                src="{{ $logoUrl }}"
-                                alt="Logo"
-                                style="width: {{ $logoWidth }}px; height: auto; display:block;"
-                            >
+                            <img src="{{ $logoUrl }}" alt="Logo"
+                                style="width: {{ $logoWidth }}px; height: auto; display:block;">
                         @else
                             <span class="cms-site-title">{{ config('app.name', 'CMS') }}</span>
                         @endif
@@ -63,11 +78,8 @@
                 @if ($layout === 'center')
                     <a href="{{ url('/') }}" class="cms-logo" aria-label="Home">
                         @if ($logoUrl)
-                            <img
-                                src="{{ $logoUrl }}"
-                                alt="Logo"
-                                style="width: {{ $logoWidth }}px; height: auto; display:block;"
-                            >
+                            <img src="{{ $logoUrl }}" alt="Logo"
+                                style="width: {{ $logoWidth }}px; height: auto; display:block;">
                         @else
                             <span class="cms-site-title">{{ config('app.name', 'CMS') }}</span>
                         @endif
@@ -79,7 +91,7 @@
                     @if (trim($menuHtml) !== '')
                         {!! $menuHtml !!}
                     @else
-                       <strong>Dynamic Menu Not set yet</strong>
+                        <strong>Dynamic Menu Not set yet</strong>
                     @endif
                 </nav>
 

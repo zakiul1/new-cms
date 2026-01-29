@@ -18,13 +18,12 @@ class MediaUploader
      *
      * @param  UploadedFile|TemporaryUploadedFile  $file
      */
-    public function upload(UploadedFile $file): Media
+    public function upload(UploadedFile|TemporaryUploadedFile $file): Media
     {
         $disk = (string) config('cms-media.disk', 'public');
         $baseDir = trim((string) config('cms-media.base_dir', 'media'), '/');
         $maxMb = (int) config('cms-media.max_upload_mb', 50);
 
-        // Basic size guard (same as UI maxSize)
         $sizeBytes = (int) ($file->getSize() ?: 0);
         if ($sizeBytes > ($maxMb * 1024 * 1024)) {
             throw new \RuntimeException("File is too large. Max allowed: {$maxMb} MB");
@@ -36,10 +35,7 @@ class MediaUploader
         $originalName = (string) $file->getClientOriginalName();
         $mime = (string) ($file->getMimeType() ?: $file->getClientMimeType() ?: 'application/octet-stream');
 
-        // Compute sha1 BEFORE storing (temp file exists now)
         $sha1 = $this->sha1OfUploadedFile($file);
-
-        // Compute width/height for images
         [$w, $h] = $this->imageSizeIfAny($file, $mime);
 
         // ✅ Dedupe
@@ -47,14 +43,24 @@ class MediaUploader
             $existing = Media::query()
                 ->where('sha1', $sha1)
                 ->where('size', $sizeBytes)
+                // optional safety: ensure same mime family
+                ->where('mime_type', $mime)
                 ->first();
 
-            if ($existing && Storage::disk((string) ($existing->disk ?: 'public'))->exists($existing->path())) {
-                return $existing;
+            if ($existing) {
+                $existingDisk = (string) ($existing->disk ?: $disk);
+
+                if (Storage::disk($existingDisk)->exists($existing->path())) {
+                    return $existing;
+                }
             }
         }
 
-        // Store original
+        // Ensure directory exists (safe no-op for most drivers)
+        if (method_exists(Storage::disk($disk), 'makeDirectory')) {
+            Storage::disk($disk)->makeDirectory($dir);
+        }
+
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
@@ -70,9 +76,9 @@ class MediaUploader
             'height' => $h,
             'sha1' => $sha1,
             'title' => (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled'),
+            'processed_at' => null,
         ]);
 
-        // Generate variants (images only)
         if ($media->isImage()) {
             $this->dispatchVariantsJob($media->id, false);
         }
@@ -81,13 +87,13 @@ class MediaUploader
     }
 
     /**
-     * ✅ Replace original file but keep same Media record (WP-like)
+     * Replace original file but keep same Media record (WP-like)
      *
      * @param  UploadedFile|TemporaryUploadedFile  $file
      */
-    public function replace(Media $media, UploadedFile $file): Media
+    public function replace(Media $media, UploadedFile|TemporaryUploadedFile $file): Media
     {
-        $disk = (string) ($media->disk ?: 'public');
+        $disk = (string) ($media->disk ?: config('cms-media.disk', 'public'));
         $dir = trim((string) $media->directory, '/');
         $maxMb = (int) config('cms-media.max_upload_mb', 50);
 
@@ -103,21 +109,23 @@ class MediaUploader
         $sha1 = $this->sha1OfUploadedFile($file);
         [$w, $h] = $this->imageSizeIfAny($file, $mime);
 
+        if (method_exists(Storage::disk($disk), 'makeDirectory')) {
+            Storage::disk($disk)->makeDirectory($dir);
+        }
+
         // Store new original first
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
-        // ✅ Remove old variant files + records
+        // Remove old variant files + records
         $variantRows = $media->variantRecords()->get();
 
         foreach ($variantRows as $variant) {
-            $variantPath = trim((string) $variant->directory, '/')
-                . '/'
-                . ltrim((string) $variant->filename, '/');
-
-            Storage::disk((string) ($variant->disk ?: 'public'))->delete($variantPath);
+            $variantDisk = (string) ($variant->disk ?: $disk);
+            Storage::disk($variantDisk)->delete($variant->path());
         }
 
+        // Delete rows
         $media->variantRecords()->delete();
 
         // Remove old original AFTER new stored
@@ -132,6 +140,7 @@ class MediaUploader
             'width' => $w,
             'height' => $h,
             'sha1' => $sha1,
+            'processed_at' => null,
         ]);
 
         if ($media->isImage()) {
@@ -146,37 +155,39 @@ class MediaUploader
      */
     public function deleteFiles(Media $media): void
     {
+        $disk = (string) ($media->disk ?: config('cms-media.disk', 'public'));
+
         $variantRows = $media->variantRecords()->get();
-
         foreach ($variantRows as $variant) {
-            $variantPath = trim((string) $variant->directory, '/')
-                . '/'
-                . ltrim((string) $variant->filename, '/');
-
-            Storage::disk((string) ($variant->disk ?: 'public'))->delete($variantPath);
+            $variantDisk = (string) ($variant->disk ?: $disk);
+            Storage::disk($variantDisk)->delete($variant->path());
         }
 
-        Storage::disk((string) ($media->disk ?: 'public'))->delete($media->path());
+        Storage::disk($disk)->delete($media->path());
     }
 
+    /**
+     * Correct queue dispatch: set connection/queue BEFORE dispatching.
+     */
     private function dispatchVariantsJob(int $mediaId, bool $force): void
     {
         $queueEnabled = (bool) config('cms-media.queue.enabled', true);
-
-        $job = GenerateMediaVariants::dispatch($mediaId, $force);
 
         if ($queueEnabled) {
             $connection = (string) config('cms-media.queue.connection', config('queue.default'));
             $queue = (string) config('cms-media.queue.queue', 'media');
 
-            $job->onConnection($connection)->onQueue($queue);
+            GenerateMediaVariants::dispatch($mediaId, $force)
+                ->onConnection($connection)
+                ->onQueue($queue);
+
             return;
         }
 
         GenerateMediaVariants::dispatchSync($mediaId, $force);
     }
 
-    private function safeUniqueFilename(UploadedFile $file): string
+    private function safeUniqueFilename(UploadedFile|TemporaryUploadedFile $file): string
     {
         $name = Str::slug((string) pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
         $name = $name !== '' ? $name : 'file';
@@ -187,7 +198,7 @@ class MediaUploader
         return $name . '-' . Str::random(10) . '.' . $ext;
     }
 
-    private function sha1OfUploadedFile(UploadedFile $file): ?string
+    private function sha1OfUploadedFile(UploadedFile|TemporaryUploadedFile $file): ?string
     {
         $realPath = $file->getRealPath();
 
@@ -200,7 +211,7 @@ class MediaUploader
         return is_string($hash) && $hash !== '' ? $hash : null;
     }
 
-    private function imageSizeIfAny(UploadedFile $file, string $mime): array
+    private function imageSizeIfAny(UploadedFile|TemporaryUploadedFile $file, string $mime): array
     {
         if (!str_starts_with($mime, 'image/')) {
             return [null, null];

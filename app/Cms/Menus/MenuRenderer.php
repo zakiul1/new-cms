@@ -3,7 +3,6 @@
 namespace App\Cms\Menus;
 
 use App\Cms\Core\CmsCacheVersions;
-use App\Cms\Hooks\HookPoints;
 use App\Cms\Hooks\Hooks;
 use App\Models\MenuAssignment;
 use App\Models\MenuItem;
@@ -21,7 +20,11 @@ class MenuRenderer
     public function renderLocation(string $locationKey, array $ctx = []): string
     {
         $ver = $this->versions->get('menu_location', $locationKey);
-        $cacheKey = "cms:menu:location:{$locationKey}:v{$ver}";
+
+        // ✅ global render version (theme/plugins/customizer publish)
+        $renderVer = $this->versions->getRender();
+
+        $cacheKey = "cms:menu:location:{$locationKey}:v{$ver}:r{$renderVer}";
 
         return (string) Cache::remember($cacheKey, now()->addMinutes(30), function () use ($locationKey, $ctx) {
             $assignment = MenuAssignment::query()
