@@ -29,9 +29,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-
             ->maxContentWidth('full')
-
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -40,17 +38,24 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups([
                 NavigationGroup::make()->label('Appearance')->collapsed(),
                 NavigationGroup::make()->label('Media')->collapsed(),
-
                 NavigationGroup::make()->label('CMS')->collapsed(),
                 NavigationGroup::make()->label('SEO')->collapsed(),
                 NavigationGroup::make()->label('Tools')->collapsed(),
             ])
 
+            // ✅ Discover Resources
             ->discoverResources(
                 in: app_path('Filament/Resources'),
                 for: 'App\\Filament\\Resources'
             )
 
+            // ✅ Discover Pages (IMPORTANT)
+            ->discoverPages(
+                in: app_path('Filament/Pages'),
+                for: 'App\\Filament\\Pages'
+            )
+
+            // ✅ Manually registered pages (you can keep these)
             ->pages([
                 Dashboard::class,
 
@@ -59,9 +64,6 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Appearance\Menus::class,
                 \App\Filament\Pages\Appearance\Widgets::class,
 
-                // Media (✅ add your Media page/resource if it's a Page)
-                // \App\Filament\Pages\Media\MediaLibrary::class,
-
                 // CMS
                 \App\Filament\Pages\Cms\Plugins::class,
                 \App\Filament\Pages\Cms\PluginSettings::class,
@@ -69,10 +71,11 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Cms\Search::class,
                 \App\Filament\Pages\Cms\Backups::class,
 
-                // ✅ CMS Settings page (you forgot to register it)
+                // Settings
                 \App\Filament\Pages\ManageCmsSettings::class,
             ])
 
+            // ✅ Widgets
             ->discoverWidgets(
                 in: app_path('Filament/Widgets'),
                 for: 'App\\Filament\\Widgets'
@@ -82,6 +85,7 @@ class AdminPanelProvider extends PanelProvider
                 FilamentInfoWidget::class,
             ])
 
+            // ✅ Middleware
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -96,6 +100,7 @@ class AdminPanelProvider extends PanelProvider
 
             ->viteTheme('resources/css/filament/admin/theme.css')
 
+            // ✅ Auth middleware
             ->authMiddleware([
                 Authenticate::class,
             ]);

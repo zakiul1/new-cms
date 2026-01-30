@@ -13,6 +13,7 @@ final class ThemeInstaller
     public function __construct(
         private ThemeManifestReader $reader,
         private ThemePublisher $publisher,
+        private ThemeManager $themes,
     ) {
     }
 
@@ -83,6 +84,7 @@ final class ThemeInstaller
 
         // publish dist -> public/themes/{slug}/dist
         $this->publisher->publish($slug);
+        $this->themes->forgetDiscoveryCache();
 
         // ✅ return array for UI
         return [

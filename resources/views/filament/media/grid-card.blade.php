@@ -5,7 +5,7 @@
     $record = $getRecord();
 
     $title = (string) ($record->title ?: ($record->original_filename ?: 'Media #' . $record->id));
-    $thumb = $record->thumbUrl() ?: $record->url();
+    $thumb = $record->thumbUrl('jpeg') ?: $record->thumbUrl() ?: $record->url();
 
     $sizeKb = number_format(((int) $record->size) / 1024, 1);
     $timeText = optional($record->created_at)->diffForHumans() ?: '';
@@ -16,50 +16,147 @@
     $editUrl = \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $record]);
 @endphp
 
-<div class="w-full min-w-0 max-w-full">
-    {{-- ✅ WHOLE TILE IS SQUARE --}}
-    <div class="group relative aspect-square w-full overflow-hidden rounded-xl bg-white ">
-        {{-- Top: image region (always square-ish inside tile) --}}
-        <div class="relative h-[72%] w-full overflow-hidden bg-gray-100">
-            <img src="{{ $thumb }}" alt="" loading="lazy"
-                class="absolute inset-0 h-full w-full object-cover" />
+@once
+<style>
+    :root {
+        --mlb-gap: 14px;
+        --mlb-tile: 175px;        /* ✅ set 160/180/200 you like */
+        --mlb-meta: 54px;         /* ✅ fixed meta height */
+    }
 
-            {{-- Type badge --}}
-            <div
-                class="absolute left-2 top-2 rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-medium text-gray-700">
-                {{ $typeLabel }}
-            </div>
+    /* ✅ Filament table "grid" -> flex wrap */
+    .fi-ta-content-grid {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: var(--mlb-gap) !important;
+        align-items: flex-start !important;
+    }
 
-            {{-- Hover actions --}}
-            <div class="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
-                <div class="absolute inset-0 bg-black/10"></div>
+    .fi-ta-content-grid > .fi-ta-record {
+        flex: 0 0 auto !important;
+        width: var(--mlb-tile) !important;
+        min-width: 0 !important;
+    }
 
-                <div class="pointer-events-auto absolute right-2 top-2 flex gap-2">
-                    <a href="{{ $editUrl }}"
-                        class="rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-800"
-                        onclick="event.stopPropagation();">
-                        Edit
-                    </a>
+    .fi-ta-record-content-ctn,
+    .fi-ta-record-content {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
 
-                    <a href="{{ $record->url() }}" target="_blank" rel="noopener"
-                        class="rounded-md bg-white/95 px-2 py-1 text-[11px] font-medium text-gray-800"
-                        onclick="event.stopPropagation();">
-                        View
-                    </a>
-                </div>
-            </div>
+    /* ✅ EXACT same card size always */
+    .mlb-tile {
+        width: 100%;
+        height: var(--mlb-tile);       /* ✅ makes it square by height too */
+        border-radius: 14px;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid rgba(15, 23, 42, .10);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ✅ Image area always same height */
+    .mlb-media {
+        position: relative;
+        height: calc(var(--mlb-tile) - var(--mlb-meta)); /* square - meta */
+        background: #f1f5f9;
+        overflow: hidden;
+    }
+
+    .mlb-media img {
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
+        object-fit: cover !important;
+    }
+
+    /* ✅ Meta area always fixed height */
+    .mlb-meta {
+        height: var(--mlb-meta);
+        border-top: 1px solid rgba(15, 23, 42, .06);
+        padding: 10px;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .mlb-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f172a;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
+    }
+
+    .mlb-row {
+        margin-top: 2px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 11px;
+        color: #64748b;
+        min-width: 0;
+        line-height: 1.2;
+    }
+    .mlb-row .left { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mlb-row .right { white-space:nowrap; }
+
+    .mlb-badge {
+        position: absolute;
+        left: 8px;
+        top: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: rgba(255,255,255,.92);
+        color: #334155;
+    }
+
+    .mlb-actions {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        display: flex;
+        gap: 8px;
+        opacity: 0;
+        transition: opacity .15s ease;
+    }
+    .mlb-tile:hover .mlb-actions { opacity: 1; }
+
+    .mlb-action {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(255,255,255,.95);
+        color: #0f172a;
+        text-decoration: none;
+    }
+</style>
+@endonce
+
+<div class="mlb-tile" wire:click="callTableAction('preview', {{ (int) $record->id }})">
+    <div class="mlb-media">
+        <img src="{{ $thumb }}" alt="{{ e($title) }}" loading="lazy">
+        <div class="mlb-badge">{{ $typeLabel }}</div>
+
+        <div class="mlb-actions" wire:click.stop>
+            <a href="{{ $editUrl }}" class="mlb-action">Edit</a>
+            <a href="{{ $record->url() }}" target="_blank" rel="noopener" class="mlb-action">View</a>
         </div>
+    </div>
 
-        {{-- Bottom: meta region (fixed height, never grows) --}}
-        <div class="h-[28%] w-full px-2 py-2 min-w-0">
-            <div class="truncate text-xs font-semibold text-gray-900" title="{{ $title }}">
-                {{ Str::limit($title, 40) }}
-            </div>
-
-            <div class="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-gray-500 min-w-0">
-                <span class="truncate min-w-0">{{ $timeText }}</span>
-                <span class="shrink-0 whitespace-nowrap">{{ $sizeKb }} KB</span>
-            </div>
+    <div class="mlb-meta">
+        <div class="mlb-title" title="{{ $title }}">{{ Str::limit($title, 40) }}</div>
+        <div class="mlb-row">
+            <span class="left">{{ $timeText }}</span>
+            <span class="right">{{ $sizeKb }} KB</span>
         </div>
     </div>
 </div>

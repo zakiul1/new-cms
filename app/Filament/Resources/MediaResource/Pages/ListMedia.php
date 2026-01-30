@@ -36,6 +36,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Filament\Tables\Columns\ViewColumn;
+
 
 class ListMedia extends ListRecords
 {
@@ -434,64 +436,60 @@ class ListMedia extends ListRecords
             ]);
 
         // ✅ GRID MODE
-        if ($this->viewMode === 'grid') {
-            return $table
-                ->columns([
-                    Stack::make([
-                        LayoutView::make('card')
-                            ->view('filament.media.grid-card')
-                            ->extraAttributes(['class' => 'w-full max-w-full min-w-0']),
-                    ]),
-                ])
-                ->contentGrid([
-                    'default' => 2,
-                    'sm' => 3,
-                    'md' => 4,
-                    'lg' => 5,
-                    'xl' => 5,
-                    '2xl' => 5,
-                ])
-                ->recordAction('preview')
-                ->actions([
-                    $this->previewAction(),
-                ])
-                ->bulkActions($this->selectMode ? $bulkActions : []);
-        }
+     if ($this->viewMode === 'grid') {
+    return $table
+        ->columns([
+            Stack::make([
+                LayoutView::make('card')
+                    ->view('filament.media.grid-card'),
+            ]),
+        ])
+        ->contentGrid([
+            'default' => 1, // ✅ let CSS handle layout
+        ])
+        ->recordUrl(null)
+        ->recordAction(null)
+        ->actions([
+            $this->previewAction(),
+        ])
+        ->bulkActions($this->selectMode ? $bulkActions : []);
+}
+
+
 
 
         // ✅ LIST MODE
-        return $table
-            ->columns([
-                ImageColumn::make('thumb')
-                    ->label('')
-                    ->getStateUsing(fn(Media $record) => $record->thumbUrl())
-                    ->square()
-                    ->size(44),
+    return $table
+    ->columns([
+        ViewColumn::make('thumb')
+            ->label('')
+            ->view('filament.media.list-thumb'),
 
-                TextColumn::make('title')
-                    ->label('Title')
-                    ->searchable()
-                    ->sortable()
-                    ->wrap()
-                    ->limit(60),
+        TextColumn::make('title')
+            ->label('Title')
+            ->searchable()
+            ->sortable()
+            ->wrap()
+            ->limit(60),
 
-                TextColumn::make('mime_type')
-                    ->label('Type'),
+        TextColumn::make('mime_type')->label('Type'),
 
-                TextColumn::make('size')
-                    ->label('Size')
-                    ->formatStateUsing(fn($state) => number_format(((int) $state) / 1024, 1) . ' KB')
-                    ->sortable(),
+        TextColumn::make('size')
+            ->label('Size')
+            ->formatStateUsing(fn ($state) => number_format(((int) $state) / 1024, 1) . ' KB')
+            ->sortable(),
 
-                TextColumn::make('created_at')
-                    ->label('Uploaded')
-                    ->since()
-                    ->sortable(),
-            ])
-            ->actions([
-                EditAction::make(),
-                DeleteAction::make(),
-            ])
-            ->bulkActions($bulkActions);
+        TextColumn::make('created_at')
+            ->label('Uploaded')
+            ->since()
+            ->sortable(),
+    ])
+    ->actions([
+        EditAction::make(),
+        DeleteAction::make(),
+    ])
+    ->bulkActions($bulkActions);
+
+
     }
 }

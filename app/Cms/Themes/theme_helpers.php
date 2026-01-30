@@ -95,11 +95,12 @@ if (!function_exists('theme_customizer_css')) {
         $base = (int) ($o['base_font_size'] ?? 16);
 
         $container = $o['container_width'] ?? 'default';
-        $containerMax = match ($container) {
-            'narrow' => '960px',
-            'wide' => '1280px',
-            default => '1100px',
-        };
+       $containerMax = match ($container) {
+    'full' => '100%',
+    'narrow' => '960px',
+    'wide' => '1280px',
+    default => '1100px',
+};
 
         $radius = !empty($o['rounded']) ? '14px' : '0px';
         $shadow = !empty($o['shadows']) ? '0 10px 30px rgba(0,0,0,.08)' : 'none';

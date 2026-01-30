@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Cms\Widgets;
+namespace App\Models;
 
 /**
  * Base class for all CMS widgets.

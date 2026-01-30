@@ -86,6 +86,24 @@ class Post extends Model
             ->wherePivot('role', 'gallery')
             ->orderBy('post_media.sort_order');
     }
+    public function getContentJsonAttribute($value): ?array
+{
+    if (is_array($value)) {
+        return $value;
+    }
+
+    if ($value === null) {
+        return null;
+    }
+
+    if (is_string($value) && trim($value) !== '') {
+        $decoded = json_decode($value, true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    return null;
+}
+
 
     /**
      * ✅ Sync media for a role (product/gallery) with sort_order

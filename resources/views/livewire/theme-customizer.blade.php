@@ -5,11 +5,17 @@
     <div class="sticky top-0 z-40 border-b bg-white/90 backdrop-blur">
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div class="flex items-center gap-3">
+                <a href="{{ url('/admin') }}"
+   class="rounded-xl border bg-white px-4 py-2 text-sm hover:bg-gray-50">
+    ← Back to Admin
+</a>
+
                 <div
                     class="h-9 w-9 rounded-xl bg-gray-900 text-white flex items-center justify-center text-sm font-semibold">
                     TC
                 </div>
                 <div>
+                    
                     <div class="text-sm font-semibold leading-4">Theme Customizer</div>
                     <div class="text-xs text-gray-500">Theme: <span
                             class="font-medium text-gray-700">{{ $theme }}</span></div>

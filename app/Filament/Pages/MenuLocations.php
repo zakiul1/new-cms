@@ -10,18 +10,24 @@ use Filament\Forms\Form;
 use Filament\Pages\Page;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use UnitEnum;
+use BackedEnum;
 
 class MenuLocations extends Page
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationGroup = 'CMS';
-    protected static ?string $navigationIcon = 'heroicon-o-map';
-    protected static ?string $title = 'Menu Locations';
-    protected static string $view = 'filament.pages.menu-locations';
+  protected static string|UnitEnum|null $navigationGroup = 'CMS';
+  
+ 
+  
 
     public ?array $data = [];
 
+     public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
     public function mount(): void
     {
         $this->form->fill($this->loadState());

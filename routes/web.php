@@ -39,9 +39,8 @@ Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')
     ->name('cms.blog.show');
 
-/**
- * ✅ Catch-all last (pages + anything else)
- */
-/* Route::get('/{slug}', [ContentRouterController::class, 'show'])
+
+
+Route::get('/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')
-    ->name('cms.catchall'); */
+    ->name('cms.catchall');

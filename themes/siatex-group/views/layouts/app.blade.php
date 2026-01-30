@@ -5,30 +5,35 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>{{ config('app.name', 'Siatex') }}</title>
+    {{-- ✅ SEO partial --}}
+    @include('cms.partials.seo')
 
     {!! theme_customizer_css() !!}
 
-    {{-- Theme dist css --}}
-    <link rel="stylesheet" href="{{ asset('themes/siatex-group/dist/theme.css') }}">
+    {{-- ✅ Tailwind (quick test). Replace with your compiled Tailwind CSS later. --}}
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    {{-- Theme dist js --}}
+    {{-- Theme JS (keep if you use it) --}}
     <script src="{{ asset('themes/siatex-group/dist/theme.js') }}" defer></script>
+
+    @stack('head')
 
     {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.head', '') !!}
 </head>
 
-<body class="siatex">
+<body class="min-h-screen bg-white text-slate-900 antialiased">
     {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.body.before', '') !!}
 
     @include('partials.topbar')
     @include('partials.header')
 
-    <main class="cms-main">
+    <main class="flex-1">
         @yield('content')
     </main>
 
     @include('partials.footer')
+
+    @stack('scripts')
 
     {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.body.after', '') !!}
 </body>
