@@ -2,47 +2,35 @@
 
 namespace App\Livewire;
 
-use App\Cms\Media\MediaUploader;
 use App\Models\Media;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Livewire\Component;
-use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 class MediaLibraryBrowser extends Component
 {
     use WithPagination;
-    use WithFileUploads;
 
     protected string $paginationTheme = 'tailwind';
 
     public ?int $activeId = null;
 
     public string $statePath = '';
-
     public bool $multiple = false;
-
     public ?int $maxItems = null;
 
     /** @var array<int, int> */
     public array $selected = [];
 
-    public string $tab = 'library'; // library | upload
+    // Filters (picker mode)
     public string $search = '';
-
-    /** Edit fields for right panel */
-    public array $edit = [
-        'title' => '',
-        'alt' => '',
-        'caption' => '',
-        'description' => '',
-    ];
-
-    /** @var array<int, UploadedFile> */
-    public array $uploads = [];
+    public string $type = 'all'; // all|image|video|pdf|other
+    public ?int $folder = null;  // term id
+    public string $sort = 'newest'; // newest|oldest|name_asc|name_desc
 
     public function mount(
         string $statePath = '',
@@ -55,29 +43,28 @@ class MediaLibraryBrowser extends Component
         $this->maxItems = $maxItems;
 
         $this->selected = array_values(array_filter(array_map('intval', $selected)));
-
         $this->activeId = $this->selected[0] ?? null;
-        $this->loadActiveToEditor();
     }
 
     public function updatedSearch(): void
     {
         $this->resetPage();
     }
-
-    public function updatedTab(): void
+    public function updatedType(): void
     {
-        $this->resetErrorBag();
+        $this->resetPage();
     }
-
-    public function setActive(int $id): void
+    public function updatedFolder(): void
     {
-        $this->activeId = (int) $id;
-        $this->loadActiveToEditor();
+        $this->resetPage();
+    }
+    public function updatedSort(): void
+    {
+        $this->resetPage();
     }
 
     /**
-     * Selected media models keyed by id (used for the WP-like selected strip).
+     * Selected media models keyed by id (used for selected strip).
      */
     public function getSelectedMediaProperty(): Collection
     {
@@ -94,30 +81,26 @@ class MediaLibraryBrowser extends Component
     }
 
     /**
-     * Active media model (used in the right panel).
-     * Blade expects $active to be a Media model or null.
+     * Optional: folder options (uses taxonomy key: media_folder)
      */
-    public function getActiveProperty(): ?Media
+    public function folderOptions(): array
     {
-        if (!$this->activeId) {
-            return null;
+        $taxonomyId = Taxonomy::query()->where('key', 'media_folder')->value('id');
+        if (!$taxonomyId) {
+            return [];
         }
 
-        // Prefer already-loaded selected cache first
-        $fromSelected = $this->selectedMedia->get($this->activeId);
-        if ($fromSelected instanceof Media) {
-            return $fromSelected;
-        }
-
-        return Media::query()->find($this->activeId);
+        return Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     public function toggle(int $id): void
     {
         $id = (int) $id;
-
         $this->activeId = $id;
-        $this->loadActiveToEditor();
 
         if (!$this->multiple) {
             $this->selected = [$id];
@@ -127,12 +110,11 @@ class MediaLibraryBrowser extends Component
         if (in_array($id, $this->selected, true)) {
             $this->selected = array_values(array_filter(
                 $this->selected,
-                fn ($x) => (int) $x !== $id
+                fn($x) => (int) $x !== $id
             ));
 
             if ($this->activeId === $id) {
                 $this->activeId = $this->selected[0] ?? null;
-                $this->loadActiveToEditor();
             }
 
             return;
@@ -151,12 +133,11 @@ class MediaLibraryBrowser extends Component
 
         $this->selected = array_values(array_filter(
             $this->selected,
-            fn ($x) => (int) $x !== $id
+            fn($x) => (int) $x !== $id
         ));
 
         if ($this->activeId === $id) {
             $this->activeId = $this->selected[0] ?? null;
-            $this->loadActiveToEditor();
         }
     }
 
@@ -164,7 +145,6 @@ class MediaLibraryBrowser extends Component
     {
         $this->selected = [];
         $this->activeId = null;
-        $this->edit = ['title' => '', 'alt' => '', 'caption' => '', 'description' => ''];
     }
 
     public function apply(): void
@@ -182,95 +162,6 @@ class MediaLibraryBrowser extends Component
         $this->dispatch('media-library-apply', ids: $ids, statePath: $this->statePath);
     }
 
-    public function upload(): void
-    {
-        $this->validate([
-            'uploads' => ['required', 'array', 'min:1'],
-            'uploads.*' => ['file', 'max:' . ((int) config('cms-media.max_upload_mb', 50) * 1024)],
-        ]);
-
-        /** @var MediaUploader $uploader */
-        $uploader = app(MediaUploader::class);
-
-        $createdIds = [];
-
-        foreach ($this->uploads as $file) {
-            if (!$file instanceof UploadedFile) {
-                continue;
-            }
-
-            $media = $uploader->upload($file);
-            $createdIds[] = (int) $media->id;
-        }
-
-        $this->uploads = [];
-        $this->resetErrorBag();
-
-        foreach ($createdIds as $id) {
-            if (!$this->multiple) {
-                $this->selected = [$id];
-                $this->activeId = $id;
-                break;
-            }
-
-            if ($this->maxItems && count($this->selected) >= $this->maxItems) {
-                break;
-            }
-
-            if (!in_array($id, $this->selected, true)) {
-                $this->selected[] = $id;
-                $this->activeId = $id;
-            }
-        }
-
-        $this->loadActiveToEditor();
-        $this->tab = 'library';
-        $this->resetPage();
-    }
-
-    public function saveDetails(): void
-    {
-        if (!$this->activeId) {
-            return;
-        }
-
-        $data = $this->validate([
-            'edit.title' => ['nullable', 'string', 'max:255'],
-            'edit.alt' => ['nullable', 'string', 'max:255'],
-            'edit.caption' => ['nullable', 'string'],
-            'edit.description' => ['nullable', 'string'],
-        ]);
-
-        $m = Media::query()->find($this->activeId);
-        if (!$m) {
-            return;
-        }
-
-        $m->update([
-            'title' => $data['edit']['title'] ?? null,
-            'alt' => $data['edit']['alt'] ?? null,
-            'caption' => $data['edit']['caption'] ?? null,
-            'description' => $data['edit']['description'] ?? null,
-        ]);
-    }
-
-    private function loadActiveToEditor(): void
-    {
-        $m = $this->active;
-
-        if (!$m) {
-            $this->edit = ['title' => '', 'alt' => '', 'caption' => '', 'description' => ''];
-            return;
-        }
-
-        $this->edit = [
-            'title' => (string) ($m->title ?? ''),
-            'alt' => (string) ($m->alt ?? ''),
-            'caption' => (string) ($m->caption ?? ''),
-            'description' => (string) ($m->description ?? ''),
-        ];
-    }
-
     public function getMediaProperty(): LengthAwarePaginator
     {
         return Media::query()
@@ -281,7 +172,33 @@ class MediaLibraryBrowser extends Component
                         ->orWhere('original_filename', 'like', $s);
                 });
             })
-            ->orderByDesc('id')
+            ->when($this->type !== 'all', function ($q) {
+                return match ($this->type) {
+                    'image' => $q->where('mime_type', 'like', 'image/%'),
+                    'video' => $q->where('mime_type', 'like', 'video/%'),
+                    'pdf' => $q->where('mime_type', 'application/pdf'),
+                    'other' => $q->where(function ($qq) {
+                            $qq->where('mime_type', 'not like', 'image/%')
+                            ->where('mime_type', 'not like', 'video/%')
+                            ->where('mime_type', '!=', 'application/pdf');
+                        }),
+                    default => $q,
+                };
+            })
+            ->when($this->folder, function ($q) {
+                $termId = (int) $this->folder;
+                if ($termId > 0) {
+                    $q->whereHas('terms', fn($qq) => $qq->where('terms.id', $termId));
+                }
+            })
+            ->when(true, function ($q) {
+                return match ($this->sort) {
+                    'oldest' => $q->orderBy('id', 'asc'),
+                    'name_asc' => $q->orderBy('title')->orderBy('id', 'desc'),
+                    'name_desc' => $q->orderByDesc('title')->orderBy('id', 'desc'),
+                    default => $q->orderByDesc('id'),
+                };
+            })
             ->paginate(36);
     }
 
@@ -290,7 +207,7 @@ class MediaLibraryBrowser extends Component
         return view('livewire.media-library-browser', [
             'media' => $this->media,
             'selectedMedia' => $this->selectedMedia,
-            'active' => $this->active, // ✅ IMPORTANT: fixes Undefined variable $active
+            'folders' => $this->folderOptions(),
         ]);
     }
 }

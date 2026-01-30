@@ -1,3 +1,7 @@
+@php
+    $renderKey = $key ?: 'home-hero';
+@endphp
+
 <div class="w-full">
     <div class="grid grid-cols-12 gap-6">
         {{-- LEFT: Sliders list --}}
@@ -5,30 +9,25 @@
             <div class="rounded-2xl border border-gray-200 bg-white p-4">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-semibold text-gray-900">Sliders</h2>
-                    <button
-                        wire:click="resetSlideForm"
-                        class="text-xs font-semibold text-primary-600 hover:underline"
-                        type="button"
-                    >
+                    <button wire:click="resetSlideForm" class="text-xs font-semibold text-primary-600 hover:underline"
+                        type="button">
                         Clear slide
                     </button>
                 </div>
 
                 <div class="mt-3 space-y-2">
                     @foreach ($sliders as $s)
-                        <button
-                            type="button"
-                            wire:click="selectSlider({{ $s->id }})"
+                        <button type="button" wire:click="selectSlider({{ $s->id }})"
                             class="w-full rounded-xl border px-3 py-2 text-left text-sm transition
-                                {{ $sliderId === $s->id ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:bg-gray-50' }}"
-                        >
+                                {{ $sliderId === $s->id ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:bg-gray-50' }}">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="min-w-0">
                                     <div class="truncate font-semibold text-gray-900">{{ $s->name }}</div>
                                     <div class="truncate text-xs text-gray-500">{{ $s->key }}</div>
                                 </div>
 
-                                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px]
+                                <span
+                                    class="shrink-0 rounded-full px-2 py-0.5 text-[11px]
                                     {{ $s->is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600' }}">
                                     {{ $s->is_active ? 'Active' : 'Off' }}
                                 </span>
@@ -42,13 +41,18 @@
 
                     <div class="mt-2 space-y-2">
                         <input wire:model="name" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Name">
-                        <input wire:model="key" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Key (home-hero)">
+                        <input wire:model="key" class="w-full rounded-xl border-gray-200 text-sm"
+                            placeholder="Key (home-hero)">
                         <button wire:click="createSlider" type="button"
                             class="w-full rounded-xl bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700">
                             Add Slider
                         </button>
-                        @error('name') <div class="text-xs text-red-600">{{ $message }}</div> @enderror
-                        @error('key') <div class="text-xs text-red-600">{{ $message }}</div> @enderror
+                        @error('name')
+                            <div class="text-xs text-red-600">{{ $message }}</div>
+                        @enderror
+                        @error('key')
+                            <div class="text-xs text-red-600">{{ $message }}</div>
+                        @enderror
                     </div>
                 </div>
             </div>
@@ -66,16 +70,18 @@
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <h1 class="text-lg font-semibold text-gray-900">Slider Settings</h1>
-                            <div class="mt-1 text-xs text-gray-500">
-                                Use in theme: <span class="font-mono">{!! slider_render("{{ $key ?: 'home-hero' }}") !!}</span>
+
+                            <div class="mt-2 text-xs text-gray-500">
+                                Use in theme:
+                                <span
+                                    class="inline-flex items-center gap-2 rounded-lg border bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-700">
+                                    {{ "{!! slider_render('{$renderKey}') !!}" }}
+                                </span>
                             </div>
                         </div>
 
-                        <button
-                            wire:click="deleteSlider({{ $sliderId }})"
-                            type="button"
-                            class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
-                        >
+                        <button wire:click="deleteSlider({{ $sliderId }})" type="button"
+                            class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">
                             Delete slider
                         </button>
                     </div>
@@ -102,11 +108,52 @@
                             </div>
                             <div>
                                 <label class="text-xs font-semibold text-gray-700">Delay (ms)</label>
-                                <input wire:model="delay" type="number" class="mt-1 w-full rounded-xl border-gray-200 text-sm">
+                                <input wire:model="delay" type="number"
+                                    class="mt-1 w-full rounded-xl border-gray-200 text-sm">
                             </div>
                             <div>
                                 <label class="text-xs font-semibold text-gray-700">Height</label>
-                                <input wire:model="height" class="mt-1 w-full rounded-xl border-gray-200 text-sm" placeholder="auto or 560px">
+                                <input wire:model="height" class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                    placeholder="auto or 560px">
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Display options --}}
+                    <div class="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                        <div class="text-sm font-semibold text-gray-900">Display Options</div>
+
+                        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <div class="flex items-center gap-3">
+                                <input type="checkbox" wire:model="show_indicators" class="rounded border-gray-300">
+                                <span class="text-sm text-gray-700">Show indicators</span>
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-semibold text-gray-700">Indicator style</label>
+                                <select wire:model="indicator_style"
+                                    class="mt-1 w-full rounded-xl border-gray-200 text-sm">
+                                    <option value="dots">Dots</option>
+                                    <option value="lines">Lines</option>
+                                </select>
+                            </div>
+
+                            <div class="flex items-center gap-3">
+                                <input type="checkbox" wire:model="show_navigation" class="rounded border-gray-300">
+                                <span class="text-sm text-gray-700">Show navigation arrows</span>
+                            </div>
+
+                            <div class="md:col-span-3">
+                                <label class="text-xs font-semibold text-gray-700">Design variant</label>
+                                <select wire:model="variant" class="mt-1 w-full rounded-xl border-gray-200 text-sm">
+                                    <option value="default">Default</option>
+                                    {{-- future variants --}}
+                                    {{-- <option value="split">Split</option> --}}
+                                    {{-- <option value="centered">Centered</option> --}}
+                                </select>
+                                <div class="mt-1 text-xs text-gray-500">
+                                    Default design is active now. More variants can be added later.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -114,7 +161,113 @@
                     <div class="mt-4">
                         <button wire:click="saveSlider" type="button"
                             class="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-                            Save settings
+                            Save slider
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Hero content --}}
+                <div class="mt-6 rounded-2xl border border-gray-200 bg-white p-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-semibold text-gray-900">Hero Content (Left side)</h2>
+                            <div class="mt-1 text-xs text-gray-500">
+                                This content shows once per slider (not per slide image).
+                            </div>
+                        </div>
+
+                        <button wire:click="addHeroButton" type="button"
+                            class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold hover:bg-gray-50">
+                            + Add button
+                        </button>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div>
+                            <label class="text-xs font-semibold text-gray-700">Kicker (small line)</label>
+                            <input wire:model="hero_kicker" class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                placeholder="YOUR RELIABLE PARTNER IN">
+                        </div>
+
+                        <div>
+                            <label class="text-xs font-semibold text-gray-700">Title</label>
+                            <input wire:model="hero_title" class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                placeholder="GARMENT MANUFACTURING">
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="text-xs font-semibold text-gray-700">Subtitle</label>
+                            <textarea wire:model="hero_subtitle" rows="2" class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                placeholder="Expertise in samples, production, and quality control — delivering excellence worldwide."></textarea>
+                        </div>
+                    </div>
+
+                    {{-- Buttons repeater --}}
+                    <div class="mt-5">
+                        <div class="text-xs font-semibold text-gray-700">Buttons</div>
+
+                        @error('hero_buttons')
+                            <div class="mt-2 text-xs text-red-600">{{ $message }}</div>
+                        @enderror
+
+                        <div class="mt-3 space-y-3">
+                            @forelse ($hero_buttons as $i => $btn)
+                                <div class="rounded-2xl border border-gray-200 p-4">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="text-sm font-semibold text-gray-900">Button #{{ $i + 1 }}
+                                        </div>
+                                        <button type="button" wire:click="removeHeroButton({{ $i }})"
+                                            class="rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
+                                            Remove
+                                        </button>
+                                    </div>
+
+                                    <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                        <div>
+                                            <label class="text-xs font-semibold text-gray-700">Text</label>
+                                            <input wire:model="hero_buttons.{{ $i }}.text"
+                                                class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                                placeholder="Get quote">
+                                        </div>
+
+                                        <div class="md:col-span-2">
+                                            <label class="text-xs font-semibold text-gray-700">URL</label>
+                                            <input wire:model="hero_buttons.{{ $i }}.url"
+                                                class="mt-1 w-full rounded-xl border-gray-200 text-sm"
+                                                placeholder="https://example.com/contact">
+                                        </div>
+
+                                        <div>
+                                            <label class="text-xs font-semibold text-gray-700">Style</label>
+                                            <select wire:model="hero_buttons.{{ $i }}.style"
+                                                class="mt-1 w-full rounded-xl border-gray-200 text-sm">
+                                                <option value="primary">Primary</option>
+                                                <option value="secondary">Secondary</option>
+                                                <option value="outline">Outline</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="flex items-center gap-3 md:col-span-2">
+                                            <input type="checkbox"
+                                                wire:model="hero_buttons.{{ $i }}.new_tab"
+                                                class="rounded border-gray-300">
+                                            <span class="text-sm text-gray-700">Open in new tab</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            @empty
+                                <div
+                                    class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
+                                    No buttons yet. Click “Add button” if you want.
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button wire:click="saveSlider" type="button"
+                            class="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
+                            Save hero content
                         </button>
                     </div>
                 </div>
@@ -135,21 +288,25 @@
                             <div class="mt-4 space-y-3">
                                 @forelse ($slides as $slide)
                                     @php
-                                        $src = $slide->media?->thumbUrl('jpeg') ?: $slide->media?->thumbUrl() ?: $slide->media?->url();
+                                        $src =
+                                            $slide->media?->thumbUrl('jpeg') ?:
+                                            $slide->media?->thumbUrl() ?:
+                                            $slide->media?->url();
                                     @endphp
                                     <div class="flex items-center gap-3 rounded-2xl border border-gray-200 p-3">
                                         <div class="h-14 w-14 overflow-hidden rounded-xl bg-gray-100">
                                             @if ($src)
-                                                <img src="{{ $src }}" class="h-full w-full object-cover" alt="">
+                                                <img src="{{ $src }}" class="h-full w-full object-cover"
+                                                    alt="">
                                             @endif
                                         </div>
 
                                         <div class="min-w-0 flex-1">
                                             <div class="truncate text-sm font-semibold text-gray-900">
-                                                {{ $slide->title ?: 'Untitled slide' }}
+                                                Slide #{{ $slide->sort_order }}
                                             </div>
                                             <div class="truncate text-xs text-gray-500">
-                                                #{{ $slide->sort_order }} • {{ $slide->is_active ? 'Active' : 'Off' }}
+                                                {{ $slide->is_active ? 'Active' : 'Off' }}
                                             </div>
                                         </div>
 
@@ -158,7 +315,8 @@
                                                 class="rounded-lg border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">
                                                 ↑
                                             </button>
-                                            <button wire:click="moveSlide({{ $slide->id }}, 'down')" type="button"
+                                            <button wire:click="moveSlide({{ $slide->id }}, 'down')"
+                                                type="button"
                                                 class="rounded-lg border border-gray-200 px-2 py-1 text-xs hover:bg-gray-50">
                                                 ↓
                                             </button>
@@ -175,7 +333,8 @@
                                         </div>
                                     </div>
                                 @empty
-                                    <div class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
+                                    <div
+                                        class="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
                                         No slides yet. Click “New slide”.
                                     </div>
                                 @endforelse
@@ -203,33 +362,27 @@
                                     <div class="aspect-[16/9] w-full">
                                         @if ($selectedMedia)
                                             @php
-                                                $src = $selectedMedia->thumbUrl('jpeg') ?: $selectedMedia->thumbUrl() ?: $selectedMedia->url();
+                                                $src =
+                                                    $selectedMedia->thumbUrl('jpeg') ?:
+                                                    $selectedMedia->thumbUrl() ?:
+                                                    $selectedMedia->url();
                                             @endphp
-                                            <img src="{{ $src }}" class="h-full w-full object-cover" alt="">
+                                            <img src="{{ $src }}" class="h-full w-full object-cover"
+                                                alt="">
                                         @else
-                                            <div class="flex h-full w-full items-center justify-center text-sm text-gray-500">
+                                            <div
+                                                class="flex h-full w-full items-center justify-center text-sm text-gray-500">
                                                 No image selected
                                             </div>
                                         @endif
                                     </div>
                                 </div>
-                                @error('media_id') <div class="mt-2 text-xs text-red-600">{{ $message }}</div> @enderror
+                                @error('media_id')
+                                    <div class="mt-2 text-xs text-red-600">{{ $message }}</div>
+                                @enderror
                             </div>
 
-                            <div class="mt-4 grid grid-cols-1 gap-3">
-                                <input wire:model="slide_title" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Title">
-                                <input wire:model="slide_subtitle" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Subtitle">
-
-                                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                    <input wire:model="button_text" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Button text">
-                                    <input wire:model="button_url" class="w-full rounded-xl border-gray-200 text-sm md:col-span-2" placeholder="Button URL">
-                                </div>
-
-                                <div class="flex items-center gap-3">
-                                    <input type="checkbox" wire:model="button_new_tab" class="rounded border-gray-300">
-                                    <span class="text-sm text-gray-700">Open in new tab</span>
-                                </div>
-
+                            <div class="mt-4">
                                 <div class="flex items-center gap-3">
                                     <input type="checkbox" wire:model="slide_active" class="rounded border-gray-300">
                                     <span class="text-sm text-gray-700">Slide active</span>
@@ -243,39 +396,39 @@
                                 </button>
                             </div>
 
-                            {{-- Media picker modal --}}
+                            {{-- Media picker modal (re-using your existing component) --}}
+                            {{-- Media picker modal (re-using your existing component) --}}
                             @if ($showMediaPicker)
-                                <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" wire:click.self="$set('showMediaPicker', false)">
-                                    <div class="w-full max-w-5xl rounded-2xl bg-white p-4">
-                                        <div class="flex items-center justify-between gap-3">
-                                            <div class="text-sm font-semibold">Pick an image</div>
-                                            <button type="button" class="rounded-lg border px-2 py-1 text-sm" wire:click="$set('showMediaPicker', false)">Close</button>
-                                        </div>
-
-                                        <div class="mt-3">
-                                            <input wire:model.live="mediaSearch" class="w-full rounded-xl border-gray-200 text-sm" placeholder="Search media...">
-                                        </div>
-
-                                        <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                                            @foreach ($mediaResults as $m)
-                                                @php
-                                                    $src = $m->thumbUrl('jpeg') ?: $m->thumbUrl() ?: $m->url();
-                                                    $label = $m->title ?: $m->original_filename ?: ('Media #' . $m->id);
-                                                @endphp
-                                                <button type="button" wire:click="pickMedia({{ $m->id }})"
-                                                    class="group overflow-hidden rounded-2xl border border-gray-200 bg-white text-left hover:border-primary-400">
-                                                    <div class="aspect-square w-full bg-gray-100">
-                                                        <img src="{{ $src }}" class="h-full w-full object-cover" alt="">
-                                                    </div>
-                                                    <div class="p-2">
-                                                        <div class="truncate text-xs font-semibold text-gray-900">{{ $label }}</div>
-                                                    </div>
+                                <div class="fixed inset-0 z-50 bg-black/40"
+                                    wire:click.self="$set('showMediaPicker', false)">
+                                    {{-- make overlay scrollable --}}
+                                    <div class="min-h-full p-4 md:p-6 overflow-y-auto flex items-start justify-center">
+                                        {{-- constrain the modal box --}}
+                                        <div
+                                            class="w-[95vw] max-w-6xl rounded-2xl bg-white shadow-xl overflow-hidden max-h-[88vh]">
+                                            <div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+                                                <div class="text-sm font-semibold">Pick an image</div>
+                                                <button type="button" class="rounded-lg border px-2 py-1 text-sm"
+                                                    wire:click="$set('showMediaPicker', false)">
+                                                    Close
                                                 </button>
-                                            @endforeach
+                                            </div>
+
+                                            {{-- inner scrolling area (this is the key) --}}
+                                            <div class="p-4 overflow-y-auto max-h-[calc(88vh-56px)]">
+                                                <livewire:media-library-browser :state-path="'slider-slide-image'" :multiple="false"
+                                                    :max-items="1" :selected="$media_id ? [$media_id] : []" :key="'mlb-slider-' .
+                                                        $sliderId .
+                                                        '-slide-' .
+                                                        $slideId .
+                                                        '-media-' .
+                                                        $media_id" />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             @endif
+
                         </div>
                     </div>
                 </div>

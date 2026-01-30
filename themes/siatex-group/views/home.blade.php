@@ -18,9 +18,9 @@
     @endphp
 
     {{-- Hero --}}
-  
-       {!! slider_render('dfd') !!}
-   
+
+    {!! slider_render('home-hero') !!}
+
 
     {{-- Intro page content (optional) --}}
     @if ($homePage)
