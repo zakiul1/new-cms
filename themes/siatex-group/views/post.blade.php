@@ -23,7 +23,7 @@
             <span class="mx-2 text-slate-300">/</span>
 
             @if ($category)
-                <a class="text-slate-600 hover:underline" href="{{ url('/category/' . $category->slug) }}">
+                <a class="text-slate-600 hover:underline" href="{{ cms_term_url($category) }}">
                     {{ $category->name }}
                 </a>
                 <span class="mx-2 text-slate-300">/</span>
@@ -36,8 +36,31 @@
     {{-- Hero --}}
     <section class="bg-slate-50">
         <div class="cms-container mx-auto px-4 py-10">
-            <div class="grid items-center gap-8 lg:grid-cols-2">
-                <div>
+            <div class="grid  gap-8 lg:grid-cols-2">
+
+                {{-- ✅ Image first on mobile --}}
+                <div class="order-1 lg:order-2 p-4">
+                    @if ($media && $media->isImage())
+                        {!! cms_picture(
+                            $media,
+                            [
+                                'alt' => e($title),
+                                'class' => 'w-full object-cover',
+                                'sizes' => '(max-width: 1024px) 100vw, 560px',
+                                'loading' => 'eager',
+                                'decoding' => 'async',
+                            ],
+                            'large',
+                            ['medium', 'medium_large', 'large'],
+                        ) !!}
+                    @else
+                        <div class="h-80 w-full rounded-lg bg-slate-100"></div>
+                    @endif
+
+                </div>
+
+                {{-- ✅ Text second on mobile --}}
+                <div class="order-2 lg:order-1">
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
                         Your Tech-pack, Our production
@@ -53,24 +76,12 @@
                         </p>
                     @endif
 
-                    <a href="#" class="mt-6 inline-flex items-center rounded bg-[#1f5f99] px-5 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]">
+                    <a href="#"
+                        class="mt-6 inline-flex items-center rounded bg-[#1f5f99] px-5 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]">
                         Get Price
                     </a>
                 </div>
 
-                <div class="rounded-xl border border-slate-200 bg-white p-4">
-                    @if ($media && $media->isImage())
-                        {!! cms_picture($media, [
-                            'alt' => e($title),
-                            'class' => 'w-full rounded-lg object-cover',
-                            'sizes' => '(max-width: 1024px) 100vw, 560px',
-                            'loading' => 'eager',
-                            'decoding' => 'async',
-                        ], 'large', ['medium','large']) !!}
-                    @else
-                        <div class="h-80 w-full rounded-lg bg-slate-100"></div>
-                    @endif
-                </div>
             </div>
         </div>
     </section>

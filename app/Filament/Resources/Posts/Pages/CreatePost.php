@@ -4,8 +4,10 @@ namespace App\Filament\Resources\Posts\Pages;
 
 use App\Cms\Content\Slugger;
 use App\Filament\Resources\Posts\PostResource;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\Width;
+use Illuminate\Support\Facades\Cache;
 
 class CreatePost extends CreateRecord
 {
@@ -13,14 +15,13 @@ class CreatePost extends CreateRecord
 
     /** @var int[] */
     protected array $productMediaIds = [];
+
     protected function getHeaderActions(): array
     {
         return [
             $this->getCancelFormAction(),
-            // Create
             $this->getCreateAnotherFormAction(),
-            $this->getCreateFormAction(),      // Create & create another (optional)
-            // Cancel (optional)
+            $this->getCreateFormAction(),
         ];
     }
 
@@ -53,9 +54,10 @@ class CreatePost extends CreateRecord
         /** @var Slugger $slugger */
         $slugger = app(Slugger::class);
 
+        // ✅ GLOBAL slug namespace (posts + pages)
         $data['slug'] = empty($data['slug'])
-            ? $slugger->uniquePostSlug('post', (string) ($data['title'] ?? ''))
-            : $slugger->uniqueFromSlug('post', (string) $data['slug']);
+            ? $slugger->uniqueGlobalSlugFromTitle((string) ($data['title'] ?? ''), ignorePostId: null)
+            : $slugger->uniqueGlobalSlugFromSlug((string) $data['slug'], ignorePostId: null);
 
         return $data;
     }
@@ -63,6 +65,15 @@ class CreatePost extends CreateRecord
     protected function afterCreate(): void
     {
         $this->syncProductGallery();
+
+        // ✅ clear sitemap cache (new post/page affects sitemap)
+        Cache::forget('cms:sitemap:xml:v2');
+
+        Notification::make()
+            ->title('Post created')
+            ->body('You can now add categories and publish it when ready.')
+            ->success()
+            ->send();
     }
 
     private function syncProductGallery(): void
@@ -74,6 +85,7 @@ class CreatePost extends CreateRecord
         // unique, keep order
         $seen = [];
         $ids = [];
+
         foreach ($this->productMediaIds as $id) {
             if ($id <= 0 || isset($seen[$id])) {
                 continue;

@@ -29,7 +29,7 @@ class CmsCacheVersions
 
     /**
      * Global render version:
-     * bump this when theme/plugins/assets that affect frontend HTML output changes.
+     * bump this when theme/plugins/assets or settings that affect frontend HTML output changes.
      */
     public function renderVersion(): int
     {
@@ -38,7 +38,31 @@ class CmsCacheVersions
 
     public function bumpRender(): int
     {
-        return $this->bump('render', 'global');
+        $v = $this->bump('render', 'global');
+
+        // ✅ Clear cached outputs that depend on frontend render/settings
+        $this->forgetFrontendCaches();
+
+        return $v;
+    }
+
+    /**
+     * Sitemap version (optional, but clean)
+     */
+    public function sitemapVersion(): int
+    {
+        return $this->get('sitemap', 'xml');
+    }
+
+    public function bumpSitemap(): int
+    {
+        $v = $this->bump('sitemap', 'xml');
+
+        // If you cache sitemap XML directly, clear it too
+        Cache::forget('cms:sitemap:xml:v3');
+        Cache::forget('cms:sitemap:xml:v2');
+
+        return $v;
     }
 
     /**
@@ -48,5 +72,20 @@ class CmsCacheVersions
     public function getRender(): int
     {
         return $this->renderVersion();
+    }
+
+    /**
+     * Central place to clear known frontend caches.
+     */
+    protected function forgetFrontendCaches(): void
+    {
+        // Sitemap caches (current + previous)
+        Cache::forget('cms:sitemap:xml:v3');
+        Cache::forget('cms:sitemap:xml:v2');
+
+        // If you cache robots.txt later, include it here
+        Cache::forget('cms:robots:txt:v1');
+
+        // Add more keys here if you introduce them later (menus, widgets, etc.)
     }
 }

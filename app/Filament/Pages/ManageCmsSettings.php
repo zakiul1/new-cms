@@ -4,18 +4,20 @@ namespace App\Filament\Pages;
 
 use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Core\SettingsRepository;
-use App\Cms\Plugins\PluginManager;
 use App\Cms\Themes\ThemeManager;
 use App\Models\Post;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Form;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -47,15 +49,24 @@ class ManageCmsSettings extends Page
             'site_name' => $settings->get('core', 'site_name', 'My CMS'),
             'site_url' => $settings->get('core', 'site_url', url('/')),
             'timezone' => $settings->get('core', 'timezone', config('app.timezone')),
-            'active_theme' => $activeTheme, // ✅ always correct
-            'enabled_plugins' => $settings->get('core', 'enabled_plugins', []),
+            'active_theme' => $activeTheme,
 
             // Global Contact (Siatex header)
             'contact_phone' => $settings->get('core', 'contact_phone', ''),
             'contact_email' => $settings->get('core', 'contact_email', ''),
 
-            // ✅ Homepage page selector (nullable)
+            // Homepage
             'homepage_page_id' => $homepageId,
+
+            // ✅ Permalinks
+            'permalink_mode' => $settings->get('core', 'permalink_mode', 'post_name'),
+            'permalink_custom_structure' => $settings->get('core', 'permalink_custom_structure', '/%postname%'),
+            'category_base' => $settings->get('core', 'category_base', 'category'),
+            'tag_base' => $settings->get('core', 'tag_base', 'tag'),
+
+            // ✅ Attachment pages (global)
+            'attachment_pages_enabled' => (bool) $settings->get('core', 'attachment_pages_enabled', false),
+            'attachment_pages_indexable' => (bool) $settings->get('core', 'attachment_pages_indexable', true),
         ]);
     }
 
@@ -127,7 +138,6 @@ class ManageCmsSettings extends Page
                         ->email()
                         ->maxLength(120),
 
-                    // ✅ Nullable homepage page (no more "0" invalid)
                     Select::make('homepage_page_id')
                         ->label('Homepage Page')
                         ->options(
@@ -142,7 +152,6 @@ class ManageCmsSettings extends Page
                         ->placeholder('— Use latest posts (default) —')
                         ->nullable(),
 
-                    // ✅ Active theme always from ThemeManager
                     Select::make('active_theme')
                         ->label('Active Theme')
                         ->options(
@@ -154,13 +163,61 @@ class ManageCmsSettings extends Page
                         ->required()
                         ->reactive(),
 
-                    CheckboxList::make('enabled_plugins')
-                        ->label('Enabled Plugins')
-                        ->options(
-                            fn(PluginManager $plugins) => collect($plugins->all())
-                                ->mapWithKeys(fn($m, $slug) => [$slug => ($m->name ?? $slug)])
-                                ->all()
-                        ),
+                    // ✅ Attachment Pages (global) (collapsible)
+                    Section::make('Attachment Pages')
+                        ->description('Public attachment pages for media at /{media-slug}.')
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            Toggle::make('attachment_pages_enabled')
+                                ->label('Enable attachment pages (public)')
+                                ->helperText('If OFF, /{media-slug} will return 404.')
+                                ->default(false),
+
+                            Toggle::make('attachment_pages_indexable')
+                                ->label('Index attachment pages (SEO)')
+                                ->helperText('If OFF, robots meta will be noindex, follow.')
+                                ->default(true),
+                        ]),
+
+                    // ✅ Permalink Settings (collapsible)
+                    Section::make('Permalink Settings')
+                        ->description('These rules apply to POSTS. Pages remain /{slug} (WP-style).')
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            Radio::make('permalink_mode')
+                                ->label('Permalink Settings (Posts)')
+                                ->options([
+                                    'plain' => 'Plain (?p=123)',
+                                    'day_name' => 'Day and name (/2026/01/31/sample-post)',
+                                    'month_name' => 'Month and name (/2026/01/sample-post)',
+                                    'numeric' => 'Numeric (/archives/123)',
+                                    'post_name' => 'Post name (/sample-post)',
+                                    'custom' => 'Custom Structure',
+                                ])
+                                ->helperText('Choose how POST URLs are generated.')
+                                ->reactive(),
+
+                            TextInput::make('permalink_custom_structure')
+                                ->label('Custom Structure')
+                                ->placeholder('/%year%/%monthnum%/%day%/%postname%')
+                                ->helperText('Allowed tags: %year%, %monthnum%, %day%, %hour%, %minute%, %second%, %post_id%, %postname%')
+                                ->visible(fn(Get $get): bool => (string) $get('permalink_mode') === 'custom')
+                                ->maxLength(255),
+
+                            TextInput::make('category_base')
+                                ->label('Category base')
+                                ->placeholder('category')
+                                ->helperText('Example: "topics" makes URLs /topics/{category-slug}')
+                                ->maxLength(60),
+
+                            TextInput::make('tag_base')
+                                ->label('Tag base')
+                                ->placeholder('tag')
+                                ->helperText('Example: "labels" makes URLs /labels/{tag-slug}')
+                                ->maxLength(60),
+                        ]),
                 ])
                     ->livewireSubmitHandler('save')
                     ->footer([
@@ -178,10 +235,19 @@ class ManageCmsSettings extends Page
     public function save(
         SettingsRepository $settings,
         ThemeManager $themes,
-        PluginManager $plugins,
         CmsCacheVersions $versions,
     ): void {
         $data = $this->form->getState();
+
+        // Snapshot current permalink settings (for cache bump decision)
+        $currentPermalinkMode = (string) $settings->get('core', 'permalink_mode', 'post_name');
+        $currentPermalinkCustom = (string) $settings->get('core', 'permalink_custom_structure', '/%postname%');
+        $currentCategoryBase = (string) $settings->get('core', 'category_base', 'category');
+        $currentTagBase = (string) $settings->get('core', 'tag_base', 'tag');
+
+        // Snapshot current attachment settings (for cache bump decision)
+        $currentAttachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
+        $currentAttachmentsIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
 
         // Core
         $settings->set('core', 'site_name', (string) ($data['site_name'] ?? ''));
@@ -192,7 +258,7 @@ class ManageCmsSettings extends Page
         $settings->set('core', 'contact_phone', (string) ($data['contact_phone'] ?? ''));
         $settings->set('core', 'contact_email', (string) ($data['contact_email'] ?? ''));
 
-        // ✅ Homepage page: store null when empty
+        // Homepage
         $homepageId = $data['homepage_page_id'] ?? null;
         $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
         if ($homepageId !== null && $homepageId <= 0) {
@@ -200,11 +266,59 @@ class ManageCmsSettings extends Page
         }
         $settings->set('core', 'homepage_page_id', $homepageId);
 
+        // ✅ Attachment pages (global)
+        $attachmentsEnabled = (bool) ($data['attachment_pages_enabled'] ?? false);
+        $attachmentsIndexable = (bool) ($data['attachment_pages_indexable'] ?? true);
+        $settings->set('core', 'attachment_pages_enabled', $attachmentsEnabled);
+        $settings->set('core', 'attachment_pages_indexable', $attachmentsIndexable);
+
+        // ✅ Permalinks (normalize)
+        $permalinkMode = (string) ($data['permalink_mode'] ?? 'post_name');
+        $customStructure = trim((string) ($data['permalink_custom_structure'] ?? '/%postname%'));
+        if ($customStructure === '') {
+            $customStructure = '/%postname%';
+        }
+        if (!str_starts_with($customStructure, '/')) {
+            $customStructure = '/' . $customStructure;
+        }
+
+        $categoryBase = trim((string) ($data['category_base'] ?? 'category'));
+        $tagBase = trim((string) ($data['tag_base'] ?? 'tag'));
+        if ($categoryBase === '') {
+            $categoryBase = 'category';
+        }
+        if ($tagBase === '') {
+            $tagBase = 'tag';
+        }
+
+        $settings->set('core', 'permalink_mode', $permalinkMode);
+        $settings->set('core', 'permalink_custom_structure', $customStructure);
+        $settings->set('core', 'category_base', $categoryBase);
+        $settings->set('core', 'tag_base', $tagBase);
+
         $renderChanged = false;
         $errors = [];
 
+        // If permalink settings changed, bump render cache (menus/SEO/canonicals)
+        if (
+            $permalinkMode !== $currentPermalinkMode ||
+            $customStructure !== $currentPermalinkCustom ||
+            $categoryBase !== $currentCategoryBase ||
+            $tagBase !== $currentTagBase
+        ) {
+            $renderChanged = true;
+        }
+
+        // If attachment settings changed, bump render cache (SEO/sitemap/canonicals)
+        if (
+            $attachmentsEnabled !== $currentAttachmentsEnabled ||
+            $attachmentsIndexable !== $currentAttachmentsIndexable
+        ) {
+            $renderChanged = true;
+        }
+
         // Theme change
-        $currentTheme = $themes->activeSlug(); // ✅ always correct
+        $currentTheme = $themes->activeSlug();
         $newTheme = (string) ($data['active_theme'] ?? $currentTheme);
 
         if ($newTheme !== '' && $newTheme !== $currentTheme) {
@@ -213,38 +327,6 @@ class ManageCmsSettings extends Page
                 $renderChanged = true;
             } catch (Throwable $e) {
                 $errors[] = "Theme activation ({$newTheme}): " . $e->getMessage();
-            }
-        }
-
-        // Plugins enable/disable
-        $currentEnabled = $settings->get('core', 'enabled_plugins', []);
-        $currentEnabled = is_array($currentEnabled)
-            ? array_values(array_unique(array_map('strval', $currentEnabled)))
-            : [];
-
-        $newEnabled = $data['enabled_plugins'] ?? [];
-        $newEnabled = is_array($newEnabled)
-            ? array_values(array_unique(array_map('strval', $newEnabled)))
-            : [];
-
-        $toEnable = array_values(array_diff($newEnabled, $currentEnabled));
-        $toDisable = array_values(array_diff($currentEnabled, $newEnabled));
-
-        foreach ($toEnable as $slug) {
-            try {
-                $plugins->enable($slug);
-                $renderChanged = true;
-            } catch (Throwable $e) {
-                $errors[] = "Enable {$slug}: " . $e->getMessage();
-            }
-        }
-
-        foreach ($toDisable as $slug) {
-            try {
-                $plugins->disable($slug);
-                $renderChanged = true;
-            } catch (Throwable $e) {
-                $errors[] = "Disable {$slug}: " . $e->getMessage();
             }
         }
 
@@ -267,10 +349,15 @@ class ManageCmsSettings extends Page
             ->title('Saved')
             ->send();
 
-        // ✅ Refresh form state (so UI matches newly activated theme instantly)
+        // Refresh form state (keep UI consistent)
         $this->form->fill([
             ...$data,
             'active_theme' => $themes->activeSlug(),
+            'permalink_custom_structure' => $customStructure,
+            'category_base' => $categoryBase,
+            'tag_base' => $tagBase,
+            'attachment_pages_enabled' => $attachmentsEnabled,
+            'attachment_pages_indexable' => $attachmentsIndexable,
         ]);
     }
 }

@@ -19,9 +19,7 @@ class MediaResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPhoto;
     protected static ?string $navigationLabel = 'Media';
     protected static ?int $navigationSort = 50;
-
     protected static string|\UnitEnum|null $navigationGroup = 'Media';
-
 
     public static function form(Schema $schema): Schema
     {

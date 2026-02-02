@@ -89,7 +89,7 @@
 
                         <div class="cms-slide {{ $isActive ? '' : 'hidden' }}" data-cms-slide
                             aria-hidden="{{ $isActive ? 'false' : 'true' }}">
-                            <div class="w-full overflow-hidden rounded-md bg-white" {!! $imgStyle !!}>
+                            <div class="w-full overflow-hidden  bg-white" {!! $imgStyle !!}>
                                 <div class="aspect-[16/9] w-full bg-white p-0" {!! $imgStyle !!}>
                                     @if ($media && method_exists($media, 'isImage') && $media->isImage())
                                         {!! cms_picture(
@@ -102,7 +102,7 @@
                                                 'decoding' => 'async',
                                             ],
                                             'large',
-                                            ['thumb', 'medium', 'large'],
+                                            ['thumb', 'medium', 'medium_large', 'large'],
                                         ) !!}
                                     @else
                                         <div class="h-full w-full bg-slate-100"></div>
@@ -115,12 +115,30 @@
 
                 @if ($showNav)
                     <button type="button"
-                        class="absolute -left-6 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-xl shadow hover:bg-white"
-                        data-cms-prev aria-label="Previous slide">‹</button>
+                        class="absolute -left-6 top-1/2 z-10 -translate-y-1/2
+           h-9 w-9 rounded-full bg-white/90 shadow
+           flex items-center justify-center
+           text-slate-800 hover:bg-white
+           focus:outline-none focus:ring-2 focus:ring-slate-300"
+                        data-cms-prev aria-label="Previous slide">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                            <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                    </button>
 
                     <button type="button"
-                        class="absolute -right-6 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/90 px-3 py-2 text-xl shadow hover:bg-white"
-                        data-cms-next aria-label="Next slide">›</button>
+                        class="absolute -right-6 top-1/2 z-10 -translate-y-1/2
+          h-9 w-9 rounded-full bg-white/90 shadow
+           flex items-center justify-center
+           text-slate-800 hover:bg-white
+           focus:outline-none focus:ring-2 focus:ring-slate-300"
+                        data-cms-next aria-label="Next slide">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </button>
                 @endif
 
                 @if ($showIndicators)

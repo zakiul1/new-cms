@@ -5,11 +5,13 @@ namespace App\Filament\Resources\MediaResource\Schemas;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Forms\Components\FileUpload;
-
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
-use Filament\Schemas\Components\Section;
 
 class MediaForm
 {
@@ -23,6 +25,53 @@ class MediaForm
                 'lg' => 1, // full width
             ])
             ->components([
+                // ✅ Attachment page controls (only relevant when editing a single media record)
+                Section::make('Attachment Page')
+                    ->description('Public attachment page uses /{slug}. You can hide it per media like WordPress.')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        Toggle::make('attachment_public')
+                            ->label('Public attachment page')
+                            ->helperText('If OFF, visiting /{slug} will return 404 (even if global attachment pages are enabled).')
+                            ->default(true),
+
+                        Toggle::make('attachment_indexable')
+                            ->label('Indexable (SEO)')
+                            ->helperText('If OFF, robots meta becomes noindex, follow for this attachment.')
+                            ->default(true),
+
+                        TextInput::make('slug')
+                            ->label('Attachment slug')
+                            ->helperText('This controls the public attachment page URL: /{slug}.')
+                            ->maxLength(255)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                $state = trim((string) $state);
+                                if ($state === '') {
+                                    return;
+                                }
+                                $set('slug', Str::slug($state));
+                            }),
+
+                        TextInput::make('attachment_url_preview')
+                            ->label('Attachment URL (preview)')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->formatStateUsing(function (Get $get) {
+                                $slug = trim((string) $get('slug'));
+                                if ($slug === '') {
+                                    return '';
+                                }
+                                return url('/' . $slug);
+                            })
+                            ->helperText('This is what the public URL will be (if enabled + public).'),
+                    ])
+                    // Only show if the form is editing an existing record or has slug fields.
+                    // In bulk upload "create" flow, it’s ok to keep it collapsed.
+                    ->visible(fn(Get $get) => true),
+
+                // ✅ Upload section (your existing code)
                 Section::make('Upload')
                     ->columnSpanFull()
                     ->schema([
@@ -45,7 +94,7 @@ class MediaForm
                                     ->all();
                             })
                             ->createOptionForm([
-                                \Filament\Forms\Components\TextInput::make('name')
+                                TextInput::make('name')
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
@@ -53,7 +102,7 @@ class MediaForm
                                         $set('slug', Str::slug((string) $state));
                                     }),
 
-                                \Filament\Forms\Components\TextInput::make('slug')
+                                TextInput::make('slug')
                                     ->label('Slug (optional)')
                                     ->maxLength(255),
 
@@ -113,7 +162,7 @@ class MediaForm
                             ->reorderable()
                             ->appendFiles()
                             ->imagePreviewHeight('120')
-                            ->panelLayout('grid') // ✅ grid preview (much better than tall list)
+                            ->panelLayout('grid') // ✅ grid preview
                             ->maxSize($maxMb * 1024)
                             ->helperText("Drag & drop. Max upload size: {$maxMb} MB each.")
                             ->columnSpanFull(),

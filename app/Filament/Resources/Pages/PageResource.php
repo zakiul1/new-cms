@@ -14,10 +14,12 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use UnitEnum;
 
 class PageResource extends Resource
 {
     protected static ?string $model = Post::class;
+
     protected static ?string $modelLabel = 'Page';
     protected static ?string $pluralModelLabel = 'Pages';
 
@@ -27,7 +29,8 @@ class PageResource extends Resource
 
     // Top-level (no group)
     protected static ?string $navigationLabel = 'Pages';
-    protected static \UnitEnum|string|null $navigationGroup = null;
+    protected static string|\UnitEnum|null $navigationGroup = null;
+
     protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder

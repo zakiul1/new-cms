@@ -2,8 +2,12 @@
 
 namespace App\Filament\Resources\Pages\Schemas;
 
+use App\Cms\Content\PermalinkManager;
 use App\Models\Post;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -13,6 +17,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class PageForm
 {
@@ -45,11 +50,26 @@ class PageForm
                                 }
                             }),
 
-                        // ✅ Same as PostForm (no Group)
+                        // ✅ GLOBAL uniqueness + slug safety
                         TextInput::make('slug')
                             ->label('Slug (optional)')
-                            ->helperText('Leave blank to auto-generate. Duplicates will auto-rename.')
-                            ->maxLength(255),
+                            ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
+                            ->maxLength(255)
+                            ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                            ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                            ->rule(function (?Post $record) {
+                                // ✅ Global across all posts table rows
+                                return Rule::unique('posts', 'slug')->ignore($record?->id);
+                            }),
+
+                        // ✅ Show actual frontend URL (uses permalink settings)
+                        Placeholder::make('permalink_preview')
+                            ->label('Permalink')
+                            ->content(function (?Post $record, PermalinkManager $permalinks) {
+                                return $record
+                                    ? $permalinks->pageUrl($record)
+                                    : 'Will be generated after saving.';
+                            }),
 
                         Textarea::make('excerpt')
                             ->rows(3)
@@ -70,7 +90,6 @@ class PageForm
                                 'style' => 'min-height: 420px;',
                             ]),
 
-                        // ✅ SEO (Premium)
                         Section::make('SEO (Premium)')
                             ->description('Control how this page appears in Google and when shared on social media.')
                             ->collapsible()
@@ -129,8 +148,9 @@ class PageForm
                                 'published' => 'Published',
                                 'scheduled' => 'Scheduled',
                             ])
-                            ->default('draft')
+                            ->default('published')
                             ->required(),
+
                         Select::make('meta_json.template')
                             ->label('Template')
                             ->options([
@@ -161,7 +181,7 @@ class PageForm
                             ->numeric()
                             ->default(0),
 
-                        // ✅ Categories (same as PostForm)
+                        // ✅ Categories (kept as you had it, but FIXED validation)
                         Select::make('categories')
                             ->label('Categories')
                             ->relationship('categories', 'name')
@@ -180,10 +200,25 @@ class PageForm
                                         }
                                     }),
 
+                                // ✅ FIX: unique within CATEGORY taxonomy (taxonomy_id), not global
                                 TextInput::make('slug')
-                                    ->label('Slug (optional)')
-                                    ->helperText('Leave blank to auto-generate.')
-                                    ->maxLength(255),
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    ->dehydrateStateUsing(fn($state) => Str::slug((string) $state))
+                                    ->helperText('Lowercase letters, numbers, and hyphens only.')
+                                    ->rule(function (?Term $record) {
+                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
+
+                                        if (!$taxonomyId) {
+                                            // taxonomy may not exist yet; createOptionUsing will enforce uniqueness
+                                            return null;
+                                        }
+
+                                        return Rule::unique('terms', 'slug')
+                                            ->where('taxonomy_id', $taxonomyId)
+                                            ->ignore($record?->id);
+                                    }),
 
                                 Select::make('parent_id')
                                     ->label('Parent Category (optional)')
@@ -191,12 +226,12 @@ class PageForm
                                     ->preload()
                                     ->nullable()
                                     ->options(function (): array {
-                                        $taxonomyId = \App\Models\Taxonomy::where('key', 'category')->value('id');
+                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
                                         if (!$taxonomyId) {
                                             return [];
                                         }
 
-                                        return \App\Models\Term::query()
+                                        return Term::query()
                                             ->where('taxonomy_id', $taxonomyId)
                                             ->orderBy('name')
                                             ->pluck('name', 'id')
@@ -204,7 +239,7 @@ class PageForm
                                     }),
                             ])
                             ->createOptionUsing(function (array $data) {
-                                $taxonomyId = \App\Models\Taxonomy::firstOrCreate(
+                                $taxonomyId = Taxonomy::firstOrCreate(
                                     ['key' => 'category'],
                                     ['label' => 'Categories', 'hierarchical' => true],
                                 )->id;
@@ -218,12 +253,13 @@ class PageForm
                                 $slug = $base;
                                 $i = 2;
 
-                                while (\App\Models\Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                                // ✅ Ensure unique within taxonomy (same as your logic)
+                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
                                     $slug = $base . '-' . $i;
                                     $i++;
                                 }
 
-                                $term = \App\Models\Term::create([
+                                $term = Term::create([
                                     'taxonomy_id' => $taxonomyId,
                                     'name' => (string) $data['name'],
                                     'slug' => $slug,
@@ -240,11 +276,10 @@ class PageForm
                             ->preload()
                             ->searchable(),
 
-
-
                         DateTimePicker::make('published_at')
                             ->label('Publish At')
-                            ->seconds(false),
+                            ->seconds(false)
+                            ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
                     ]),
             ]);
     }

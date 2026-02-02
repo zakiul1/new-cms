@@ -2,6 +2,7 @@
 
 namespace App\Observers;
 
+use App\Cms\Content\PermalinkManager;
 use App\Models\Post;
 use App\Models\PostRevision;
 use App\Models\Redirect;
@@ -47,16 +48,21 @@ class PostObserver
                 return;
             }
 
-            // Store history (avoid duplicates)
             SlugHistory::query()->firstOrCreate([
-                'entity_type' => $type,  // ✅ post or page
+                'entity_type' => $type,
                 'entity_id' => $post->id,
                 'old_slug' => $oldSlug,
             ]);
 
-            // ✅ Your routing is /{slug} for BOTH posts and pages
-            $from = '/' . $oldSlug;
-            $to = '/' . $newSlug;
+            $permalinks = app(PermalinkManager::class);
+
+            $from = $type === 'page'
+                ? $permalinks->pagePath($post, $oldSlug)
+                : $permalinks->postPath($post, $oldSlug);
+
+            $to = $type === 'page'
+                ? $permalinks->pagePath($post, $newSlug)
+                : $permalinks->postPath($post, $newSlug);
 
             if ($from === $to) {
                 return;

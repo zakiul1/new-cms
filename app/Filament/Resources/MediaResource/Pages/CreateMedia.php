@@ -20,6 +20,10 @@ class CreateMedia extends CreateRecord
 
     protected ?int $folderTermId = null;
 
+    // ✅ Defaults applied to all uploaded files in this create action
+    protected bool $attachmentPublicDefault = true;
+    protected bool $attachmentIndexableDefault = true;
+
     public function getMaxContentWidth(): Width
     {
         return Width::Full; // ✅ full width like your Post create page
@@ -32,7 +36,18 @@ class CreateMedia extends CreateRecord
             ? (int) $data['folder_term_id']
             : null;
 
-        unset($data['folder_term_id']);
+        // ✅ Attachment defaults from the form (apply to ALL uploaded files)
+        // If you didn't show these toggles on create, these will just stay true.
+        $this->attachmentPublicDefault = array_key_exists('attachment_public', $data)
+            ? (bool) $data['attachment_public']
+            : true;
+
+        $this->attachmentIndexableDefault = array_key_exists('attachment_indexable', $data)
+            ? (bool) $data['attachment_indexable']
+            : true;
+
+        // Cleanup non-uploader keys
+        unset($data['folder_term_id'], $data['attachment_public'], $data['attachment_indexable'], $data['slug']);
 
         $files = $data['files'] ?? [];
 
@@ -62,6 +77,9 @@ class CreateMedia extends CreateRecord
 
         $media = $uploader->upload($first);
 
+        // ✅ Apply per-attachment defaults to the newly created record
+        $this->applyAttachmentDefaults($media);
+
         // attach folder (optional)
         if ($this->folderTermId) {
             $media->terms()->syncWithoutDetaching([$this->folderTermId]);
@@ -80,6 +98,9 @@ class CreateMedia extends CreateRecord
         foreach ($this->remainingFiles as $file) {
             $m = $uploader->upload($file);
 
+            // ✅ Apply per-attachment defaults
+            $this->applyAttachmentDefaults($m);
+
             if ($this->folderTermId) {
                 $m->terms()->syncWithoutDetaching([$this->folderTermId]);
             }
@@ -97,5 +118,25 @@ class CreateMedia extends CreateRecord
     protected function getRedirectUrl(): string
     {
         return MediaResource::getUrl('index'); // ✅ WP feel
+    }
+
+    private function applyAttachmentDefaults(Media $media): void
+    {
+        // Only write if different (saves queries)
+        $needsSave = false;
+
+        if ((bool) $media->attachment_public !== $this->attachmentPublicDefault) {
+            $media->attachment_public = $this->attachmentPublicDefault;
+            $needsSave = true;
+        }
+
+        if ((bool) $media->attachment_indexable !== $this->attachmentIndexableDefault) {
+            $media->attachment_indexable = $this->attachmentIndexableDefault;
+            $needsSave = true;
+        }
+
+        if ($needsSave) {
+            $media->save();
+        }
     }
 }

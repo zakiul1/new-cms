@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class Media extends Model
 {
@@ -25,6 +26,12 @@ class Media extends Model
         'height',
         'sha1',
         'title',
+
+        // ✅ attachment page fields
+        'slug',
+        'attachment_public',
+        'attachment_indexable',
+
         'alt',
         'caption',
         'description',
@@ -35,16 +42,45 @@ class Media extends Model
     protected $casts = [
         'meta' => 'array',
         'processed_at' => 'datetime',
+
+        // ✅ IMPORTANT: Filament toggles + query filters need real booleans
+        'attachment_public' => 'bool',
+        'attachment_indexable' => 'bool',
     ];
 
     protected static function booted(): void
     {
+        static::creating(function (self $media): void {
+            // Optional safety: if slug was not set (older code paths), generate one.
+            // Your MediaUploader already sets slug, so this is only a fallback.
+            if (!filled($media->slug)) {
+                $base = Str::slug(Str::limit((string) ($media->title ?: $media->original_filename ?: 'attachment'), 120, ''));
+                $base = $base !== '' ? $base : 'attachment';
+                $media->slug = $base . '-' . Str::random(10);
+            }
+
+            // Defaults if not set (migration defaults also cover this)
+            if (!isset($media->attachment_public)) {
+                $media->attachment_public = true;
+            }
+            if (!isset($media->attachment_indexable)) {
+                $media->attachment_indexable = true;
+            }
+        });
+
         static::deleting(function (self $media): void {
             // Delete physical files (original + variants)
             app(MediaUploader::class)->deleteFiles($media);
 
             // DB variant rows are removed by FK cascade (media_variants.media_id)
         });
+    }
+
+    public function posts()
+    {
+        return $this->belongsToMany(Post::class, 'post_media')
+            ->withPivot(['role', 'sort_order'])
+            ->withTimestamps();
     }
 
     public function uploader(): BelongsTo

@@ -21,7 +21,7 @@
         @else
             <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;">
                 @foreach ($posts as $post)
-                    <a href="{{ url('/blog/' . $post->slug) }}" style="display:block;text-decoration:none;color:inherit;">
+                    <a href="{{ cms_post_url($post) }}" style="display:block;text-decoration:none;color:inherit;">
                         <div style="border:1px solid rgba(0,0,0,.08);border-radius:12px;padding:14px;">
                             <div style="font-weight:700;margin-bottom:6px;">
                                 {{ $post->title }}

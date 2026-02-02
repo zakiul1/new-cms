@@ -11,10 +11,12 @@
     $logoUrl = $logo ? $logo->url() : null;
 
     $logoWidth = (int) ($o['logo_width'] ?? 180);
-    if ($logoWidth <= 0) $logoWidth = 180;
+    if ($logoWidth <= 0) {
+        $logoWidth = 180;
+    }
 @endphp
 
-<header class="border-b border-slate-200 bg-white">
+<header class=" bg-white">
     <div class="cms-container mx-auto px-4">
         <div class="flex items-center justify-between gap-4 py-6">
             <a href="{{ url('/') }}" class="flex items-center gap-3" aria-label="Home">
@@ -27,7 +29,8 @@
 
             <div class="flex items-center gap-6 text-sm text-slate-700">
                 @if ($phone !== '')
-                    <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}" class="flex items-center gap-2 hover:text-slate-900">
+                    <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}"
+                        class="flex items-center gap-2 hover:text-slate-900">
                         <span aria-hidden="true">📞</span>
                         <span class="font-medium">{{ $phone }}</span>
                     </a>

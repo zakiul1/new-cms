@@ -2,8 +2,13 @@
 
 namespace App\Filament\Resources\Posts\Schemas;
 
+use App\Cms\Content\PermalinkManager;
 use App\Filament\Forms\Components\MediaPicker;
+use App\Models\Post;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -13,6 +18,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class PostForm
 {
@@ -47,10 +53,66 @@ class PostForm
                                 }
                             }),
 
+                        // ✅ GLOBAL uniqueness + slug safety
                         TextInput::make('slug')
                             ->label('Slug (optional)')
-                            ->helperText('Leave blank to auto-generate. Duplicates will auto-rename.')
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                            // ✅ sanitize on blur
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                $set('slug', filled($state) ? Str::slug((string) $state) : null);
+                            })
+                            ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                            ->rule(function (?Post $record) {
+                                // ✅ Global across all posts table rows (posts + pages share same slug namespace)
+                                return Rule::unique('posts', 'slug')->ignore($record?->id);
+                            })
+                            ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).'),
+
+                        // ✅ Show actual frontend URL (uses Permalink Settings)
+                        Placeholder::make('permalink_preview')
+                            ->label('Permalink')
+                            ->content(function (?Post $record, Get $get, PermalinkManager $permalinks) {
+                                // When editing an existing post, show the true permalink
+                                if ($record) {
+                                    return $permalinks->postUrl($record);
+                                }
+
+                                // On create, we don't have ID/date yet; show a "preview"
+                                $base = rtrim((string) config('app.url'), '/');
+
+                                $slug = trim((string) $get('slug'), '/');
+                                if ($slug === '') {
+                                    $slug = Str::slug((string) ($get('title') ?? ''));
+                                }
+                                $slug = $slug !== '' ? $slug : '(auto)';
+
+                                $structure = $permalinks->postStructure();
+
+                                // Plain mode uses query param
+                                if ($structure === 'plain') {
+                                    return "{$base}/?p=(after-save)";
+                                }
+
+                                // Build a preview path by replacing tokens; ID not known yet
+                                $now = now();
+                                $preview = strtr($structure, [
+                                    '%year%' => $now->format('Y'),
+                                    '%monthnum%' => $now->format('m'),
+                                    '%day%' => $now->format('d'),
+                                    '%hour%' => $now->format('H'),
+                                    '%minute%' => $now->format('i'),
+                                    '%second%' => $now->format('s'),
+                                    '%post_id%' => '(after-save)',
+                                    '%postname%' => $slug,
+                                ]);
+
+                                $preview = '/' . ltrim($preview, '/');
+                                $preview = $preview !== '/' ? rtrim($preview, '/') : '/';
+
+                                return $base . $preview;
+                            }),
 
                         Textarea::make('excerpt')
                             ->rows(3)
@@ -110,7 +172,6 @@ class PostForm
                                     ])
                                     ->default(''),
 
-                                // If you prefer MediaPicker here, you can swap to MediaPicker
                                 TextInput::make('meta_json.seo.og_image')
                                     ->label('OpenGraph Image (optional)')
                                     ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
@@ -135,6 +196,7 @@ class PostForm
                             ])
                             ->default('published')
                             ->required(),
+
                         MediaPicker::make('featured_media_id')
                             ->label('Featured Image')
                             ->modalHeading('Featured image'),
@@ -165,7 +227,23 @@ class PostForm
                                 TextInput::make('slug')
                                     ->label('Slug (optional)')
                                     ->helperText('Leave blank to auto-generate.')
-                                    ->maxLength(255),
+                                    ->maxLength(255)
+                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn($state, Set $set) => $set('slug', Str::slug((string) $state)))
+                                    ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                                    // ✅ FIX: unique within CATEGORY taxonomy (taxonomy_id)
+                                    ->rule(function (?Term $record) {
+                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
+
+                                        if (!$taxonomyId) {
+                                            return null;
+                                        }
+
+                                        return Rule::unique('terms', 'slug')
+                                            ->where('taxonomy_id', $taxonomyId)
+                                            ->ignore($record?->id);
+                                    }),
 
                                 Select::make('parent_id')
                                     ->label('Parent Category (optional)')
@@ -173,12 +251,12 @@ class PostForm
                                     ->preload()
                                     ->nullable()
                                     ->options(function (): array {
-                                        $taxonomyId = \App\Models\Taxonomy::where('key', 'category')->value('id');
+                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
                                         if (!$taxonomyId) {
                                             return [];
                                         }
 
-                                        return \App\Models\Term::query()
+                                        return Term::query()
                                             ->where('taxonomy_id', $taxonomyId)
                                             ->orderBy('name')
                                             ->pluck('name', 'id')
@@ -186,7 +264,7 @@ class PostForm
                                     }),
                             ])
                             ->createOptionUsing(function (array $data) {
-                                $taxonomyId = \App\Models\Taxonomy::firstOrCreate(
+                                $taxonomyId = Taxonomy::firstOrCreate(
                                     ['key' => 'category'],
                                     ['label' => 'Categories', 'hierarchical' => true],
                                 )->id;
@@ -200,12 +278,12 @@ class PostForm
                                 $slug = $base;
                                 $i = 2;
 
-                                while (\App\Models\Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
                                     $slug = $base . '-' . $i;
                                     $i++;
                                 }
 
-                                $term = \App\Models\Term::create([
+                                $term = Term::create([
                                     'taxonomy_id' => $taxonomyId,
                                     'name' => (string) $data['name'],
                                     'slug' => $slug,
@@ -222,11 +300,10 @@ class PostForm
                             ->preload()
                             ->searchable(),
 
-
-
                         DateTimePicker::make('published_at')
                             ->label('Publish At')
-                            ->seconds(false),
+                            ->seconds(false)
+                            ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
                     ]),
             ]);
     }

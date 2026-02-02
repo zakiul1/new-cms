@@ -47,7 +47,79 @@ class Settings
             return $default;
         }
 
+        // ✅ Normalize common string booleans safely
+        if (is_string($val)) {
+            $trim = trim($val);
+            $lower = strtolower($trim);
+
+            if ($lower === 'true') {
+                return true;
+            }
+            if ($lower === 'false') {
+                return false;
+            }
+            if ($trim === '1') {
+                return true;
+            }
+            if ($trim === '0') {
+                return false;
+            }
+        }
+
         return $val;
+    }
+
+    /**
+     * Convenience typed getters (optional but very handy for toggles).
+     */
+    public function getBool(string $key, bool $default = false, string $group = 'core'): bool
+    {
+        $val = $this->get($key, $default, $group);
+
+        if (is_bool($val)) {
+            return $val;
+        }
+
+        // int 0/1
+        if (is_int($val)) {
+            return $val === 1;
+        }
+
+        // string normalization already handled in get(), but keep safe:
+        if (is_string($val)) {
+            $trim = trim($val);
+            $lower = strtolower($trim);
+            if ($lower === 'true' || $trim === '1')
+                return true;
+            if ($lower === 'false' || $trim === '0')
+                return false;
+        }
+
+        return (bool) $val;
+    }
+
+    public function getInt(string $key, int $default = 0, string $group = 'core'): int
+    {
+        $val = $this->get($key, $default, $group);
+
+        if (is_int($val))
+            return $val;
+        if (is_numeric($val))
+            return (int) $val;
+
+        return $default;
+    }
+
+    public function getString(string $key, string $default = '', string $group = 'core'): string
+    {
+        $val = $this->get($key, $default, $group);
+
+        if (is_string($val))
+            return $val;
+        if ($val === null)
+            return $default;
+
+        return (string) $val;
     }
 
     public function set(string $key, mixed $value, string $group = 'core'): void
@@ -86,6 +158,14 @@ class Settings
         Cache::forget($this->cacheKey($group));
     }
 
+    /**
+     * If you ever need to clear the table-exists cache (e.g. after migrations).
+     */
+    public function forgetTableExistsCache(): void
+    {
+        Cache::forget(self::TABLE_EXISTS_CACHE_KEY);
+    }
+
     private function cacheKey(string $group): string
     {
         return self::CACHE_PREFIX . $group;
@@ -118,6 +198,7 @@ class Settings
             return '';
         }
 
+        // ✅ cms_settings.value is JSON (you always store JSON) — decode it.
         $decoded = json_decode($trim, true);
         return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $value;
     }

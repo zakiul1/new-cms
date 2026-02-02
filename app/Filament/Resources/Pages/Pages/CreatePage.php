@@ -5,22 +5,17 @@ namespace App\Filament\Resources\Pages\Pages;
 use App\Cms\Content\Slugger;
 use App\Filament\Resources\Pages\PageResource;
 use Filament\Resources\Pages\CreateRecord;
-use Filament\Actions\Action;
 
 class CreatePage extends CreateRecord
 {
     protected static string $resource = PageResource::class;
 
-
-
     protected function getHeaderActions(): array
     {
         return [
             $this->getCancelFormAction(),
-            // Create
             $this->getCreateAnotherFormAction(),
-            $this->getCreateFormAction(),      // Create & create another (optional)
-            // Cancel (optional)
+            $this->getCreateFormAction(),
         ];
     }
 
@@ -42,9 +37,10 @@ class CreatePage extends CreateRecord
         /** @var Slugger $slugger */
         $slugger = app(Slugger::class);
 
+        // ✅ GLOBAL uniqueness across post + page
         $data['slug'] = empty($data['slug'])
-            ? $slugger->uniquePostSlug('page', (string) ($data['title'] ?? ''))
-            : $slugger->uniqueFromSlug('page', (string) $data['slug']);
+            ? $slugger->uniqueGlobalSlugFromTitle((string) ($data['title'] ?? ''), ignorePostId: null)
+            : $slugger->uniqueGlobalSlugFromSlug((string) $data['slug'], ignorePostId: null);
 
         // ✅ Ensure JSON defaults exist
         $data['meta_json'] = is_array($data['meta_json'] ?? null) ? $data['meta_json'] : [];

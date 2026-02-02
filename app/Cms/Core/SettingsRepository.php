@@ -18,14 +18,12 @@ class SettingsRepository
                     ->where('key', $key)
                     ->first();
 
-                // ✅ If not found, return default
                 if (!$row) {
                     return $default;
                 }
 
                 $value = $row->value;
 
-                // ✅ If DB stored null/empty, still fallback to default
                 if ($value === null) {
                     return $default;
                 }
@@ -40,6 +38,17 @@ class SettingsRepository
                             return $decoded;
                         }
                     }
+
+                    // ✅ Normalize common boolean strings safely
+                    $lower = strtolower($trim);
+                    if ($lower === 'true')
+                        return true;
+                    if ($lower === 'false')
+                        return false;
+                    if ($trim === '1')
+                        return true;
+                    if ($trim === '0')
+                        return false;
                 }
 
                 return $value;
@@ -49,7 +58,6 @@ class SettingsRepository
 
     public function set(string $group, string $key, mixed $value): void
     {
-        // ✅ Store arrays/objects as JSON to keep DB consistent
         $stored = $value;
 
         if (is_array($value) || is_object($value)) {

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Pages\Tables;
 
+use App\Cms\Content\PermalinkManager;
+use App\Models\Post;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -23,6 +25,15 @@ class PagesTable
                     ->limit(50) // trims and adds "…"
                     ->tooltip(fn($record) => $record->title) // full title on hover
                     ->extraAttributes(['class' => 'max-w-[420px] truncate']),
+
+                // ✅ Permalink (Pages are always /{slug})
+                TextColumn::make('url')
+                    ->label('URL')
+                    ->state(fn(Post $record, PermalinkManager $permalinks) => $permalinks->pageUrl($record))
+                    ->url(fn(Post $record, PermalinkManager $permalinks) => $permalinks->pageUrl($record), true)
+                    ->limit(60)
+                    ->tooltip(fn(Post $record, PermalinkManager $permalinks) => $permalinks->pageUrl($record))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('status')
                     ->badge()

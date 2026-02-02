@@ -1,13 +1,12 @@
 <?php
 
+use App\Cms\Hooks\HookPoints;
+use App\Http\Controllers\Cms\CategoryArchiveController;
+use App\Http\Controllers\Cms\ContentRouterController;
+use App\Http\Controllers\Cms\RobotsController;
+use App\Http\Controllers\Cms\SitemapController;
 use App\Http\Controllers\ThemeCustomizerController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Cms\ContentRouterController;
-use App\Http\Controllers\Cms\SitemapController;
-use App\Http\Controllers\Cms\RobotsController;
-use App\Http\Controllers\Cms\CategoryArchiveController;
-use App\Cms\Hooks\HookPoints;
-use App\Livewire\ThemeCustomizer;
 
 // ✅ Let plugins register routes BEFORE the catch-all
 do_action(HookPoints::CMS_ROUTES);
@@ -21,26 +20,29 @@ Route::middleware(['web', 'auth'])
     ->get('/customizer', [ThemeCustomizerController::class, 'index'])
     ->name('cms.customizer');
 
-// ✅ Category archive (example: /category/product)
+// ✅ Backward-compatible category archive (default base: /category/{slug})
 Route::get('/category/{slug}', [CategoryArchiveController::class, 'show'])
     ->where('slug', '.*')
     ->name('cms.category.archive');
 
-// ✅ Home (theme home)
-Route::get('/', fn() => view('home'));
+// ✅ Home (now supports ?p=123 for "Plain" permalinks)
+Route::get('/', [ContentRouterController::class, 'home'])->name('cms.home');
 
 // ✅ Preview helper routes
 require base_path('routes/cms_preview.php');
 
 /**
- * ✅ POSTS route (important if your permalink rule is /blog/{slug})
+ * Legacy route - you can keep it; canonical redirects will normalize URLs.
  */
 Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')
     ->name('cms.blog.show');
 
-
-
+/**
+ * ✅ Catch-all route:
+ * Handles pages, posts, attachment pages (/media-slug), and slug history redirects.
+ * IMPORTANT: keep this LAST.
+ */
 Route::get('/{slug}', [ContentRouterController::class, 'show'])
     ->where('slug', '.*')
     ->name('cms.catchall');

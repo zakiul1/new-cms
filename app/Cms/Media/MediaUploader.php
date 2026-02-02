@@ -64,6 +64,8 @@ class MediaUploader
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
+        $title = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+
         $media = Media::create([
             'uploaded_by' => Auth::id(),
             'disk' => $disk,
@@ -75,7 +77,13 @@ class MediaUploader
             'width' => $w,
             'height' => $h,
             'sha1' => $sha1,
-            'title' => (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled'),
+
+            // ✅ Attachment fields
+            'title' => $title,
+            'slug' => $this->makeUniqueAttachmentSlug($title),
+            'attachment_public' => true,
+            'attachment_indexable' => true,
+
             'processed_at' => null,
         ]);
 
@@ -131,6 +139,10 @@ class MediaUploader
         // Remove old original AFTER new stored
         Storage::disk($disk)->delete($oldPath);
 
+        // Ensure slug exists for older records (do NOT change existing slug)
+        $titleForSlug = (string) ($media->title ?: pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+        $slug = $media->slug ?: $this->makeUniqueAttachmentSlug($titleForSlug);
+
         // Update DB
         $media->update([
             'filename' => basename((string) $path),
@@ -141,6 +153,13 @@ class MediaUploader
             'height' => $h,
             'sha1' => $sha1,
             'processed_at' => null,
+
+            // ✅ keep same slug; only backfill if missing
+            'slug' => $slug,
+
+            // ✅ ensure defaults exist (in case older record had nulls)
+            'attachment_public' => $media->attachment_public ?? true,
+            'attachment_indexable' => $media->attachment_indexable ?? true,
         ]);
 
         if ($media->isImage()) {
@@ -196,6 +215,19 @@ class MediaUploader
         $ext = $ext !== '' ? $ext : 'bin';
 
         return $name . '-' . Str::random(10) . '.' . $ext;
+    }
+
+    private function makeUniqueAttachmentSlug(string $title): string
+    {
+        $name = pathinfo($title, PATHINFO_FILENAME);
+        $base = Str::slug(Str::limit($name, 120, ''));
+        $base = $base !== '' ? $base : 'attachment';
+
+        do {
+            $slug = $base . '-' . Str::random(10);
+        } while (Media::query()->where('slug', $slug)->exists());
+
+        return $slug;
     }
 
     private function sha1OfUploadedFile(UploadedFile|TemporaryUploadedFile $file): ?string

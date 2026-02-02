@@ -40,6 +40,10 @@ return [
         // width in px (height auto)
         'thumb' => 300,
         'medium' => 768,
+
+        // ✅ NEW (WP-like): between medium and large
+        'medium_large' => 1024,
+
         'large' => 1600,
     ],
 

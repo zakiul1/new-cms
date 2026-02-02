@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Posts\Tables;
 
+use App\Cms\Content\PermalinkManager;
+use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Actions\BulkActionGroup;
@@ -22,9 +24,18 @@ class PostsTable
                     ->searchable()
                     ->sortable()
                     ->wrap(false)
-                    ->limit(50) // trims and adds "…"
-                    ->tooltip(fn($record) => $record->title) // full title on hover
+                    ->limit(50)
+                    ->tooltip(fn($record) => $record->title)
                     ->extraAttributes(['class' => 'max-w-[420px] truncate']),
+
+                // ✅ Permalink (uses current permalink settings)
+                TextColumn::make('url')
+                    ->label('URL')
+                    ->state(fn(Post $record, PermalinkManager $permalinks) => $permalinks->postUrl($record))
+                    ->url(fn(Post $record, PermalinkManager $permalinks) => $permalinks->postUrl($record), true)
+                    ->limit(60)
+                    ->tooltip(fn(Post $record, PermalinkManager $permalinks) => $permalinks->postUrl($record))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('categories.name')
                     ->label('Categories')
