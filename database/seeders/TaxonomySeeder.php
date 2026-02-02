@@ -18,5 +18,11 @@ class TaxonomySeeder extends Seeder
             ['key' => 'tag'],
             ['label' => 'Tags', 'hierarchical' => false],
         );
+
+        // ✅ NEW: Media Categories
+        Taxonomy::firstOrCreate(
+            ['key' => 'media_category'],
+            ['label' => 'Media Categories', 'hierarchical' => true],
+        );
     }
 }

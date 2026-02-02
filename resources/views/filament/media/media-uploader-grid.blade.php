@@ -1,6 +1,7 @@
 <div class="space-y-4">
-    {{-- Folder select (optional) --}}
-    <div class="flex items-center gap-3">
+    {{-- Folder + Category selects (optional) --}}
+    <div class="flex flex-wrap items-end gap-6">
+        {{-- Folder select (optional) --}}
         <div class="w-full max-w-sm">
             <label class="mb-1 block text-xs font-medium text-gray-700">Upload into folder (optional)</label>
             <select wire:model="termId" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
@@ -9,6 +10,43 @@
                     <option value="{{ $t->id }}">{{ $t->name }}</option>
                 @endforeach
             </select>
+        </div>
+
+        {{-- Category select (optional, multi) --}}
+        <div class="w-full max-w-sm">
+            <label class="mb-1 block text-xs font-medium text-gray-700">Categories (optional)</label>
+
+            <select wire:model="categoryIds" multiple
+                class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                @php
+                    $catTaxId = \App\Models\Taxonomy::query()->where('key', 'media_category')->value('id');
+                @endphp
+
+                @foreach (\App\Models\Term::query()->where('taxonomy_id', $catTaxId)->orderBy('name')->get() as $c)
+                    <option value="{{ $c->id }}">{{ $c->name }}</option>
+                @endforeach
+            </select>
+
+            <p class="mt-1 text-[11px] text-gray-500">
+                Hold <span class="font-semibold">Ctrl</span> (Windows) / <span class="font-semibold">Cmd</span> (Mac) to
+                select multiple.
+                If none selected, it will be saved as <span class="font-semibold">Uncategorized</span>.
+            </p>
+
+            {{-- Runtime category create --}}
+            <div class="mt-2 flex items-center gap-2">
+                <input type="text" wire:model.defer="newCategoryName" placeholder="Create new category..."
+                    class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs" />
+                <button type="button" wire:click="createCategory" wire:loading.attr="disabled"
+                    class="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-800 disabled:opacity-60">
+                    <span wire:loading.remove>Create</span>
+                    <span wire:loading>Creating…</span>
+                </button>
+            </div>
+
+            @error('newCategoryName')
+                <div class="mt-1 text-xs text-red-600">{{ $message }}</div>
+            @enderror
         </div>
     </div>
 

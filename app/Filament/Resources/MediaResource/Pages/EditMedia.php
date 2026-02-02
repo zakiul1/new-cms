@@ -7,6 +7,8 @@ use App\Cms\Media\MediaUploader;
 use App\Filament\Resources\MediaResource;
 use App\Jobs\GenerateMediaVariants;
 use App\Models\Media;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
@@ -14,6 +16,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\RichEditor;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Components\Section;
@@ -25,8 +28,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
-use Filament\Forms\Components\RichEditor;
-
 
 class EditMedia extends EditRecord
 {
@@ -34,6 +35,9 @@ class EditMedia extends EditRecord
 
     /** @var TemporaryUploadedFile|UploadedFile|null */
     protected TemporaryUploadedFile|UploadedFile|null $pendingReplaceFile = null;
+
+    /** @var array<int> */
+    protected array $pendingCategoryTermIds = [];
 
     public function getMaxContentWidth(): Width
     {
@@ -69,9 +73,6 @@ class EditMedia extends EditRecord
             ->components([
                 /**
                  * LEFT (2/3): Content
-                 * Order: Title, Slug, Permalink, Description, Caption,
-                 *        NEW Meta title/description (frontend),
-                 *        SEO (Premium), Frontend Preview
                  */
                 Section::make('Content')
                     ->columnSpan([
@@ -156,7 +157,6 @@ class EditMedia extends EditRecord
                                 }
                             }),
 
-
                         Textarea::make('caption')
                             ->label('Caption')
                             ->rows(3)
@@ -170,7 +170,7 @@ class EditMedia extends EditRecord
                                 }
                             }),
 
-                        // ✅ NEW fields (NOT SEO Premium)
+                        // ✅ Frontend meta
                         TextInput::make('meta.frontend.meta_title')
                             ->label('Meta title')
                             ->helperText('Used on attachment page (frontend) under related section.')
@@ -320,6 +320,103 @@ class EditMedia extends EditRecord
                             ->storeFiles(false)
                             ->helperText('Replaces original file. Variants regenerate for images.'),
 
+                        // ✅ NEW: Media Categories (multi) + runtime create
+                        Select::make('category_term_ids')
+                            ->label('Categories')
+                            ->helperText('Assign categories to this media. You can create new categories here.')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->options(function (): array {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_category'],
+                                    ['label' => 'Media Categories', 'hierarchical' => true],
+                                )->id;
+
+                                return Term::query()
+                                    ->where('taxonomy_id', $taxonomyId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->all();
+                            })
+                            ->afterStateHydrated(function ($state, Set $set) {
+                                /** @var Media $record */
+                                $record = $this->record;
+
+                                $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+
+                                $ids = $taxonomyId
+                                    ? $record->terms()
+                                        ->where('terms.taxonomy_id', $taxonomyId)
+                                        ->pluck('terms.id')
+                                        ->all()
+                                    : [];
+
+                                $set('category_term_ids', $ids);
+                            })
+                            ->createOptionForm([
+                                TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, callable $set) {
+                                        $set('slug', Str::slug((string) $state));
+                                    }),
+
+                                TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->maxLength(255),
+
+                                Select::make('parent_id')
+                                    ->label('Parent Category (optional)')
+                                    ->searchable()
+                                    ->preload()
+                                    ->nullable()
+                                    ->options(function (): array {
+                                        $taxonomyId = Taxonomy::where('key', 'media_category')->value('id');
+                                        if (!$taxonomyId) {
+                                            return [];
+                                        }
+
+                                        return Term::query()
+                                            ->where('taxonomy_id', $taxonomyId)
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->all();
+                                    }),
+                            ])
+                            ->createOptionUsing(function (array $data) {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_category'],
+                                    ['label' => 'Media Categories', 'hierarchical' => true],
+                                )->id;
+
+                                $base = filled($data['slug'] ?? null)
+                                    ? Str::slug((string) $data['slug'])
+                                    : Str::slug((string) ($data['name'] ?? ''));
+
+                                $base = $base !== '' ? $base : 'category';
+
+                                $slug = $base;
+                                $i = 2;
+
+                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                                    $slug = $base . '-' . $i;
+                                    $i++;
+                                }
+
+                                $term = Term::create([
+                                    'taxonomy_id' => $taxonomyId,
+                                    'name' => (string) $data['name'],
+                                    'slug' => $slug,
+                                    'parent_id' => $data['parent_id'] ?? null,
+                                ]);
+
+                                return $term->getKey();
+                            })
+                            ->columnSpanFull(),
+
                         Section::make('Attachment Settings')
                             ->description('Public page URL is /{slug}. You can hide it per media like WordPress.')
                             ->collapsible()
@@ -369,6 +466,18 @@ class EditMedia extends EditRecord
 
         unset($data['replace_file']);
 
+        // ✅ categories (store for afterSave sync, then remove from record payload)
+        $this->pendingCategoryTermIds = isset($data['category_term_ids']) && is_array($data['category_term_ids'])
+            ? collect($data['category_term_ids'])
+                ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all()
+            : [];
+
+        unset($data['category_term_ids']);
+
         if (array_key_exists('slug', $data)) {
             $newSlug = trim((string) ($data['slug'] ?? ''));
             if ($newSlug === '') {
@@ -395,12 +504,15 @@ class EditMedia extends EditRecord
 
     protected function afterSave(): void
     {
+        /** @var Media $record */
+        $record = $this->record;
+
+        // ✅ sync categories every save
+        $record->syncCategoryTerms($this->pendingCategoryTermIds);
+
         if (!$this->pendingReplaceFile) {
             return;
         }
-
-        /** @var Media $record */
-        $record = $this->record;
 
         app(MediaUploader::class)->replace($record, $this->pendingReplaceFile);
 

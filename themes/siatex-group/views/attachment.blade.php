@@ -27,85 +27,118 @@
         }
 
         // -----------------------------
-        // Category (breadcrumb only)
+        // Breadcrumb:
+        // Prefer media_category taxonomy term, fallback to post category
         // -----------------------------
+        $mediaCategoryTerm = null;
+        $mediaCategoryTaxId = null;
+        $mediaCategoryIds = [];
+
         $parentPost = null;
-        $category = null;
+        $postCategory = null;
+
+        try {
+            $mediaCategoryTaxId = \App\Models\Taxonomy::query()->where('key', 'media_category')->value('id');
+
+            if ($mediaCategoryTaxId) {
+                $mediaCategoryTerm = $media
+                    ->terms()
+                    ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->orderBy('terms.name')
+                    ->first();
+
+                $mediaCategoryIds = $media
+                    ->terms()
+                    ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->pluck('terms.id')
+                    ->map(fn($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+        } catch (\Throwable $e) {
+            $mediaCategoryTaxId = null;
+            $mediaCategoryTerm = null;
+            $mediaCategoryIds = [];
+        }
 
         try {
             $parentPost = $media->posts()->where('status', 'published')->latest('id')->first();
             if ($parentPost) {
-                $category = $parentPost->categories()->first();
+                $postCategory = $parentPost->categories()->first();
             }
         } catch (\Throwable $e) {
             $parentPost = null;
-            $category = null;
+            $postCategory = null;
         }
 
+        $breadcrumbTerm = $mediaCategoryTerm ?: $postCategory;
+
         // -----------------------------
-        // ✅ RELATED MEDIA (random images)
+        // ✅ STRICT SAME-CATEGORY RELATED (RANDOM, DIFFERENT ORDER)
         //
-        // Goal:
-        // - Related grid: up to 10 random images
-        // - Related Links: up to 10 random image titles as links
-        // - Prefer NO overlap between grid and links
-        // - If there aren't enough distinct images, allow overlap so links still show
-//
-// NOTE:
-// We keep it safe by:
-// - Fetching a moderate amount and filtering by ->isImage() (no reliance on mime_type column name)
-// - Then splitting into grid + links
-// -----------------------------
-$pool = collect();
-$related = collect();
-$relatedLinks = collect();
+        // Rules:
+        // - ONLY same media_category
+        // - exclude current media
+        // - Related grid: random 10
+        // - Related links: random 10 (different random query => different order)
+        // - avoid overlap if possible; if category small, allow overlap
+        // -----------------------------
+        $related = collect();
+        $relatedLinks = collect();
 
-$buildPool = function (array $excludeIds = [], int $fetch = 120) {
-    try {
-        return \App\Models\Media::query()
-            ->when(!empty($excludeIds), fn($q) => $q->whereNotIn('id', $excludeIds))
-            ->inRandomOrder()
-            ->limit($fetch)
-            ->get()
-            ->filter(fn($m) => $m instanceof \App\Models\Media && $m->isImage())
-            ->unique('id')
-            ->values();
-    } catch (\Throwable $e) {
-        return collect();
-    }
-};
+        $fetchSameCategoryRandom = function (array $excludeIds, int $limit) use (
+            $media,
+            $mediaCategoryTaxId,
+            $mediaCategoryIds,
+        ) {
+            if (!$mediaCategoryTaxId || empty($mediaCategoryIds)) {
+                return collect();
+            }
 
-// 1) First pool excluding current media
-$pool = $buildPool([$media->id], 200)
-    ->shuffle()
-    ->values();
+            try {
+                return \App\Models\Media::query()
+                    ->whereNotIn('id', $excludeIds)
+                    ->whereHas('terms', function ($q) use ($mediaCategoryTaxId, $mediaCategoryIds) {
+                        $q->where('terms.taxonomy_id', $mediaCategoryTaxId)->whereIn('terms.id', $mediaCategoryIds);
+                    })
+                    ->inRandomOrder()
+                    ->limit($limit)
+                    ->get()
+                    ->filter(fn($m) => $m instanceof \App\Models\Media && $m->isImage())
+                    ->unique('id')
+                    ->values();
+            } catch (\Throwable $e) {
+                return collect();
+            }
+        };
 
-// 2) Split pool: first 10 -> grid, next 10 -> links
-$related = $pool->take(10)->values();
-$relatedLinks = $pool->slice(10, 10)->values();
-
-// 3) If links are less than 10, try to fetch more distinct images to fill links (no overlap)
-$need = 10 - $relatedLinks->count();
-if ($need > 0) {
-    $excludeIds = collect([$media->id])
-        ->merge($related->pluck('id'))
-        ->merge($relatedLinks->pluck('id'))
-        ->unique()
-        ->values()
-        ->all();
-
-    $extra = $buildPool($excludeIds, 250)->shuffle()->take($need)->values();
-    $relatedLinks = $relatedLinks->concat($extra)->take(10)->values();
-}
-
-// 4) Still empty / still short? Allow overlap from grid so "Related Links" always shows something.
-if ($relatedLinks->count() < 10) {
-    $fillFromRelated = $related
-        ->reject(fn($m) => $relatedLinks->contains('id', $m->id))
-                ->take(10 - $relatedLinks->count())
+        // If no category => show nothing
+        if ($mediaCategoryTaxId && !empty($mediaCategoryIds)) {
+            // 1) grid random
+            $related = $fetchSameCategoryRandom([$media->id], 80)
+                ->take(10)
                 ->values();
 
-            $relatedLinks = $relatedLinks->concat($fillFromRelated)->take(10)->values();
+            // 2) links random (try no-overlap first)
+            $excludeForLinks = collect([$media->id])
+                ->merge($related->pluck('id'))
+                ->unique()
+                ->values()
+                ->all();
+
+            $relatedLinks = $fetchSameCategoryRandom($excludeForLinks, 80)->take(10)->values();
+
+            // 3) if still not enough links (category small), allow overlap from category
+            $need = 10 - $relatedLinks->count();
+            if ($need > 0) {
+                $more = $fetchSameCategoryRandom([$media->id], 120)
+                    ->reject(fn($m) => $relatedLinks->contains('id', $m->id))
+                    ->take($need)
+                    ->values();
+
+                $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
+            }
         }
     @endphp
 
@@ -114,10 +147,10 @@ if ($relatedLinks->count() < 10) {
         <nav class="text-sm text-slate-500">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
 
-            @if ($category)
+            @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
-                <a class="text-slate-600 hover:underline" href="{{ cms_term_url($category) }}">
-                    {{ $category->name }}
+                <a class="text-slate-600 hover:underline" href="{{ cms_term_url($breadcrumbTerm) }}">
+                    {{ $breadcrumbTerm->name }}
                 </a>
             @endif
 
@@ -181,7 +214,7 @@ if ($relatedLinks->count() < 10) {
         <section class="bg-white">
             <div class="cms-container mx-auto px-4 py-10">
 
-                {{-- RELATED GRID (max 10, 4 columns on desktop) --}}
+                {{-- RELATED GRID (random, same category only) --}}
                 @if ($related->count())
                     <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -233,7 +266,7 @@ if ($relatedLinks->count() < 10) {
                         @endif
                     </div>
 
-                    {{-- RIGHT (4) Related Links (max 10, random media titles) --}}
+                    {{-- RIGHT (4) Related Links (random, same category only) --}}
                     <div class="lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>

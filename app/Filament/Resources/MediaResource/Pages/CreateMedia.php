@@ -20,6 +20,9 @@ class CreateMedia extends CreateRecord
 
     protected ?int $folderTermId = null;
 
+    /** @var array<int> */
+    protected array $categoryTermIds = [];
+
     // ✅ Defaults applied to all uploaded files in this create action
     protected bool $attachmentPublicDefault = true;
     protected bool $attachmentIndexableDefault = true;
@@ -36,6 +39,16 @@ class CreateMedia extends CreateRecord
             ? (int) $data['folder_term_id']
             : null;
 
+        // ✅ categories (optional, apply to ALL uploaded files)
+        $this->categoryTermIds = isset($data['category_term_ids']) && is_array($data['category_term_ids'])
+            ? collect($data['category_term_ids'])
+                ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all()
+            : [];
+
         // ✅ Attachment defaults from the form (apply to ALL uploaded files)
         // If you didn't show these toggles on create, these will just stay true.
         $this->attachmentPublicDefault = array_key_exists('attachment_public', $data)
@@ -47,7 +60,13 @@ class CreateMedia extends CreateRecord
             : true;
 
         // Cleanup non-uploader keys
-        unset($data['folder_term_id'], $data['attachment_public'], $data['attachment_indexable'], $data['slug']);
+        unset(
+            $data['folder_term_id'],
+            $data['category_term_ids'],
+            $data['attachment_public'],
+            $data['attachment_indexable'],
+            $data['slug']
+        );
 
         $files = $data['files'] ?? [];
 
@@ -75,14 +94,23 @@ class CreateMedia extends CreateRecord
         /** @var MediaUploader $uploader */
         $uploader = app(MediaUploader::class);
 
-        $media = $uploader->upload($first);
+        $media = $uploader->upload($first, [
+            'folder_term_id' => $this->folderTermId,
+            'category_term_ids' => $this->categoryTermIds,
+        ]);
+
 
         // ✅ Apply per-attachment defaults to the newly created record
         $this->applyAttachmentDefaults($media);
 
-        // attach folder (optional)
+        // ✅ attach folder (optional)
         if ($this->folderTermId) {
             $media->terms()->syncWithoutDetaching([$this->folderTermId]);
+        }
+
+        // ✅ attach categories (optional)
+        if (!empty($this->categoryTermIds)) {
+            $media->syncCategoryTerms($this->categoryTermIds);
         }
 
         return $media;
@@ -101,8 +129,14 @@ class CreateMedia extends CreateRecord
             // ✅ Apply per-attachment defaults
             $this->applyAttachmentDefaults($m);
 
+            // ✅ folder
             if ($this->folderTermId) {
                 $m->terms()->syncWithoutDetaching([$this->folderTermId]);
+            }
+
+            // ✅ categories
+            if (!empty($this->categoryTermIds)) {
+                $m->syncCategoryTerms($this->categoryTermIds);
             }
 
             $count++;

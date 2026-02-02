@@ -220,4 +220,88 @@ class Media extends Model
         $this->clearFolderTerms();
         $this->terms()->syncWithoutDetaching([$termId]);
     }
+
+    // -------------------------
+    // ✅ Media Category helpers
+    // taxonomy key: media_category
+    // -------------------------
+
+    protected function categoryTaxonomyId(): ?int
+    {
+        return Taxonomy::query()->where('key', 'media_category')->value('id');
+    }
+
+    /**
+     * Media categories as terms (only taxonomy: media_category)
+     */
+    public function categories(): MorphToMany
+    {
+        $taxonomyId = $this->categoryTaxonomyId();
+
+        // If taxonomy not created yet, return an empty relation safely.
+        if (!$taxonomyId) {
+            return $this->terms()->whereRaw('1=0');
+        }
+
+        return $this->terms()
+            ->where('terms.taxonomy_id', $taxonomyId)
+            ->orderBy('terms.name');
+    }
+
+    /**
+     * Remove only media_category terms from this media.
+     */
+    public function clearCategoryTerms(): void
+    {
+        $taxonomyId = $this->categoryTaxonomyId();
+        if (!$taxonomyId) {
+            return;
+        }
+
+        $termIds = Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->pluck('id')
+            ->all();
+
+        if (count($termIds)) {
+            $this->terms()->detach($termIds);
+        }
+    }
+
+    /**
+     * Sync media categories (multiple) safely.
+     *
+     * @param array<int|string> $termIds
+     */
+    public function syncCategoryTerms(array $termIds): void
+    {
+        $taxonomyId = $this->categoryTaxonomyId();
+        if (!$taxonomyId) {
+            return;
+        }
+
+        // Keep only valid IDs
+        $termIds = collect($termIds)
+            ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+            ->map(fn($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        // Ensure provided terms belong to media_category taxonomy
+        if (!empty($termIds)) {
+            $termIds = Term::query()
+                ->where('taxonomy_id', $taxonomyId)
+                ->whereIn('id', $termIds)
+                ->pluck('id')
+                ->all();
+        }
+
+        // Replace only this taxonomy
+        $this->clearCategoryTerms();
+
+        if (!empty($termIds)) {
+            $this->terms()->syncWithoutDetaching($termIds);
+        }
+    }
 }

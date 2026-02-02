@@ -4,6 +4,8 @@ namespace App\Cms\Media;
 
 use App\Jobs\GenerateMediaVariants;
 use App\Models\Media;
+use App\Models\Taxonomy;
+use App\Models\Term;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -16,9 +18,15 @@ class MediaUploader
     /**
      * Upload a file and return Media record.
      *
+     * Supported $options:
+     * - folder_term_id: int|null
+     * - category_term_ids: array<int|string>
+     * - default_category_name: string (default: "Uncategorized")
+     *
      * @param  UploadedFile|TemporaryUploadedFile  $file
+     * @param  array<string, mixed> $options
      */
-    public function upload(UploadedFile|TemporaryUploadedFile $file): Media
+    public function upload(UploadedFile|TemporaryUploadedFile $file, array $options = []): Media
     {
         $disk = (string) config('cms-media.disk', 'public');
         $baseDir = trim((string) config('cms-media.base_dir', 'media'), '/');
@@ -43,7 +51,6 @@ class MediaUploader
             $existing = Media::query()
                 ->where('sha1', $sha1)
                 ->where('size', $sizeBytes)
-                // optional safety: ensure same mime family
                 ->where('mime_type', $mime)
                 ->first();
 
@@ -51,6 +58,9 @@ class MediaUploader
                 $existingDisk = (string) ($existing->disk ?: $disk);
 
                 if (Storage::disk($existingDisk)->exists($existing->path())) {
+                    // ✅ Ensure taxonomy attachments if needed (optional)
+                    $this->applyFolderAndCategoryOptions($existing, $options);
+
                     return $existing;
                 }
             }
@@ -86,6 +96,9 @@ class MediaUploader
 
             'processed_at' => null,
         ]);
+
+        // ✅ Apply folder + category rules
+        $this->applyFolderAndCategoryOptions($media, $options);
 
         if ($media->isImage()) {
             $this->dispatchVariantsJob($media->id, false);
@@ -183,6 +196,90 @@ class MediaUploader
         }
 
         Storage::disk($disk)->delete($media->path());
+    }
+
+    /**
+     * ✅ Apply folder + categories.
+     * If category_term_ids empty => attach "Uncategorized" in media_category taxonomy.
+     *
+     * @param array<string, mixed> $options
+     */
+    private function applyFolderAndCategoryOptions(Media $media, array $options): void
+    {
+        // -------------------------
+        // Folder (optional)
+        // -------------------------
+        $folderTermId = $options['folder_term_id'] ?? null;
+
+        if (filled($folderTermId) && is_numeric($folderTermId)) {
+            $folderTermId = (int) $folderTermId;
+
+            // Attach folder like your existing create flow
+            $media->terms()->syncWithoutDetaching([$folderTermId]);
+        }
+
+        // -------------------------
+        // Categories (optional, but default to Uncategorized)
+        // -------------------------
+        $categoryIds = $options['category_term_ids'] ?? [];
+        $categoryIds = is_array($categoryIds) ? $categoryIds : [];
+
+        $categoryIds = collect($categoryIds)
+            ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+            ->map(fn($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (!empty($categoryIds)) {
+            // Your Media::syncCategoryTerms already validates taxonomy
+            $media->syncCategoryTerms($categoryIds);
+            return;
+        }
+
+        // If nothing selected -> attach default Uncategorized (taxonomy: media_category)
+        $defaultName = (string) ($options['default_category_name'] ?? 'Uncategorized');
+        $this->attachDefaultMediaCategory($media, $defaultName);
+    }
+
+    /**
+     * Attach (or create) the "Uncategorized" term for media_category taxonomy
+     */
+    private function attachDefaultMediaCategory(Media $media, string $name = 'Uncategorized'): void
+    {
+        $taxonomy = Taxonomy::firstOrCreate(
+            ['key' => 'media_category'],
+            ['label' => 'Media Categories', 'hierarchical' => true],
+        );
+
+        $slugBase = Str::slug($name);
+        $slugBase = $slugBase !== '' ? $slugBase : 'uncategorized';
+
+        $term = Term::query()
+            ->where('taxonomy_id', $taxonomy->id)
+            ->where(function ($q) use ($slugBase, $name) {
+                $q->where('slug', $slugBase)->orWhere('name', $name);
+            })
+            ->first();
+
+        if (!$term) {
+            $slug = $slugBase;
+            $i = 2;
+            while (Term::where('taxonomy_id', $taxonomy->id)->where('slug', $slug)->exists()) {
+                $slug = $slugBase . '-' . $i;
+                $i++;
+            }
+
+            $term = Term::create([
+                'taxonomy_id' => $taxonomy->id,
+                'name' => $name,
+                'slug' => $slug,
+                'parent_id' => null,
+            ]);
+        }
+
+        // Replace only media_category taxonomy to ensure it's categorized
+        $media->syncCategoryTerms([$term->id]);
     }
 
     /**

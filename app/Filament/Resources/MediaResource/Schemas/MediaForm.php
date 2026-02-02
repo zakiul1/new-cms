@@ -63,18 +63,18 @@ class MediaForm
                                 if ($slug === '') {
                                     return '';
                                 }
+
                                 return url('/' . $slug);
                             })
                             ->helperText('This is what the public URL will be (if enabled + public).'),
                     ])
-                    // Only show if the form is editing an existing record or has slug fields.
-                    // In bulk upload "create" flow, it’s ok to keep it collapsed.
                     ->visible(fn(Get $get) => true),
 
-                // ✅ Upload section (your existing code)
+                // ✅ Upload section
                 Section::make('Upload')
                     ->columnSpanFull()
                     ->schema([
+                        // ✅ Folder selector (existing)
                         Select::make('folder_term_id')
                             ->label('Folder (optional)')
                             ->helperText('Upload into a folder like WordPress. Leave empty for Uncategorized.')
@@ -154,6 +154,88 @@ class MediaForm
                                 return $term->getKey();
                             }),
 
+                        // ✅ NEW: Category selector (multi) + runtime create option
+                        Select::make('category_term_ids')
+                            ->label('Categories (optional)')
+                            ->helperText('Select media categories (max 10 shown later in Related Links). You can create categories from here.')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->options(function (): array {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_category'],
+                                    ['label' => 'Media Categories', 'hierarchical' => true],
+                                )->id;
+
+                                return Term::query()
+                                    ->where('taxonomy_id', $taxonomyId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->all();
+                            })
+                            ->createOptionForm([
+                                TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, callable $set) {
+                                        $set('slug', Str::slug((string) $state));
+                                    }),
+
+                                TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->maxLength(255),
+
+                                Select::make('parent_id')
+                                    ->label('Parent Category (optional)')
+                                    ->searchable()
+                                    ->preload()
+                                    ->nullable()
+                                    ->options(function (): array {
+                                        $taxonomyId = Taxonomy::where('key', 'media_category')->value('id');
+                                        if (!$taxonomyId) {
+                                            return [];
+                                        }
+
+                                        return Term::query()
+                                            ->where('taxonomy_id', $taxonomyId)
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->all();
+                                    }),
+                            ])
+                            ->createOptionUsing(function (array $data) {
+                                $taxonomyId = Taxonomy::firstOrCreate(
+                                    ['key' => 'media_category'],
+                                    ['label' => 'Media Categories', 'hierarchical' => true],
+                                )->id;
+
+                                $base = filled($data['slug'] ?? null)
+                                    ? Str::slug((string) $data['slug'])
+                                    : Str::slug((string) ($data['name'] ?? ''));
+
+                                $base = $base !== '' ? $base : 'category';
+
+                                $slug = $base;
+                                $i = 2;
+
+                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                                    $slug = $base . '-' . $i;
+                                    $i++;
+                                }
+
+                                $term = Term::create([
+                                    'taxonomy_id' => $taxonomyId,
+                                    'name' => (string) $data['name'],
+                                    'slug' => $slug,
+                                    'parent_id' => $data['parent_id'] ?? null,
+                                ]);
+
+                                return $term->getKey();
+                            }),
+
+                        // ✅ Upload
                         FileUpload::make('files')
                             ->label('Upload files')
                             ->required()

@@ -9,35 +9,32 @@ use App\Models\Media;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
+use Filament\Actions\Action as TableAction;
+use Filament\Actions\BulkAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Forms;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Enums\Width;
 use Filament\Tables;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkAction;
-use Filament\Actions\Action as TableAction;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\Layout\View as LayoutView;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
-use Filament\Tables\Columns\ViewColumn;
-
 
 class ListMedia extends ListRecords
 {
@@ -105,6 +102,53 @@ class ListMedia extends ListRecords
             ->all();
     }
 
+    protected function categoryOptions(): array
+    {
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxonomyId) {
+            return [];
+        }
+
+        return Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    protected function ensureTaxonomy(string $key, string $label, bool $hierarchical = true): Taxonomy
+    {
+        // Some projects have Taxonomy::ensure(), but to keep this file safe:
+        return Taxonomy::firstOrCreate(
+            ['key' => $key],
+            ['label' => $label, 'hierarchical' => $hierarchical],
+        );
+    }
+
+    protected function createUniqueTerm(int $taxonomyId, string $name, ?int $parentId = null): Term
+    {
+        $name = trim($name);
+        $name = $name !== '' ? $name : 'Untitled';
+
+        $base = Str::slug($name);
+        $base = $base !== '' ? $base : 'term';
+
+        $slug = $base;
+        $i = 2;
+
+        while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+            $slug = $base . '-' . $i;
+            $i++;
+        }
+
+        return Term::create([
+            'taxonomy_id' => $taxonomyId,
+            'name' => $name,
+            'slug' => $slug,
+            'parent_id' => $parentId,
+        ]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -127,6 +171,7 @@ class ListMedia extends ListRecords
                 ->visible(fn() => $this->viewMode === 'grid')
                 ->action(fn() => $this->toggleSelectMode()),
 
+            // ✅ Upload modal (now includes Categories + runtime create)
             Action::make('upload')
                 ->label('Upload')
                 ->icon('heroicon-o-arrow-up-tray')
@@ -153,17 +198,55 @@ class ListMedia extends ListRecords
                                 ->nullable(),
                         ])
                         ->createOptionUsing(function (array $data): int {
-                            $taxonomy = Taxonomy::ensure('media_folder', 'Media Folders', true);
+                            $taxonomy = $this->ensureTaxonomy('media_folder', 'Media Folders', true);
 
-                            $term = Term::create([
-                                'taxonomy_id' => $taxonomy->id,
-                                'name' => (string) $data['name'],
-                                'parent_id' => filled($data['parent_id'] ?? null) ? (int) $data['parent_id'] : null,
-                            ]);
+                            $parentId = filled($data['parent_id'] ?? null) ? (int) $data['parent_id'] : null;
+
+                            $term = $this->createUniqueTerm(
+                                (int) $taxonomy->id,
+                                (string) ($data['name'] ?? ''),
+                                $parentId
+                            );
 
                             return (int) $term->id;
                         })
                         ->helperText('You can create a folder here, or manage folders from “Media Folders”.'),
+
+                    // ✅ NEW: Categories
+                    Select::make('category_term_ids')
+                        ->label('Categories (optional)')
+                        ->options(fn() => $this->categoryOptions())
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->nullable()
+                        ->createOptionForm([
+                            TextInput::make('name')
+                                ->label('Category name')
+                                ->required()
+                                ->maxLength(255),
+
+                            Select::make('parent_id')
+                                ->label('Parent (optional)')
+                                ->searchable()
+                                ->preload()
+                                ->options(fn() => $this->categoryOptions())
+                                ->nullable(),
+                        ])
+                        ->createOptionUsing(function (array $data): int {
+                            $taxonomy = $this->ensureTaxonomy('media_category', 'Media Categories', true);
+
+                            $parentId = filled($data['parent_id'] ?? null) ? (int) $data['parent_id'] : null;
+
+                            $term = $this->createUniqueTerm(
+                                (int) $taxonomy->id,
+                                (string) ($data['name'] ?? ''),
+                                $parentId
+                            );
+
+                            return (int) $term->id;
+                        })
+                        ->helperText('Optional. If none selected, media will be saved as Uncategorized.'),
 
                     Action::make('folders')
                         ->label('Folders')
@@ -187,12 +270,21 @@ class ListMedia extends ListRecords
 
                     Placeholder::make('hint')
                         ->label('')
-                        ->content('Tip: Use folders to organize media like WordPress.')
+                        ->content('Tip: Use folders + categories to organize media like WordPress.')
                         ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
                     $files = $data['files'] ?? [];
                     $termId = filled($data['term_id'] ?? null) ? (int) $data['term_id'] : null;
+
+                    $categoryIds = isset($data['category_term_ids']) && is_array($data['category_term_ids'])
+                        ? collect($data['category_term_ids'])
+                            ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+                            ->map(fn($id) => (int) $id)
+                            ->unique()
+                            ->values()
+                            ->all()
+                        : [];
 
                     // normalize single file
                     if ($files instanceof TemporaryUploadedFile || $files instanceof UploadedFile) {
@@ -208,24 +300,28 @@ class ListMedia extends ListRecords
                     $count = 0;
 
                     foreach ($files as $file) {
-                        if (!$file instanceof UploadedFile) {
+                        if (!($file instanceof TemporaryUploadedFile || $file instanceof UploadedFile)) {
                             continue;
                         }
 
-                        $media = $uploader->upload($file);
+                        // ✅ if you updated MediaUploader with options (recommended)
+                        $media = $uploader->upload($file, [
+                            'folder_term_id' => $termId,
+                            'category_term_ids' => $categoryIds,
+                            'default_category_name' => 'Uncategorized',
+                        ]);
 
-                        if ($termId) {
-                            $media->syncFolderTerm($termId);
-                        }
-
+                        // If you did NOT update MediaUploader, use this instead:
+                        // $media = $uploader->upload($file);
+                        // if ($termId) $media->syncFolderTerm($termId);
+                        // if (!empty($categoryIds)) $media->syncCategoryTerms($categoryIds);
+        
                         $count++;
                     }
 
                     Notification::make()->title("Uploaded {$count} file(s).")->success()->send();
                     $this->resetTable();
                 }),
-
-            /*   CreateAction::make()->label('Add New'), */
         ];
     }
 
@@ -274,6 +370,8 @@ class ListMedia extends ListRecords
 
                     Notification::make()->title('Folder cleared.')->success()->send();
                 }),
+
+            // (Optional) Bulk set categories could be added here too if you want.
         ];
     }
 
@@ -297,8 +395,8 @@ class ListMedia extends ListRecords
 
                 TextInput::make('title')->label('Title')->maxLength(255),
                 TextInput::make('alt')->label('Alt text')->maxLength(255),
-                Textarea::make('caption')->label('Caption')->rows(2),
-                Textarea::make('description')->label('Description')->rows(3),
+                Forms\Components\Textarea::make('caption')->label('Caption')->rows(2),
+                Forms\Components\Textarea::make('description')->label('Description')->rows(3),
 
                 FileUpload::make('replace_file')
                     ->label('Replace file (optional)')
@@ -362,7 +460,6 @@ class ListMedia extends ListRecords
                     ->color('danger')
                     ->requiresConfirmation()
                     ->action(function (Media $record): void {
-                        // NOTE: if you want to delete files too, we can add that to MediaUploader.
                         $record->delete();
 
                         Notification::make()->title('Deleted.')->success()->send();
@@ -376,8 +473,7 @@ class ListMedia extends ListRecords
         $bulkActions = $this->buildBulkActions();
 
         $table = $table
-           ->modifyQueryUsing(fn(Builder $query) => $query->with(['variantRecords', 'terms']))
-
+            ->modifyQueryUsing(fn(Builder $query) => $query->with(['variantRecords', 'terms']))
             ->defaultSort('id', 'desc')
             ->searchDebounce(400)
             ->persistSearchInSession()
@@ -423,6 +519,21 @@ class ListMedia extends ListRecords
                         return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', $termId));
                     }),
 
+                // ✅ NEW: Category filter
+                SelectFilter::make('category')
+                    ->label('Category')
+                    ->searchable()
+                    ->preload()
+                    ->options(fn(): array => $this->categoryOptions())
+                    ->query(function (Builder $query, array $data) {
+                        $termId = filled($data['value'] ?? null) ? (int) $data['value'] : null;
+                        if (!$termId) {
+                            return $query;
+                        }
+
+                        return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', $termId));
+                    }),
+
                 Filter::make('created_range')
                     ->form([
                         Forms\Components\DatePicker::make('from')->label('From'),
@@ -436,60 +547,55 @@ class ListMedia extends ListRecords
             ]);
 
         // ✅ GRID MODE
-     if ($this->viewMode === 'grid') {
-    return $table
-        ->columns([
-            Stack::make([
-                LayoutView::make('card')
-                    ->view('filament.media.grid-card'),
-            ]),
-        ])
-        ->contentGrid([
-            'default' => 1, // ✅ let CSS handle layout
-        ])
-        ->recordUrl(null)
-        ->recordAction(null)
-        ->actions([
-            $this->previewAction(),
-        ])
-        ->bulkActions($this->selectMode ? $bulkActions : []);
-}
-
-
-
+        if ($this->viewMode === 'grid') {
+            return $table
+                ->columns([
+                    Stack::make([
+                        LayoutView::make('card')
+                            ->view('filament.media.grid-card'),
+                    ]),
+                ])
+                ->contentGrid([
+                    'default' => 1, // ✅ let CSS handle layout
+                ])
+                ->recordUrl(null)
+                ->recordAction(null)
+                ->actions([
+                    $this->previewAction(),
+                ])
+                ->bulkActions($this->selectMode ? $bulkActions : []);
+        }
 
         // ✅ LIST MODE
-    return $table
-    ->columns([
-        ViewColumn::make('thumb')
-            ->label('')
-            ->view('filament.media.list-thumb'),
+        return $table
+            ->columns([
+                ViewColumn::make('thumb')
+                    ->label('')
+                    ->view('filament.media.list-thumb'),
 
-        TextColumn::make('title')
-            ->label('Title')
-            ->searchable()
-            ->sortable()
-            ->wrap()
-            ->limit(60),
+                TextColumn::make('title')
+                    ->label('Title')
+                    ->searchable()
+                    ->sortable()
+                    ->wrap()
+                    ->limit(60),
 
-        TextColumn::make('mime_type')->label('Type'),
+                TextColumn::make('mime_type')->label('Type'),
 
-        TextColumn::make('size')
-            ->label('Size')
-            ->formatStateUsing(fn ($state) => number_format(((int) $state) / 1024, 1) . ' KB')
-            ->sortable(),
+                TextColumn::make('size')
+                    ->label('Size')
+                    ->formatStateUsing(fn($state) => number_format(((int) $state) / 1024, 1) . ' KB')
+                    ->sortable(),
 
-        TextColumn::make('created_at')
-            ->label('Uploaded')
-            ->since()
-            ->sortable(),
-    ])
-    ->actions([
-        EditAction::make(),
-        DeleteAction::make(),
-    ])
-    ->bulkActions($bulkActions);
-
-
+                TextColumn::make('created_at')
+                    ->label('Uploaded')
+                    ->since()
+                    ->sortable(),
+            ])
+            ->actions([
+                EditAction::make(),
+                DeleteAction::make(),
+            ])
+            ->bulkActions($bulkActions);
     }
 }
