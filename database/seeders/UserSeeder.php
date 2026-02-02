@@ -11,10 +11,17 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
+        // Filament uses "web" guard by default
+        $guard = 'web';
+
         // Ensure roles exist (safe if already seeded)
         $roles = ['super-admin', 'admin', 'editor', 'author', 'seo-manager'];
+
         foreach ($roles as $role) {
-            Role::firstOrCreate(['name' => $role]);
+            Role::firstOrCreate([
+                'name' => $role,
+                'guard_name' => $guard,
+            ]);
         }
 
         // Create or update the main admin user
@@ -26,7 +33,7 @@ class UserSeeder extends Seeder
             ]
         );
 
-        // Assign super-admin role
+        // Assign super-admin role (same guard)
         $user->syncRoles(['super-admin']);
     }
 }
