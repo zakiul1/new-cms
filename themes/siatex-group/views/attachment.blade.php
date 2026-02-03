@@ -75,20 +75,12 @@
         $breadcrumbTerm = $mediaCategoryTerm ?: $postCategory;
 
         // -----------------------------
-        // ✅ STRICT SAME-CATEGORY RELATED (RANDOM, DIFFERENT ORDER)
-        //
-        // Rules:
-        // - ONLY same media_category
-        // - exclude current media
-        // - Related grid: random 10
-        // - Related links: random 10 (different random query => different order)
-        // - avoid overlap if possible; if category small, allow overlap
+        // ✅ STRICT SAME-CATEGORY RELATED (RANDOM)
         // -----------------------------
         $related = collect();
         $relatedLinks = collect();
 
         $fetchSameCategoryRandom = function (array $excludeIds, int $limit) use (
-            $media,
             $mediaCategoryTaxId,
             $mediaCategoryIds,
         ) {
@@ -113,14 +105,11 @@
             }
         };
 
-        // If no category => show nothing
         if ($mediaCategoryTaxId && !empty($mediaCategoryIds)) {
-            // 1) grid random
             $related = $fetchSameCategoryRandom([$media->id], 80)
                 ->take(10)
                 ->values();
 
-            // 2) links random (try no-overlap first)
             $excludeForLinks = collect([$media->id])
                 ->merge($related->pluck('id'))
                 ->unique()
@@ -129,7 +118,6 @@
 
             $relatedLinks = $fetchSameCategoryRandom($excludeForLinks, 80)->take(10)->values();
 
-            // 3) if still not enough links (category small), allow overlap from category
             $need = 10 - $relatedLinks->count();
             if ($need > 0) {
                 $more = $fetchSameCategoryRandom([$media->id], 120)
@@ -140,6 +128,58 @@
                 $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
             }
         }
+
+        // -----------------------------
+        // ✅ Custom JSON (WP-like) loader
+        // Supports:
+        // - meta.custom_json (array OR string JSON)
+        // - meta.frontend.custom_json (legacy)
+        // - if user pasted a full <script type="application/ld+json">...</script>, extract inner JSON safely
+        // -----------------------------
+        $customJsonRaw = data_get($media->meta ?? [], 'custom_json', null);
+        if ($customJsonRaw === null || $customJsonRaw === '') {
+            $customJsonRaw = data_get($media->meta ?? [], 'frontend.custom_json', null);
+        }
+
+        $customJson = null;
+
+        if (is_array($customJsonRaw)) {
+            $customJson = $customJsonRaw;
+        } elseif (is_string($customJsonRaw)) {
+            $str = trim($customJsonRaw);
+
+            if ($str !== '') {
+                // Avoid literal "<script" in PHP strings (formatter safe)
+                $openTag = '<' . 'script';
+                $closeTag = '</' . 'script' . '>';
+
+                $openPos = stripos($str, $openTag);
+
+                // If a script tag exists, try to extract the inner content
+                if ($openPos !== false) {
+                    $gtPos = strpos($str, '>', $openPos);
+                    if ($gtPos !== false) {
+                        $endPos = stripos($str, $closeTag, $gtPos + 1);
+                        if ($endPos !== false) {
+                            $str = substr($str, $gtPos + 1, $endPos - ($gtPos + 1));
+                            $str = trim((string) $str);
+                        }
+                    }
+                }
+
+                $decoded = json_decode($str, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $customJson = $decoded;
+                }
+            }
+        }
+
+        // JSON-LD detection (basic)
+        $isJsonLd = is_array($customJson) && (isset($customJson['@context']) || isset($customJson['@type']));
+
+        // ✅ IMPORTANT:
+        // If you already output JSON-LD in <head> (SEO partial), keep this false.
+        $printJsonLdHere = false;
     @endphp
 
     {{-- Breadcrumb --}}
@@ -214,7 +254,7 @@
         <section class="bg-white">
             <div class="cms-container mx-auto px-4 py-10">
 
-                {{-- RELATED GRID (random, same category only) --}}
+                {{-- RELATED GRID --}}
                 @if ($related->count())
                     <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -253,7 +293,6 @@
 
                 {{-- META + RELATED LINKS --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
-                    {{-- LEFT (8) --}}
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
                             {{ $metaTitle !== '' ? $metaTitle : $title }}
@@ -266,7 +305,6 @@
                         @endif
                     </div>
 
-                    {{-- RIGHT (4) Related Links (random, same category only) --}}
                     <div class="lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
@@ -306,4 +344,6 @@
             </div>
         </section>
     @endif
+
+
 @endsection

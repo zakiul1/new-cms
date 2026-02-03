@@ -36,31 +36,8 @@
     {{-- Hero --}}
     <section class="bg-slate-50">
         <div class="cms-container mx-auto px-4 py-10">
-            <div class="grid  gap-8 lg:grid-cols-2">
-
-                {{-- ✅ Image first on mobile --}}
-                <div class="order-1 lg:order-2 p-4">
-                    @if ($media && $media->isImage())
-                        {!! cms_picture(
-                            $media,
-                            [
-                                'alt' => e($title),
-                                'class' => 'w-full object-cover',
-                                'sizes' => '(max-width: 1024px) 100vw, 560px',
-                                'loading' => 'eager',
-                                'decoding' => 'async',
-                            ],
-                            'large',
-                            ['medium', 'medium_large', 'large'],
-                        ) !!}
-                    @else
-                        <div class="h-80 w-full rounded-lg bg-slate-100"></div>
-                    @endif
-
-                </div>
-
-                {{-- ✅ Text second on mobile --}}
-                <div class="order-2 lg:order-1">
+            <div class="grid gap-8 lg:grid-cols-2">
+                <div>
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
                         Your Tech-pack, Our production
@@ -82,6 +59,24 @@
                     </a>
                 </div>
 
+                <div class="p-4">
+                    @if ($media && method_exists($media, 'isImage') && $media->isImage())
+                        {!! cms_picture(
+                            $media,
+                            [
+                                'alt' => e($title),
+                                'class' => 'w-full object-cover',
+                                'sizes' => '(max-width: 1024px) 100vw, 560px',
+                                'loading' => 'eager',
+                                'decoding' => 'async',
+                            ],
+                            'large',
+                            ['medium', 'medium_large', 'large'],
+                        ) !!}
+                    @else
+                        <div class="h-80 w-full rounded-lg bg-slate-100"></div>
+                    @endif
+                </div>
             </div>
         </div>
     </section>
@@ -94,4 +89,49 @@
             </div>
         </div>
     </section>
+
+    {{-- ✅ Custom JSON (per post) for frontend + optional JSON-LD --}}
+    @php
+        // Supports:
+        // - meta_json.custom_json (array OR string JSON)
+        // - meta_json.seo.custom_json (legacy)
+        // - if user pasted <script type="application/ld+json">...</script>, extract JSON
+
+        $customJsonRaw =
+            data_get($post->meta_json ?? [], 'custom_json', null) ?:
+            data_get($post->meta_json ?? [], 'seo.custom_json', null);
+
+        $customJson = null;
+
+        if (is_array($customJsonRaw)) {
+            $customJson = $customJsonRaw;
+        } elseif (is_string($customJsonRaw)) {
+            $str = trim($customJsonRaw);
+
+            if ($str !== '') {
+                // Extract JSON from script tag if user pasted whole tag
+                $openTag = '<' . 'script';
+                $closeTag = '</' . 'script' . '>';
+
+                $openPos = stripos($str, $openTag);
+                if ($openPos !== false) {
+                    $gtPos = strpos($str, '>', $openPos);
+                    if ($gtPos !== false) {
+                        $endPos = stripos($str, $closeTag, $gtPos + 1);
+                        if ($endPos !== false) {
+                            $str = substr($str, $gtPos + 1, $endPos - ($gtPos + 1));
+                            $str = trim((string) $str);
+                        }
+                    }
+                }
+
+                $decoded = json_decode($str, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $customJson = $decoded;
+                }
+            }
+        }
+
+        $isJsonLd = is_array($customJson) && (isset($customJson['@context']) || isset($customJson['@type']));
+    @endphp
 @endsection

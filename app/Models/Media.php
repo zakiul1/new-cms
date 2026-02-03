@@ -177,6 +177,7 @@ class Media extends Model
 
     // -------------------------
     // Folder helpers (WP-like)
+    // taxonomy key: media_folder
     // -------------------------
 
     protected function folderTaxonomyId(): ?int
@@ -238,12 +239,15 @@ class Media extends Model
     {
         $taxonomyId = $this->categoryTaxonomyId();
 
-        // If taxonomy not created yet, return an empty relation safely.
+        // Always return a MorphToMany (type-safe)
+        $rel = $this->terms();
+
         if (!$taxonomyId) {
-            return $this->terms()->whereRaw('1=0');
+            // force empty
+            return $rel->whereRaw('0=1');
         }
 
-        return $this->terms()
+        return $rel
             ->where('terms.taxonomy_id', $taxonomyId)
             ->orderBy('terms.name');
     }
@@ -270,6 +274,7 @@ class Media extends Model
 
     /**
      * Sync media categories (multiple) safely.
+     * If you pass an empty array, it leaves categories empty (unless you want auto-uncategorized behavior elsewhere).
      *
      * @param array<int|string> $termIds
      */
@@ -280,7 +285,6 @@ class Media extends Model
             return;
         }
 
-        // Keep only valid IDs
         $termIds = collect($termIds)
             ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
             ->map(fn($id) => (int) $id)

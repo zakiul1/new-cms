@@ -74,7 +74,12 @@ class MediaUploader
         $storedName = $this->safeUniqueFilename($file);
         $path = $file->storeAs($dir, $storedName, $disk);
 
-        $title = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+        $baseName = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+
+        // Convert dashes/underscores to spaces, collapse spaces, Title Case (optional)
+        $title = trim(preg_replace('/\s+/', ' ', str_replace(['-', '_'], ' ', $baseName)) ?: '');
+        $title = $title !== '' ? Str::title($title) : 'Untitled';
+
 
         $media = Media::create([
             'uploaded_by' => Auth::id(),
@@ -154,6 +159,7 @@ class MediaUploader
 
         // Ensure slug exists for older records (do NOT change existing slug)
         $titleForSlug = (string) ($media->title ?: pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+
         $slug = $media->slug ?: $this->makeUniqueAttachmentSlug($titleForSlug);
 
         // Update DB

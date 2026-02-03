@@ -12,11 +12,13 @@ use App\Models\Term;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\RichEditor;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Components\Section;
@@ -72,178 +74,241 @@ class EditMedia extends EditRecord
             ])
             ->components([
                 /**
-                 * LEFT (2/3): Content
+                 * LEFT (2/3): Tabs (Content + CSS/JS + JSON + Preview)
                  */
-                Section::make('Content')
+                Tabs::make('Editor')
                     ->columnSpan([
                         'default' => 1,
                         'lg' => 2,
                     ])
-                    ->schema([
-                        TextInput::make('title')
-                            ->label('Title')
-                            ->required()
-                            ->maxLength(255)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                // slug fill (if empty)
-                                if (!filled($get('slug'))) {
-                                    $set('slug', Str::slug((string) $state));
-                                }
-
-                                // ✅ SEO title auto-fill (only if empty)
-                                if (!filled($get('meta.seo.title'))) {
-                                    $set('meta.seo.title', (string) $state);
-                                }
-
-                                // ✅ Frontend meta title auto-fill (only if empty)
-                                if (!filled($get('meta.frontend.meta_title'))) {
-                                    $set('meta.frontend.meta_title', (string) $state);
-                                }
-                            }),
-
-                        TextInput::make('slug')
-                            ->label('Slug (optional)')
-                            ->maxLength(255)
-                            ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set) {
-                                $set('slug', filled($state) ? Str::slug((string) $state) : null);
-                            })
-                            ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
-                            ->helperText('Leave blank to auto-generate. Controls /{slug}'),
-
-                        Placeholder::make('permalink_preview')
-                            ->label('Permalink')
-                            ->content(function (?Media $record, Get $get) {
-                                $base = rtrim((string) config('app.url'), '/');
-
-                                $slug = $record?->slug ?: trim((string) $get('slug'), '/');
-                                if ($slug === '') {
-                                    $slug = Str::slug((string) ($get('title') ?? ''));
-                                }
-                                $slug = $slug !== '' ? $slug : '(auto)';
-
-                                return $base . '/' . ltrim($slug, '/');
-                            }),
-
-                        RichEditor::make('description')
-                            ->label('Description')
-                            ->toolbarButtons([
-                                'bold',
-                                'italic',
-                                'underline',
-                                'bulletList',
-                                'orderedList',
-                                'link',
-                                'blockquote',
-                                'undo',
-                                'redo',
-                            ])
-                            ->extraAttributes(['style' => 'min-height: 260px;'])
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                // ✅ Auto-fill Frontend meta description from Description (ONLY if empty)
-                                if (!filled($get('meta.frontend.meta_description'))) {
-                                    $set('meta.frontend.meta_description', (string) $state); // store HTML
-                                }
-
-                                // (optional) keep SEO auto-fill too, if you want:
-                                if (!filled($get('meta.seo.description'))) {
-                                    $plain = trim(strip_tags((string) $state));
-                                    if ($plain !== '') {
-                                        $set('meta.seo.description', \Illuminate\Support\Str::limit($plain, 160, ''));
-                                    }
-                                }
-                            }),
-
-                        Textarea::make('caption')
-                            ->label('Caption')
-                            ->rows(3)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                $text = trim((string) $state);
-
-                                // ✅ If description is empty AND frontend meta desc is empty -> fill from caption
-                                if (!filled($get('description')) && !filled($get('meta.frontend.meta_description')) && $text !== '') {
-                                    $set('meta.frontend.meta_description', $text);
-                                }
-                            }),
-
-                        // ✅ Frontend meta
-                        TextInput::make('meta.frontend.meta_title')
-                            ->label('Meta title')
-                            ->helperText('Used on attachment page (frontend) under related section.')
-                            ->maxLength(255)
-                            ->live(onBlur: true),
-
-                        RichEditor::make('meta.frontend.meta_description')
-                            ->label('Meta description')
-                            ->helperText('Used on attachment page (frontend) under related section.')
-                            ->toolbarButtons([
-                                'bold',
-                                'italic',
-                                'underline',
-                                'bulletList',
-                                'orderedList',
-                                'link',
-                                'blockquote',
-                                'undo',
-                                'redo',
-                            ])
-                            ->extraAttributes([
-                                'style' => 'min-height: 220px;',
-                            ])
-                            ->live(onBlur: true),
-
-                        // ✅ SEO (Premium) — KEEP SAME
-                        Section::make('SEO (Premium)')
-                            ->description('Control how this attachment page appears in Google and when shared on social media.')
-                            ->collapsible()
-                            ->collapsed()
+                    ->tabs([
+                        Tab::make('Content')
                             ->schema([
-                                TextInput::make('meta.seo.title')
-                                    ->label('SEO Title')
-                                    ->helperText('Recommended: ~50–60 characters.')
-                                    ->maxLength(140)
-                                    ->live(onBlur: true),
+                                TextInput::make('title')
+                                    ->label('Title')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        // slug fill (if empty)
+                                        if (!filled($get('slug'))) {
+                                            $set('slug', Str::slug((string) $state));
+                                        }
 
-                                Textarea::make('meta.seo.description')
-                                    ->label('Meta Description')
-                                    ->helperText('Recommended: ~150–160 characters.')
-                                    ->rows(3)
-                                    ->maxLength(200)
-                                    ->live(onBlur: true),
+                                        // ✅ SEO title auto-fill (only if empty)
+                                        if (!filled($get('meta.seo.title'))) {
+                                            $set('meta.seo.title', (string) $state);
+                                        }
 
-                                TextInput::make('meta.seo.canonical')
-                                    ->label('Canonical URL (optional)')
-                                    ->placeholder('https://example.com/your-page')
-                                    ->helperText('Leave empty to auto-use the current URL.')
-                                    ->maxLength(255),
+                                        // ✅ Frontend meta title auto-fill (only if empty)
+                                        if (!filled($get('meta.frontend.meta_title'))) {
+                                            $set('meta.frontend.meta_title', (string) $state);
+                                        }
+                                    }),
 
-                                Select::make('meta.seo.robots')
-                                    ->label('Robots')
-                                    ->helperText('Default: index, follow')
-                                    ->options([
-                                        '' => 'Default (index, follow)',
-                                        'index, follow' => 'index, follow',
-                                        'noindex, follow' => 'noindex, follow',
-                                        'index, nofollow' => 'index, nofollow',
-                                        'noindex, nofollow' => 'noindex, nofollow',
+                                TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->maxLength(255)
+                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set) {
+                                        $set('slug', filled($state) ? Str::slug((string) $state) : null);
+                                    })
+                                    ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                                    ->helperText('Leave blank to auto-generate. Controls /{slug}'),
+
+                                Placeholder::make('permalink_preview')
+                                    ->label('Permalink')
+                                    ->content(function (?Media $record, Get $get) {
+                                        $base = rtrim((string) config('app.url'), '/');
+
+                                        $slug = $record?->slug ?: trim((string) $get('slug'), '/');
+                                        if ($slug === '') {
+                                            $slug = Str::slug((string) ($get('title') ?? ''));
+                                        }
+                                        $slug = $slug !== '' ? $slug : '(auto)';
+
+                                        return $base . '/' . ltrim($slug, '/');
+                                    }),
+
+                                RichEditor::make('description')
+                                    ->label('Description (Product)')
+                                    ->toolbarButtons([
+                                        'bold',
+                                        'italic',
+                                        'underline',
+                                        'bulletList',
+                                        'orderedList',
+                                        'link',
+                                        'blockquote',
+                                        'undo',
+                                        'redo',
                                     ])
-                                    ->default(''),
+                                    ->extraAttributes(['style' => 'min-height: 260px;'])
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        // ✅ Auto-fill Frontend meta description from Description (ONLY if empty)
+                                        if (!filled($get('meta.frontend.meta_description'))) {
+                                            $set('meta.frontend.meta_description', (string) $state); // store HTML
+                                        }
 
-                                TextInput::make('meta.seo.og_image')
-                                    ->label('OpenGraph Image (optional)')
-                                    ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
-                                    ->maxLength(255),
-                            ])
-                            ->columnSpanFull(),
+                                        // (optional) keep SEO auto-fill too, if you want:
+                                        if (!filled($get('meta.seo.description'))) {
+                                            $plain = trim(strip_tags((string) $state));
+                                            if ($plain !== '') {
+                                                $set('meta.seo.description', Str::limit($plain, 160, ''));
+                                            }
+                                        }
+                                    }),
 
-                        Section::make('Frontend Preview')
-                            ->description('Live preview (admin-only). This does not affect the public page until you Save.')
-                            ->collapsible()
-                            ->collapsed()
+                                /*     Textarea::make('caption')
+                                        ->label('Caption')
+                                        ->rows(3)
+                                        ->live(onBlur: true)
+                                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                            $text = trim((string) $state);
+
+                                            // ✅ If description is empty AND frontend meta desc is empty -> fill from caption
+                                            if (!filled($get('description')) && !filled($get('meta.frontend.meta_description')) && $text !== '') {
+                                                $set('meta.frontend.meta_description', $text);
+                                            }
+                                        }), */
+
+                                // ✅ Frontend meta
+                                TextInput::make('meta.frontend.meta_title')
+                                    ->label('Sub title')
+                                    ->helperText('Used on attachment page (frontend) under related section.')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
+
+                                RichEditor::make('meta.frontend.meta_description')
+                                    ->label('Sub description')
+                                    ->helperText('Used on attachment page (frontend) under related section.')
+                                    ->toolbarButtons([
+                                        'bold',
+                                        'italic',
+                                        'underline',
+                                        'bulletList',
+                                        'orderedList',
+                                        'link',
+                                        'blockquote',
+                                        'undo',
+                                        'redo',
+                                    ])
+                                    ->extraAttributes([
+                                        'style' => 'min-height: 220px;',
+                                    ])
+                                    ->live(onBlur: true),
+
+                                // ✅ SEO (Premium) — KEEP SAME
+                                Section::make('SEO (Premium)')
+                                    ->description('Control how this attachment page appears in Google and when shared on social media.')
+                                    ->collapsible()
+                                    ->collapsed()
+                                    ->schema([
+                                        TextInput::make('meta.seo.title')
+                                            ->label('SEO Title')
+                                            ->helperText('Recommended: ~50–60 characters.')
+                                            ->maxLength(140)
+                                            ->live(onBlur: true),
+
+                                        Textarea::make('meta.seo.description')
+                                            ->label('Meta Description')
+                                            ->helperText('Recommended: ~150–160 characters.')
+                                            ->rows(3)
+                                            ->maxLength(200)
+                                            ->live(onBlur: true),
+
+                                        TextInput::make('meta.seo.canonical')
+                                            ->label('Canonical URL (optional)')
+                                            ->placeholder('https://example.com/your-page')
+                                            ->helperText('Leave empty to auto-use the current URL.')
+                                            ->maxLength(255),
+
+                                        Select::make('meta.seo.robots')
+                                            ->label('Robots')
+                                            ->helperText('Default: index, follow')
+                                            ->options([
+                                                '' => 'Default (index, follow)',
+                                                'index, follow' => 'index, follow',
+                                                'noindex, follow' => 'noindex, follow',
+                                                'index, nofollow' => 'index, nofollow',
+                                                'noindex, nofollow' => 'noindex, nofollow',
+                                            ])
+                                            ->default(''),
+
+                                        TextInput::make('meta.seo.og_image')
+                                            ->label('OpenGraph Image (optional)')
+                                            ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
+                                            ->maxLength(255),
+                                    ])
+                                    ->columnSpanFull(),
+                            ]),
+
+                        Tab::make('Custom CSS & JS')
+                            ->schema([
+                                Textarea::make('meta.assets.css')
+                                    ->label('Custom CSS')
+                                    ->helperText('Applies to this attachment page only. Output inside <head>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                                    ])
+                                    ->live(onBlur: true),
+
+                                Textarea::make('meta.assets.js')
+                                    ->label('Custom JS')
+                                    ->helperText('Applies to this attachment page only. Output before </body>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                                    ])
+                                    ->live(onBlur: true),
+                                Textarea::make('meta.custom_json')
+                                    ->label('Custom JSON (WP-like)')
+                                    ->helperText('Valid JSON only. Saved per media record. (Do not include <script> tag)')
+                                    ->rows(18)
+                                    ->nullable()
+                                    ->rules(['json'])
+                                    ->formatStateUsing(function ($state) {
+                                        if (blank($state)) {
+                                            return '';
+                                        }
+
+                                        if (is_array($state)) {
+                                            return json_encode(
+                                                $state,
+                                                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                                            ) ?: '';
+                                        }
+
+                                        // If older data was saved as string JSON, keep it editable.
+                                        return (string) $state;
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        $state = trim((string) $state);
+
+                                        if ($state === '') {
+                                            return null;
+                                        }
+
+                                        $decoded = json_decode($state, true);
+
+                                        // extra safety: if decode fails, keep null (rules(['json']) should prevent this anyway)
+                                        if (json_last_error() !== JSON_ERROR_NONE) {
+                                            return null;
+                                        }
+
+                                        return $decoded;
+                                    })
+                                    ->live(onBlur: true),
+
+                            ]),
+
+
+
+
+                        Tab::make('Frontend Preview')
                             ->schema([
                                 Placeholder::make('frontend_preview')
                                     ->label('')
@@ -273,8 +338,7 @@ class EditMedia extends EditRecord
                                         return new HtmlString($html);
                                     })
                                     ->dehydrated(false),
-                            ])
-                            ->columnSpanFull(),
+                            ]),
                     ]),
 
                 /**
@@ -320,7 +384,7 @@ class EditMedia extends EditRecord
                             ->storeFiles(false)
                             ->helperText('Replaces original file. Variants regenerate for images.'),
 
-                        // ✅ NEW: Media Categories (multi) + runtime create
+                        // ✅ Media Categories (multi) + runtime create
                         Select::make('category_term_ids')
                             ->label('Categories')
                             ->helperText('Assign categories to this media. You can create new categories here.')
@@ -443,6 +507,7 @@ class EditMedia extends EditRecord
                                         if ($slug === '') {
                                             return '';
                                         }
+
                                         return url('/' . ltrim($slug, '/'));
                                     })
                                     ->helperText('This is the public attachment page URL (if enabled + public).'),

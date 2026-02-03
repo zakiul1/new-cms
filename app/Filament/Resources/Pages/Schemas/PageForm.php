@@ -10,12 +10,15 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -29,113 +32,211 @@ class PageForm
                 'lg' => 3,
             ])
             ->components([
-                // LEFT (2/3)
-                Section::make('Content')
+                /**
+                 * LEFT (2/3): Tabs
+                 */
+                Tabs::make('Editor')
                     ->columnSpan([
                         'default' => 1,
                         'lg' => 2,
                     ])
-                    ->schema([
-                        TextInput::make('title')
-                            ->required()
-                            ->maxLength(255)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                if (!filled($get('slug'))) {
-                                    $set('slug', Str::slug((string) $state));
-                                }
+                    ->tabs([
+                        Tab::make('Content')
+                            ->schema([
+                                TextInput::make('title')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        if (!filled($get('slug'))) {
+                                            $set('slug', Str::slug((string) $state));
+                                        }
 
-                                if (!filled($get('meta_json.seo.title'))) {
-                                    $set('meta_json.seo.title', (string) $state);
-                                }
-                            }),
+                                        if (!filled($get('meta_json.seo.title'))) {
+                                            $set('meta_json.seo.title', (string) $state);
+                                        }
+                                    }),
 
-                        // ✅ GLOBAL uniqueness + slug safety
-                        TextInput::make('slug')
-                            ->label('Slug (optional)')
-                            ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
-                            ->maxLength(255)
-                            ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                            ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
-                            ->rule(function (?Post $record) {
-                                // ✅ Global across all posts table rows
-                                return Rule::unique('posts', 'slug')->ignore($record?->id);
-                            }),
+                                // ✅ GLOBAL uniqueness + slug safety
+                                TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
+                                    ->maxLength(255)
+                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    // ✅ sanitize on blur
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set) {
+                                        $set('slug', filled($state) ? Str::slug((string) $state) : null);
+                                    })
+                                    ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                                    ->rule(function (?Post $record) {
+                                        // ✅ Global across all posts table rows
+                                        return Rule::unique('posts', 'slug')->ignore($record?->id);
+                                    }),
 
-                        // ✅ Show actual frontend URL (uses permalink settings)
-                        Placeholder::make('permalink_preview')
-                            ->label('Permalink')
-                            ->content(function (?Post $record, PermalinkManager $permalinks) {
-                                return $record
-                                    ? $permalinks->pageUrl($record)
-                                    : 'Will be generated after saving.';
-                            }),
+                                // ✅ Show actual frontend URL (uses permalink settings)
+                                Placeholder::make('permalink_preview')
+                                    ->label('Permalink')
+                                    ->content(function (?Post $record, PermalinkManager $permalinks) {
+                                        return $record
+                                            ? $permalinks->pageUrl($record)
+                                            : 'Will be generated after saving.';
+                                    }),
 
-                        Textarea::make('excerpt')
-                            ->rows(3)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                if (!filled($get('meta_json.seo.description'))) {
-                                    $text = trim((string) $state);
-                                    if ($text !== '') {
-                                        $set('meta_json.seo.description', Str::limit($text, 160, ''));
-                                    }
-                                }
-                            }),
+                                Textarea::make('excerpt')
+                                    ->rows(3)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        if (!filled($get('meta_json.seo.description'))) {
+                                            $text = trim((string) $state);
+                                            if ($text !== '') {
+                                                $set('meta_json.seo.description', Str::limit($text, 160, ''));
+                                            }
+                                        }
+                                    }),
 
-                        RichEditor::make('content_json.html')
-                            ->label('Content')
-                            ->columnSpanFull()
-                            ->extraAttributes([
-                                'style' => 'min-height: 420px;',
+                                RichEditor::make('content_json.html')
+                                    ->label('Content')
+                                    ->columnSpanFull()
+                                    ->extraAttributes([
+                                        'style' => 'min-height: 420px;',
+                                    ]),
+
+                                Section::make('SEO (Premium)')
+                                    ->description('Control how this page appears in Google and when shared on social media.')
+                                    ->collapsible()
+                                    ->collapsed()
+                                    ->schema([
+                                        TextInput::make('meta_json.seo.title')
+                                            ->label('SEO Title')
+                                            ->helperText('Recommended: ~50–60 characters.')
+                                            ->maxLength(140)
+                                            ->live(onBlur: true),
+
+                                        Textarea::make('meta_json.seo.description')
+                                            ->label('Meta Description')
+                                            ->helperText('Recommended: ~150–160 characters.')
+                                            ->rows(3)
+                                            ->maxLength(200)
+                                            ->live(onBlur: true),
+
+                                        TextInput::make('meta_json.seo.canonical')
+                                            ->label('Canonical URL (optional)')
+                                            ->placeholder('https://example.com/your-page')
+                                            ->helperText('Leave empty to auto-use the current URL.')
+                                            ->maxLength(255),
+
+                                        Select::make('meta_json.seo.robots')
+                                            ->label('Robots')
+                                            ->helperText('Default: index, follow')
+                                            ->options([
+                                                '' => 'Default (index, follow)',
+                                                'index, follow' => 'index, follow',
+                                                'noindex, follow' => 'noindex, follow',
+                                                'index, nofollow' => 'index, nofollow',
+                                                'noindex, nofollow' => 'noindex, nofollow',
+                                            ])
+                                            ->default(''),
+
+                                        TextInput::make('meta_json.seo.og_image')
+                                            ->label('OpenGraph Image (optional)')
+                                            ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
+                                            ->placeholder('https://example.com/og.jpg')
+                                            ->maxLength(255),
+                                    ])
+                                    ->columnSpanFull(),
                             ]),
 
-                        Section::make('SEO (Premium)')
-                            ->description('Control how this page appears in Google and when shared on social media.')
-                            ->collapsible()
-                            ->collapsed()
+                        Tab::make('Custom CSS & JS')
                             ->schema([
-                                TextInput::make('meta_json.seo.title')
-                                    ->label('SEO Title')
-                                    ->helperText('Recommended: ~50–60 characters.')
-                                    ->maxLength(140)
-                                    ->live(onBlur: true),
-
-                                Textarea::make('meta_json.seo.description')
-                                    ->label('Meta Description')
-                                    ->helperText('Recommended: ~150–160 characters.')
-                                    ->rows(3)
-                                    ->maxLength(200)
-                                    ->live(onBlur: true),
-
-                                TextInput::make('meta_json.seo.canonical')
-                                    ->label('Canonical URL (optional)')
-                                    ->placeholder('https://example.com/your-page')
-                                    ->helperText('Leave empty to auto-use the current URL.')
-                                    ->maxLength(255),
-
-                                Select::make('meta_json.seo.robots')
-                                    ->label('Robots')
-                                    ->helperText('Default: index, follow')
-                                    ->options([
-                                        '' => 'Default (index, follow)',
-                                        'index, follow' => 'index, follow',
-                                        'noindex, follow' => 'noindex, follow',
-                                        'index, nofollow' => 'index, nofollow',
-                                        'noindex, nofollow' => 'noindex, nofollow',
+                                Textarea::make('meta_json.assets.css')
+                                    ->label('Custom CSS (Paste Row CSS Without <style> tags)')
+                                    ->helperText('Applies to this post only. Output inside <head>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
                                     ])
-                                    ->default(''),
+                                    ->live(onBlur: true),
 
-                                TextInput::make('meta_json.seo.og_image')
-                                    ->label('OpenGraph Image (optional)')
-                                    ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
-                                    ->placeholder('https://example.com/og.jpg')
-                                    ->maxLength(255),
-                            ])
-                            ->columnSpanFull(),
+                                Textarea::make('meta_json.assets.js')
+                                    ->label('Custom JS (Paste Script Without <script> tags)')
+                                    ->helperText('Applies to this post only. Output before </body>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                                    ])
+                                    ->live(onBlur: true),
+                                Textarea::make('meta_json.custom_json')
+                                    ->label('Custom JSON (Paste Valid JSON)')
+                                    ->helperText('Valid JSON only. Saved per post. (Do not include <script> tag)')
+                                    ->rows(18)
+                                    ->nullable()
+                                    ->rules(['json'])
+                                    ->formatStateUsing(function ($state) {
+                                        if (blank($state)) {
+                                            return '';
+                                        }
+
+                                        if (is_array($state)) {
+                                            return json_encode(
+                                                $state,
+                                                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                                            ) ?: '';
+                                        }
+
+                                        // keep legacy string JSON editable
+                                        return (string) $state;
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        $state = trim((string) $state);
+
+                                        if ($state === '') {
+                                            return null;
+                                        }
+
+                                        $decoded = json_decode($state, true);
+
+                                        // extra safety (rules(['json']) should already prevent invalid)
+                                        if (json_last_error() !== JSON_ERROR_NONE) {
+                                            return null;
+                                        }
+
+                                        return $decoded;
+                                    })
+                                    ->live(onBlur: true),
+                            ]),
+
+
+
+                        Tab::make('Frontend Preview')
+                            ->schema([
+                                Placeholder::make('frontend_preview')
+                                    ->label('')
+                                    ->content(function (?Post $record, Get $get, PermalinkManager $permalinks): HtmlString {
+                                        $title = trim((string) ($get('title') ?? ''));
+                                        $title = $title !== '' ? $title : (string) ($record?->title ?: 'Page');
+
+                                        $excerpt = trim((string) ($get('excerpt') ?? ''));
+
+                                        $url = $record
+                                            ? $permalinks->pageUrl($record)
+                                            : '';
+
+                                        $html = view('filament.pages.frontend-preview', [
+                                            'title' => $title,
+                                            'excerpt' => $excerpt,
+                                            'url' => $url,
+                                        ])->render();
+
+                                        return new HtmlString($html);
+                                    })
+                                    ->dehydrated(false),
+                            ]),
                     ]),
 
-                // RIGHT (1/3)
+                /**
+                 * RIGHT (1/3): Publish
+                 */
                 Section::make('Publish')
                     ->columnSpan([
                         'default' => 1,
@@ -181,7 +282,7 @@ class PageForm
                             ->numeric()
                             ->default(0),
 
-                        // ✅ Categories (kept as you had it, but FIXED validation)
+                        // ✅ Categories (kept as you had it, but validation fixed)
                         Select::make('categories')
                             ->label('Categories')
                             ->relationship('categories', 'name')
@@ -253,7 +354,7 @@ class PageForm
                                 $slug = $base;
                                 $i = 2;
 
-                                // ✅ Ensure unique within taxonomy (same as your logic)
+                                // ✅ Ensure unique within taxonomy
                                 while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
                                     $slug = $base . '-' . $i;
                                     $i++;

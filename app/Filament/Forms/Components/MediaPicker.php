@@ -74,9 +74,7 @@ class MediaPicker extends Field
      */
     public function getSelectedMedia(): array
     {
-        $ids = $this->isMultiple()
-            ? array_values(array_filter(array_map('intval', (array) ($this->getState() ?? []))))
-            : array_values(array_filter([(int) ($this->getState() ?? 0)]));
+        $ids = $this->normalizeIds($this->getState());
 
         if ($ids === []) {
             return [];
@@ -84,10 +82,24 @@ class MediaPicker extends Field
 
         /** @var Collection<int, Media> $media */
         $media = Media::query()
+            ->select([
+                'id',
+                'title',
+                'original_filename',
+                'mime_type',
+                'size',
+                'path',
+                'disk',
+            ])
             ->whereIn('id', $ids)
+            ->with([
+                'variantRecords', // helps thumbUrl fast
+                'terms',          // for category/folder filter/badges in picker view
+            ])
             ->get()
             ->keyBy('id');
 
+        // Preserve selected order
         $out = [];
         foreach ($ids as $id) {
             $m = $media->get($id);
@@ -96,7 +108,13 @@ class MediaPicker extends Field
             }
 
             $title = (string) ($m->title ?: ($m->original_filename ?: ('Media #' . $m->id)));
-            $thumb = (string) ($m->thumbUrl() ?: $m->url());
+
+            $thumb = (string) (
+                $m->thumbUrl('jpeg')
+                ?: $m->thumbUrl()
+                ?: $m->url()
+            );
+
             $url = (string) $m->url();
 
             $out[] = [
@@ -108,5 +126,21 @@ class MediaPicker extends Field
         }
 
         return $out;
+    }
+
+    /**
+     * Normalize the stored state into ordered IDs.
+     *
+     * @return array<int>
+     */
+    protected function normalizeIds(mixed $state): array
+    {
+        if ($this->isMultiple()) {
+            return array_values(array_filter(array_map('intval', (array) ($state ?? []))));
+        }
+
+        $id = (int) ($state ?? 0);
+
+        return $id > 0 ? [$id] : [];
     }
 }

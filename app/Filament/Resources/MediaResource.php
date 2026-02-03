@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\MediaResource\Pages\CreateMedia;
 use App\Filament\Resources\MediaResource\Pages\EditMedia;
 use App\Filament\Resources\MediaResource\Pages\ListMedia;
+use App\Filament\Resources\MediaResource\Pages\UploadMedia; // ✅ NEW
 use App\Filament\Resources\MediaResource\Schemas\MediaForm;
 use App\Models\Media;
 use BackedEnum;
@@ -30,8 +31,10 @@ class MediaResource extends Resource
     {
         return [
             'index' => ListMedia::route('/'),
+            'upload' => UploadMedia::route('/upload'),
             'create' => CreateMedia::route('/create'),
             'edit' => EditMedia::route('/{record}/edit'),
         ];
     }
+
 }

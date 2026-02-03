@@ -21,12 +21,20 @@ class ContentRouterController extends Controller
     public function home(Request $request, PermalinkManager $permalinks)
     {
         $p = $request->query('p');
+
         if (is_numeric($p)) {
             $post = $this->findPublishedPostById((int) $p);
+
             if ($post) {
+                [$css, $js] = $this->extractPostAssets($post);
+
                 return view('post', [
                     'post' => $post,
                     'seo' => $this->buildSeo($post, $request, $permalinks),
+
+                    // ✅ per-page assets
+                    'pageAssetsCss' => $css,
+                    'pageAssetsJs' => $js,
                 ]);
             }
         }
@@ -78,9 +86,15 @@ class ContentRouterController extends Controller
                     return redirect()->to($canonicalPath, 301);
                 }
 
+                [$css, $js] = $this->extractPostAssets($page);
+
                 return view('page', [
                     'post' => $page,
                     'seo' => $this->buildSeo($page, $request, $permalinks),
+
+                    // ✅ per-page assets
+                    'pageAssetsCss' => $css,
+                    'pageAssetsJs' => $js,
                 ]);
             }
         }
@@ -108,9 +122,15 @@ class ContentRouterController extends Controller
                 }
             }
 
+            [$css, $js] = $this->extractPostAssets($post);
+
             return view('post', [
                 'post' => $post,
                 'seo' => $this->buildSeo($post, $request, $permalinks),
+
+                // ✅ per-page assets
+                'pageAssetsCss' => $css,
+                'pageAssetsJs' => $js,
             ]);
         }
 
@@ -146,10 +166,16 @@ class ContentRouterController extends Controller
                         ->limit(12)
                         ->get(['posts.id', 'posts.type', 'posts.title', 'posts.slug', 'posts.published_at']);
 
+                    [$css, $js] = $this->extractMediaAssets($media);
+
                     return view('attachment', [
                         'media' => $media,
                         'usedIn' => $usedIn,
                         'seo' => $this->buildAttachmentSeo($media, $indexable),
+
+                        // ✅ per-page assets
+                        'pageAssetsCss' => $css,
+                        'pageAssetsJs' => $js,
                     ]);
                 }
             }
@@ -232,15 +258,35 @@ class ContentRouterController extends Controller
 
     private function buildAttachmentSeo(Media $media, bool $indexable): array
     {
-        $title = trim((string) ($media->title ?: $media->original_filename ?: config('app.name')));
-        $desc = trim((string) ($media->caption ?: $media->description ?: ''));
+        $meta = is_array($media->meta) ? $media->meta : [];
+        $seo = data_get($meta, 'seo', []);
+        $seo = is_array($seo) ? $seo : [];
 
-        $canonical = url('/' . $media->slug);
-        $robots = $indexable ? 'index, follow' : 'noindex, follow';
+        $fallbackTitle = (string) ($media->title ?: $media->original_filename ?: config('app.name'));
 
-        $ogImage = null;
-        if (method_exists($media, 'isImage') && $media->isImage() && method_exists($media, 'url')) {
-            $ogImage = $media->url();
+        // For description: prefer saved SEO description; fallback to description/caption (strip tags for SEO)
+        $fallbackDesc = (string) ($media->description ?: $media->caption ?: '');
+        $fallbackDesc = trim(strip_tags($fallbackDesc));
+
+        $title = trim((string) ($seo['title'] ?? $fallbackTitle));
+        $desc = trim((string) ($seo['description'] ?? $fallbackDesc));
+
+        $canonical = trim((string) ($seo['canonical'] ?? ''));
+        if ($canonical === '') {
+            $canonical = url('/' . $media->slug);
+        }
+
+        // If SEO robots set, respect it; otherwise use indexable bool.
+        $robots = trim((string) ($seo['robots'] ?? ''));
+        if ($robots === '') {
+            $robots = $indexable ? 'index, follow' : 'noindex, follow';
+        }
+
+        $ogImage = trim((string) ($seo['og_image'] ?? ''));
+
+        // If no og_image specified, use image URL if this is image.
+        if ($ogImage === '' && method_exists($media, 'isImage') && $media->isImage() && method_exists($media, 'url')) {
+            $ogImage = (string) $media->url();
         }
 
         return [
@@ -311,5 +357,40 @@ class ContentRouterController extends Controller
             'term' => $term,
             'posts' => $posts,
         ]);
+    }
+
+    /**
+     * ✅ Per Post/Page assets from meta_json.assets.{css,js}
+     *
+     * @return array{0:string,1:string} [css, js]
+     */
+    private function extractPostAssets(Post $post): array
+    {
+        $meta = is_array($post->meta_json) ? $post->meta_json : [];
+        $assets = $meta['assets'] ?? [];
+
+        if (!is_array($assets)) {
+            $assets = [];
+        }
+
+        $css = (string) ($assets['css'] ?? '');
+        $js = (string) ($assets['js'] ?? '');
+
+        return [$css, $js];
+    }
+
+    /**
+     * ✅ Per Media assets from meta.assets.{css,js}
+     *
+     * @return array{0:string,1:string} [css, js]
+     */
+    private function extractMediaAssets(Media $media): array
+    {
+        $meta = is_array($media->meta) ? $media->meta : [];
+
+        $css = (string) data_get($meta, 'assets.css', '');
+        $js = (string) data_get($meta, 'assets.js', '');
+
+        return [$css, $js];
     }
 }

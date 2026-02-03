@@ -10,6 +10,13 @@
 
     {!! theme_customizer_css() !!}
 
+    {{-- ✅ Per-page Custom CSS (from admin) --}}
+    @if (!empty($pageAssetsCss))
+        <style id="page-custom-css">
+            {!! $pageAssetsCss !!}
+        </style>
+    @endif
+
     {{-- ✅ Tailwind (quick test). Replace with your compiled Tailwind CSS later. --}}
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -34,6 +41,13 @@
     @include('partials.footer')
 
     @stack('scripts')
+
+    {{-- ✅ Per-page Custom JS (from admin) --}}
+    @if (!empty($pageAssetsJs))
+        <script id="page-custom-js">
+            {!! $pageAssetsJs !!}
+        </script>
+    @endif
 
     {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.body.after', '') !!}
 </body>
