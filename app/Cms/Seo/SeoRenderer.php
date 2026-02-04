@@ -7,6 +7,35 @@ use Illuminate\Support\Str;
 
 class SeoRenderer
 {
+    /**
+     * Ensure a trailing slash on URLs (keeps query + hash).
+     */
+    protected function ensureTrailingSlash(string $url): string
+    {
+        $url = trim($url);
+
+        if ($url === '') {
+            return $url;
+        }
+
+        $hash = '';
+        $query = '';
+
+        if (str_contains($url, '#')) {
+            [$url, $hash] = explode('#', $url, 2);
+            $hash = '#' . $hash;
+        }
+
+        if (str_contains($url, '?')) {
+            [$url, $query] = explode('?', $url, 2);
+            $query = '?' . $query;
+        }
+
+        $url = rtrim($url, '/') . '/';
+
+        return $url . $query . $hash;
+    }
+
     public function meta(?Post $post = null): string
     {
         $base = rtrim((string) config('app.url'), '/');
@@ -14,7 +43,7 @@ class SeoRenderer
         // Defaults
         $title = (string) config('app.name', 'CMS');
         $desc = '';
-        $canonical = $base . '/';
+        $canonical = $this->ensureTrailingSlash($base . '/');
         $robots = 'index, follow';
         $ogImage = null;
 
@@ -33,9 +62,12 @@ class SeoRenderer
             $desc = Str::limit(trim(strip_tags($desc)), 160, '');
 
             $slug = trim((string) ($post->slug ?? ''), '/');
+
             $canonical = trim((string) ($seo['canonical'] ?? '')) !== ''
                 ? (string) $seo['canonical']
-                : ($slug === '' ? $base . '/' : $base . '/' . $slug);
+                : ($slug === '' ? $base . '/' : $base . '/' . $slug . '/');
+
+            $canonical = $this->ensureTrailingSlash($canonical);
 
             $robots = trim((string) ($seo['robots'] ?? '')) !== ''
                 ? (string) $seo['robots']
@@ -80,14 +112,15 @@ class SeoRenderer
                 '@context' => 'https://schema.org',
                 '@type' => 'WebSite',
                 'name' => (string) config('app.name', 'CMS'),
-                'url' => $base . '/',
+                'url' => $this->ensureTrailingSlash($base . '/'),
             ];
 
             return '<script type="application/ld+json">' . json_encode($data, JSON_UNESCAPED_SLASHES) . '</script>' . "\n";
         }
 
         $slug = trim((string) ($post->slug ?? ''), '/');
-        $url = $slug === '' ? $base . '/' : $base . '/' . $slug;
+        $url = $slug === '' ? $base . '/' : $base . '/' . $slug . '/';
+        $url = $this->ensureTrailingSlash($url);
 
         if ($post->type === 'post') {
             $data = [

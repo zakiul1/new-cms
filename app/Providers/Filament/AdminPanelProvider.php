@@ -2,6 +2,8 @@
 
 namespace App\Providers\Filament;
 
+use App\Cms\Hooks\HookPoints;
+use App\Cms\Hooks\Hooks;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -24,7 +26,7 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        return $panel
+        $panel = $panel
             ->default()
             ->id('admin')
             ->path('lara-admin')
@@ -34,7 +36,6 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
 
-            // ✅ Sidebar group order
             ->navigationGroups([
                 NavigationGroup::make()->label('Appearance')->collapsed(),
                 NavigationGroup::make()->label('Media')->collapsed(),
@@ -43,19 +44,16 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make()->label('Tools')->collapsed(),
             ])
 
-            // ✅ Discover Resources
             ->discoverResources(
                 in: app_path('Filament/Resources'),
                 for: 'App\\Filament\\Resources'
             )
 
-            // ✅ Discover Pages (IMPORTANT)
             ->discoverPages(
                 in: app_path('Filament/Pages'),
                 for: 'App\\Filament\\Pages'
             )
 
-            // ✅ Manually registered pages (you can keep these)
             ->pages([
                 Dashboard::class,
 
@@ -75,7 +73,6 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\ManageCmsSettings::class,
             ])
 
-            // ✅ Widgets
             ->discoverWidgets(
                 in: app_path('Filament/Widgets'),
                 for: 'App\\Filament\\Widgets'
@@ -85,7 +82,6 @@ class AdminPanelProvider extends PanelProvider
                 FilamentInfoWidget::class,
             ])
 
-            // ✅ Middleware
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -100,9 +96,13 @@ class AdminPanelProvider extends PanelProvider
 
             ->viteTheme('resources/css/filament/admin/theme.css')
 
-            // ✅ Auth middleware
             ->authMiddleware([
                 Authenticate::class,
             ]);
+
+        // ✅ Allow plugins to register Filament pages/resources/widgets at panel build time
+        app(Hooks::class)->doAction(HookPoints::FILAMENT_ADMIN_PANEL, $panel);
+
+        return $panel;
     }
 }

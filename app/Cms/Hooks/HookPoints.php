@@ -16,4 +16,6 @@ final class HookPoints
     public const CMS_REGISTER_BLOCKS = 'cms.register_blocks';
     public const CMS_THE_CONTENT = 'cms.the_content';
     public const CMS_SEO_META = 'cms.seo.meta';
+    public const FILAMENT_ADMIN_PANEL = 'filament.admin.panel';
+
 }

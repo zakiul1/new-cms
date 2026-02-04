@@ -64,6 +64,16 @@ class EditMedia extends EditRecord
             }
         }
     }
+    /**
+     * Allow plugins to auto-fill defaults when Edit Media loads.
+     * Only affects the initial form fill (doesn't overwrite user values).
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $filtered = apply_filters('media.edit.defaults.fill', $data, $this->record);
+
+        return is_array($filtered) ? $filtered : $data;
+    }
 
     public function form(Schema $schema): Schema
     {
@@ -597,30 +607,7 @@ class EditMedia extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('visit')
-                ->label('Visit')
-                ->icon('heroicon-o-arrow-top-right-on-square')
-                ->color('primary')
-                ->visible(fn(Media $record): bool => filled($record->slug))
-                ->disabled(function (Media $record): bool {
-                    $settings = app(SettingsRepository::class);
-                    $enabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
-                    return !($enabled && (bool) $record->attachment_public);
-                })
-                ->action(function (Media $record): void {
-                    $url = url('/' . ltrim((string) $record->slug, '/'));
-                    $jsUrl = json_encode($url, JSON_UNESCAPED_SLASHES);
-
-                    $this->js(<<<JS
-                        (function () {
-                            const w = window.open({$jsUrl}, '_blank', 'noopener,noreferrer');
-                            if (!w) {
-                                alert('Popup blocked. Please allow popups for this site, then click Visit again.');
-                            }
-                        })();
-                    JS);
-                }),
 
             Action::make('delete')
                 ->label('Delete')
@@ -657,6 +644,30 @@ class EditMedia extends EditRecord
                         ->title('Variant regeneration queued.')
                         ->success()
                         ->send();
+                }),
+            Action::make('visit')
+                ->label('Visit')
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->color('primary')
+                ->visible(fn(Media $record): bool => filled($record->slug))
+                ->disabled(function (Media $record): bool {
+                    $settings = app(SettingsRepository::class);
+                    $enabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
+
+                    return !($enabled && (bool) $record->attachment_public);
+                })
+                ->action(function (Media $record): void {
+                    $url = url('/' . ltrim((string) $record->slug, '/'));
+                    $jsUrl = json_encode($url, JSON_UNESCAPED_SLASHES);
+
+                    $this->js(<<<JS
+                        (function () {
+                            const w = window.open({$jsUrl}, '_blank', 'noopener,noreferrer');
+                            if (!w) {
+                                alert('Popup blocked. Please allow popups for this site, then click Visit again.');
+                            }
+                        })();
+                    JS);
                 }),
 
             Action::make('back')

@@ -1,35 +1,32 @@
 <!doctype html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
+@php($hooks = app(\App\Cms\Hooks\Hooks::class))
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    {{-- ✅ SEO partial --}}
     @include('cms.partials.seo')
+
+    {{-- ✅ Frontend one CSS + one JS (Vite builds + minifies) --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     {!! theme_customizer_css() !!}
 
-    {{-- ✅ Per-page Custom CSS (from admin) --}}
     @if (!empty($pageAssetsCss))
         <style id="page-custom-css">
             {!! $pageAssetsCss !!}
         </style>
     @endif
 
-    {{-- ✅ Tailwind (quick test). Replace with your compiled Tailwind CSS later. --}}
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    {{-- Theme JS (keep if you use it) --}}
-    <script src="{{ asset('themes/siatex-group/dist/theme.js') }}" defer></script>
-
     @stack('head')
 
-    {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.head', '') !!}
+    {!! $hooks->applyFilters('theme.head', '') !!}
 </head>
 
 <body class="min-h-screen bg-white text-slate-900 antialiased">
-    {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.body.before', '') !!}
+    {!! $hooks->applyFilters('theme.body.before', '') !!}
 
     @include('partials.topbar')
     @include('partials.header')
@@ -42,14 +39,13 @@
 
     @stack('scripts')
 
-    {{-- ✅ Per-page Custom JS (from admin) --}}
     @if (!empty($pageAssetsJs))
         <script id="page-custom-js">
             {!! $pageAssetsJs !!}
         </script>
     @endif
 
-    {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.body.after', '') !!}
+    {!! $hooks->applyFilters('theme.body.after', '') !!}
 </body>
 
 </html>

@@ -1,0 +1,6 @@
+{
+  "name": "Media Defaults",
+  "slug": "media-defaults",
+  "version": "1.0.0",
+  "description": "Default Title/Description/Sub title/Sub description for Media Edit. Auto-fills only when fields are empty."
+}

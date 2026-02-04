@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\MediaResource\Tables;
 
+use App\Filament\Resources\MediaResource;
 use App\Models\Media;
 use App\Models\Taxonomy;
 use App\Models\Term;
@@ -11,12 +12,16 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
 class MediaTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            // ✅ Needed for hover UI (group-hover)
+            ->recordClasses(fn() => 'group')
+
             ->columns([
                 ImageColumn::make('thumb')
                     ->label('')
@@ -26,7 +31,27 @@ class MediaTable
                 TextColumn::make('title')
                     ->searchable()
                     ->sortable()
-                    ->description(fn(Media $record) => $record->original_filename ?: null),
+                    ->description(function (Media $record): HtmlString {
+                        $fileName = trim((string) ($record->original_filename ?? ''));
+
+                        $editUrl = MediaResource::getUrl('edit', ['record' => $record]);
+
+                        $viewUrl = filled($record->slug)
+                            ? url('/' . ltrim((string) $record->slug, '/'))
+                            : $record->url();
+
+                        $fileLine = $fileName !== ''
+                            ? '<div class="text-xs text-slate-500 truncate">' . e($fileName) . '</div>'
+                            : '';
+
+                        $actions = '<div class="mt-1 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">' .
+                            '<a class="hover:underline text-primary-600" href="' . e($editUrl) . '">Edit</a>' .
+                            ' <span class="text-slate-300">|</span> ' .
+                            '<a class="hover:underline text-slate-600" href="' . e($viewUrl) . '" target="_blank" rel="noopener noreferrer">View</a>' .
+                            '</div>';
+
+                        return new HtmlString($fileLine . $actions);
+                    }),
 
                 TextColumn::make('mime_type')
                     ->label('Type')
@@ -107,8 +132,14 @@ class MediaTable
                     ])
                     ->query(function (Builder $query, array $data) {
                         return $query
-                            ->when($data['from'] ?? null, fn(Builder $q, $date) => $q->whereDate('created_at', '>=', $date))
-                            ->when($data['until'] ?? null, fn(Builder $q, $date) => $q->whereDate('created_at', '<=', $date));
+                            ->when(
+                                $data['from'] ?? null,
+                                fn(Builder $q, $date) => $q->whereDate('created_at', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'] ?? null,
+                                fn(Builder $q, $date) => $q->whereDate('created_at', '<=', $date),
+                            );
                     }),
             ])
             ->defaultSort('id', 'desc');

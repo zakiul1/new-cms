@@ -49,95 +49,126 @@
     }
 
     // ------------------------------------
-    // Canonical
+    // ✅ URL trailing slash helper (Canonical + OG URL)
     // ------------------------------------
-    $canonical = trim((string) ($seoInput['canonical'] ?? ''));
-    if ($canonical === '') {
-        $canonical = url()->current();
-    }
+    $ensureTrailingSlash = function (string $u): string {
+        $u = trim($u);
 
-    // ------------------------------------
-    // Open Graph
-    // ------------------------------------
-    $og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
+        if ($u === '') {
+            return $u;
+        }
 
-    $ogTitle = trim((string) ($og['title'] ?? $title));
-    $ogDesc = trim((string) ($og['description'] ?? $desc));
-    $ogType = trim((string) ($og['type'] ?? 'article'));
-    $ogUrl = trim((string) ($og['url'] ?? $canonical));
+        // Keep query/hash
+        $hash = '';
+        $query = '';
 
-    $ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
+        if (str_contains($u, '#')) {
+            [$u, $hash] = explode('#', $u, 2);
+            $hash = '#' . $hash;
+        }
 
-    // ------------------------------------
-    // Twitter
-    // ------------------------------------
-    $tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
+        if (str_contains($u, '?')) {
+            [$u, $query] = explode('?', $u, 2);
+            $query = '?' . $query;
+        }
 
-    $twTitle = trim((string) ($tw['title'] ?? $title));
-    $twDesc = trim((string) ($tw['description'] ?? $desc));
-    $twCard = trim((string) ($tw['card'] ?? ''));
+        // If it's just a domain with no path, keep the single trailing slash.
+    $u = rtrim($u, '/') . '/';
 
-    if ($twCard === '') {
-        $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
-    }
+    return $u . $query . $hash;
+};
 
-    // ------------------------------------
-    // Extra meta tags
-    // ------------------------------------
-    $extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
+// ------------------------------------
+// Canonical
+// ------------------------------------
+$canonical = trim((string) ($seoInput['canonical'] ?? ''));
+if ($canonical === '') {
+    $canonical = url()->current();
+}
+$canonical = $ensureTrailingSlash($canonical);
 
-    // ------------------------------------
-    // ✅ JSON-LD (per record)
-    //
-    // Priority:
-    // - Post/Page: meta_json.custom_json
-    // - Post/Page legacy: meta_json.seo.custom_json
-    // - Media: meta.custom_json
-    // - Media legacy: meta.frontend.custom_json
-    // ------------------------------------
-    $rawJsonLd = '';
+// ------------------------------------
+// Open Graph
+// ------------------------------------
+$og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
 
-    if (isset($post) && $post) {
-        $m = is_array($post->meta_json ?? null) ? $post->meta_json : [];
-        $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
-    }
+$ogTitle = trim((string) ($og['title'] ?? $title));
+$ogDesc = trim((string) ($og['description'] ?? $desc));
+$ogType = trim((string) ($og['type'] ?? 'article'));
+$ogUrl = $ensureTrailingSlash(trim((string) ($og['url'] ?? $canonical)));
 
-    if (($rawJsonLd === '' || $rawJsonLd === null) && isset($media) && $media) {
-        $m2 = is_array($media->meta ?? null) ? $media->meta : [];
-        $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
-    }
+$ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
 
-    // Normalize into a pure JSON string (NO regex, NO literal "<script")
-    $jsonLd = '';
+// ------------------------------------
+// Twitter
+// ------------------------------------
+$tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
 
-    if (is_array($rawJsonLd)) {
-        $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
-    } else {
-        $jsonLd = trim((string) $rawJsonLd);
+$twTitle = trim((string) ($tw['title'] ?? $title));
+$twDesc = trim((string) ($tw['description'] ?? $desc));
+$twCard = trim((string) ($tw['card'] ?? ''));
 
-        if ($jsonLd !== '') {
-            // Avoid literal "<script" so Blade formatter doesn't replace it
-        $openTag = '<' . 'script';
-        $closeTag = '</' . 'script' . '>';
+if ($twCard === '') {
+    $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
+}
 
-        $openPos = stripos($jsonLd, $openTag);
-        if ($openPos !== false) {
-            // find the ">" of the opening script tag
-            $gtPos = strpos($jsonLd, '>', $openPos);
-            if ($gtPos !== false) {
-                $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
-                if ($endPos !== false) {
-                    $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
-                    $jsonLd = trim((string) $jsonLd);
+// ------------------------------------
+// Extra meta tags
+// ------------------------------------
+$extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
+
+// ------------------------------------
+// ✅ JSON-LD (per record)
+//
+// Priority:
+// - Post/Page: meta_json.custom_json
+// - Post/Page legacy: meta_json.seo.custom_json
+// - Media: meta.custom_json
+// - Media legacy: meta.frontend.custom_json
+// ------------------------------------
+$rawJsonLd = '';
+
+if (isset($post) && $post) {
+    $m = is_array($post->meta_json ?? null) ? $post->meta_json : [];
+    $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
+}
+
+if (($rawJsonLd === '' || $rawJsonLd === null) && isset($media) && $media) {
+    $m2 = is_array($media->meta ?? null) ? $media->meta : [];
+    $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+}
+
+// Normalize into a pure JSON string (NO regex, NO literal "<script")
+$jsonLd = '';
+
+if (is_array($rawJsonLd)) {
+    $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
+} else {
+    $jsonLd = trim((string) $rawJsonLd);
+
+    if ($jsonLd !== '') {
+        // Avoid literal "<script" so Blade formatter doesn't replace it
+            $openTag = '<' . 'script';
+            $closeTag = '</' . 'script' . '>';
+
+            $openPos = stripos($jsonLd, $openTag);
+            if ($openPos !== false) {
+                // find the ">" of the opening script tag
+                $gtPos = strpos($jsonLd, '>', $openPos);
+                if ($gtPos !== false) {
+                    $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
+                    if ($endPos !== false) {
+                        $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
+                        $jsonLd = trim((string) $jsonLd);
+                    }
                 }
             }
         }
     }
-}
 
-// Validate JSON
-$jsonLdIsValid = false;
-if ($jsonLd !== '') {
+    // Validate JSON
+    $jsonLdIsValid = false;
+    if ($jsonLd !== '') {
         json_decode($jsonLd, true);
         $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
     }

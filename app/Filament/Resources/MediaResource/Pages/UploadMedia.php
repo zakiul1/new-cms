@@ -255,4 +255,7 @@ class UploadMedia extends Page
 
         $this->redirect(MediaResource::getUrl('index'));
     }
+
+
+
 }

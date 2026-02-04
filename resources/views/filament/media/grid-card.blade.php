@@ -5,6 +5,9 @@
     $record = $getRecord();
 
     $title = (string) ($record->title ?: ($record->original_filename ?: 'Media #' . $record->id));
+    $title = trim($title) !== '' ? trim($title) : 'Media #' . $record->id;
+
+    // ✅ Prefer thumb, then url
     $thumb = $record->thumbUrl('jpeg') ?: $record->thumbUrl() ?: $record->url();
 
     $sizeKb = number_format(((int) $record->size) / 1024, 1);
@@ -13,44 +16,23 @@
     $type = (string) ($record->mime_type ?: 'application/octet-stream');
     $typeLabel = strtoupper((string) strtok($type, '/'));
 
+    // ✅ Edit + frontend view
     $editUrl = \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $record]);
+    $viewUrl = filled($record->slug) ? url('/' . ltrim((string) $record->slug, '/')) : $record->url();
 @endphp
 
 @once
     <style>
         :root {
             --mlb-gap: 14px;
-            --mlb-tile: 175px;
-            /* ✅ set 160/180/200 you like */
             --mlb-meta: 54px;
-            /* ✅ fixed meta height */
+            /* fixed meta height */
         }
 
-        /* ✅ Filament table "grid" -> flex wrap */
-        .fi-ta-content-grid {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: var(--mlb-gap) !important;
-            align-items: flex-start !important;
-        }
+        /* ✅ Only style inside the card. DO NOT override .fi-ta-content-grid here. */
 
-        .fi-ta-content-grid>.fi-ta-record {
-            flex: 0 0 auto !important;
-            width: var(--mlb-tile) !important;
-            min-width: 0 !important;
-        }
-
-        .fi-ta-record-content-ctn,
-        .fi-ta-record-content {
-            width: 100% !important;
-            min-width: 0 !important;
-        }
-
-        /* ✅ EXACT same card size always */
         .mlb-tile {
             width: 100%;
-            height: var(--mlb-tile);
-            /* ✅ makes it square by height too */
             border-radius: 14px;
             overflow: hidden;
             background: #fff;
@@ -58,13 +40,13 @@
             cursor: pointer;
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
 
-        /* ✅ Image area always same height */
+        /* ✅ Perfect square image area */
         .mlb-media {
             position: relative;
-            height: calc(var(--mlb-tile) - var(--mlb-meta));
-            /* square - meta */
+            aspect-ratio: 1 / 1;
             background: #f1f5f9;
             overflow: hidden;
         }
@@ -76,7 +58,7 @@
             object-fit: cover !important;
         }
 
-        /* ✅ Meta area always fixed height */
+        /* ✅ Meta area fixed height */
         .mlb-meta {
             height: var(--mlb-meta);
             border-top: 1px solid rgba(15, 23, 42, .06);
@@ -154,25 +136,31 @@
             color: #0f172a;
             text-decoration: none;
         }
+
+        .mlb-action:hover {
+            text-decoration: underline;
+        }
     </style>
 @endonce
 
-<div class="mlb-tile" wire:click="callTableAction('preview', {{ (int) $record->id }})">
+{{-- ✅ Click card => Edit (WP-like) --}}
+<a href="{{ $editUrl }}" class="mlb-tile">
     <div class="mlb-media">
-        <img src="{{ $thumb }}" alt="{{ e($title) }}" loading="lazy">
+        <img src="{{ $thumb }}" alt="{{ e($title) }}" loading="lazy" decoding="async">
         <div class="mlb-badge">{{ $typeLabel }}</div>
 
-        <div class="mlb-actions" wire:click.stop>
+        {{-- ✅ actions: stop click so it doesn't open edit --}}
+        <div class="mlb-actions" onclick="event.stopPropagation();">
             <a href="{{ $editUrl }}" class="mlb-action">Edit</a>
-            <a href="{{ $record->url() }}" target="_blank" rel="noopener" class="mlb-action">View</a>
+            <a href="{{ $viewUrl }}" target="_blank" rel="noopener noreferrer" class="mlb-action">View</a>
         </div>
     </div>
 
     <div class="mlb-meta">
-        <div class="mlb-title" title="{{ $title }}">{{ Str::limit($title, 40) }}</div>
+        <div class="mlb-title" title="{{ e($title) }}">{{ Str::limit($title, 40) }}</div>
         <div class="mlb-row">
             <span class="left">{{ $timeText }}</span>
             <span class="right">{{ $sizeKb }} KB</span>
         </div>
     </div>
-</div>
+</a>
