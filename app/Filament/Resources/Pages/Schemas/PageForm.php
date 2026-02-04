@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Pages\Schemas;
 
 use App\Cms\Content\PermalinkManager;
+use App\Filament\Forms\Components\WpClassicEditor;
 use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
@@ -95,12 +96,34 @@ class PageForm
                                         }
                                     }),
 
-                                RichEditor::make('content_json.html')
+                                WpClassicEditor::make('content_json')
                                     ->label('Content')
+                                    ->height(320)
                                     ->columnSpanFull()
-                                    ->extraAttributes([
-                                        'style' => 'min-height: 420px;',
-                                    ]),
+
+                                    // ✅ editor always receives a STRING (not array)
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+
+                                    // ✅ when saving, convert string back into array for content_json
+                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get): array {
+                                        $current = $get('content_json');
+
+                                        if (!is_array($current)) {
+                                            $current = [];
+                                        }
+
+                                        $current['html'] = is_string($state) ? $state : '';
+
+                                        return $current;
+                                    }),
+
 
                                 Section::make('SEO (Premium)')
                                     ->description('Control how this page appears in Google and when shared on social media.')

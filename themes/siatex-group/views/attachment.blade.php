@@ -6,183 +6,238 @@
         /** @var \App\Models\Media $media */
 
         // -----------------------------
+        // Helpers
+        // -----------------------------
+        $allowedHtml = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a>';
+
+        // ✅ Always work with meta as array (sometimes it may come as JSON string)
+        $meta = $media->meta ?? [];
+        if (is_string($meta) && trim($meta) !== '') {
+            $decoded = json_decode($meta, true);
+            $meta = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        /**
+         * ✅ Read editor HTML safely:
+         * - string => return it
+         * - array  => return ['html'] or ['value'] if present
+         * - object => try same via cast
+         * - anything else => ''
+         */
+        $htmlValue = function ($value): string {
+            if ($value === null) {
+                return '';
+            }
+
+            if (is_string($value)) {
+                return $value;
+            }
+
+            if (is_array($value)) {
+                $html = $value['html'] ?? ($value['value'] ?? ($value['content'] ?? ''));
+                return is_string($html) ? $html : '';
+            }
+
+            if (is_object($value)) {
+                $arr = (array) $value;
+                $html = $arr['html'] ?? ($arr['value'] ?? ($arr['content'] ?? ''));
+                return is_string($html) ? $html : '';
+            }
+
+            return '';
+        };
+
+        $sanitizeRichHtml = function ($value) use ($allowedHtml, $htmlValue): string {
+            $html = trim($htmlValue($value));
+            if ($html === '') {
+                return '';
+            }
+
+            return strip_tags($html, $allowedHtml);
+        };
+
+        $textValue = function ($value): string {
+            if ($value === null) {
+                return '';
+            }
+            if (is_string($value)) {
+                return $value;
+            }
+            return '';
+        };
+
+        // -----------------------------
         // Base title + hero text
         // -----------------------------
         $title = (string) ($media->title ?: $media->original_filename ?? '');
         $title = trim($title) !== '' ? trim($title) : 'Attachment';
 
-        /**
-         * Description (Product) is RichEditor HTML.
-         * Caption might be plain text. We'll handle both safely.
- */
-$heroDescHtml = trim((string) ($media->description ?? ''));
-$heroCaption = trim((string) ($media->caption ?? ''));
+        // Description (Product) is HTML, Caption is plain text
+        $heroDescHtml = $sanitizeRichHtml($media->description ?? '');
+        $heroCaption = trim($textValue($media->caption ?? ''));
 
-// Allow a safe subset of tags from RichEditor
-$allowedHtml = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a>';
+        $heroHtml = '';
+        if ($heroDescHtml !== '') {
+            $heroHtml = $heroDescHtml;
+        } elseif ($heroCaption !== '') {
+            $heroHtml = nl2br(e($heroCaption));
+        }
 
-$heroHtml = '';
-if ($heroDescHtml !== '') {
-    // sanitize rich text
-    $heroHtml = strip_tags($heroDescHtml, $allowedHtml);
-} elseif ($heroCaption !== '') {
-    // caption treated as plain text -> preserve new lines
-    $heroHtml = nl2br(e($heroCaption));
-}
+        // -----------------------------
+        // ✅ Frontend meta (from meta.frontend.*)
+        // -----------------------------
+        $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
 
-// -----------------------------
-// Frontend meta (from meta.frontend.*)
-// -----------------------------
-$metaTitle = trim((string) data_get($media->meta ?? [], 'frontend.meta_title', ''));
+        // ✅ This MUST be only the meta_description field (string/array handled)
+        $metaDescRaw = data_get($meta, 'frontend.meta_description', '');
+        $metaDescHtml = $sanitizeRichHtml($metaDescRaw);
 
-$metaDescHtml = trim((string) data_get($media->meta ?? [], 'frontend.meta_description', ''));
-if ($metaDescHtml !== '') {
-    $metaDescHtml = strip_tags($metaDescHtml, $allowedHtml);
-}
+        // -----------------------------
+        // Breadcrumb:
+        // Prefer media_category taxonomy term, fallback to post category
+        // -----------------------------
+        $mediaCategoryTerm = null;
+        $mediaCategoryTaxId = null;
+        $mediaCategoryIds = [];
 
-// -----------------------------
-// Breadcrumb:
-// Prefer media_category taxonomy term, fallback to post category
-// -----------------------------
-$mediaCategoryTerm = null;
-$mediaCategoryTaxId = null;
-$mediaCategoryIds = [];
+        $parentPost = null;
+        $postCategory = null;
 
-$parentPost = null;
-$postCategory = null;
+        try {
+            $mediaCategoryTaxId = \App\Models\Taxonomy::query()->where('key', 'media_category')->value('id');
 
-try {
-    $mediaCategoryTaxId = \App\Models\Taxonomy::query()->where('key', 'media_category')->value('id');
+            if ($mediaCategoryTaxId) {
+                $mediaCategoryTerm = $media
+                    ->terms()
+                    ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->orderBy('terms.name')
+                    ->first();
 
-    if ($mediaCategoryTaxId) {
-        $mediaCategoryTerm = $media
-            ->terms()
-            ->where('terms.taxonomy_id', $mediaCategoryTaxId)
-            ->orderBy('terms.name')
-            ->first();
+                $mediaCategoryIds = $media
+                    ->terms()
+                    ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->pluck('terms.id')
+                    ->map(fn($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+        } catch (\Throwable $e) {
+            $mediaCategoryTaxId = null;
+            $mediaCategoryTerm = null;
+            $mediaCategoryIds = [];
+        }
 
-        $mediaCategoryIds = $media
-            ->terms()
-            ->where('terms.taxonomy_id', $mediaCategoryTaxId)
-            ->pluck('terms.id')
-            ->map(fn($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
-    }
-} catch (\Throwable $e) {
-    $mediaCategoryTaxId = null;
-    $mediaCategoryTerm = null;
-    $mediaCategoryIds = [];
-}
+        try {
+            $parentPost = $media->posts()->where('status', 'published')->latest('id')->first();
+            if ($parentPost) {
+                $postCategory = $parentPost->categories()->first();
+            }
+        } catch (\Throwable $e) {
+            $parentPost = null;
+            $postCategory = null;
+        }
 
-try {
-    $parentPost = $media->posts()->where('status', 'published')->latest('id')->first();
-    if ($parentPost) {
-        $postCategory = $parentPost->categories()->first();
-    }
-} catch (\Throwable $e) {
-    $parentPost = null;
-    $postCategory = null;
-}
+        $breadcrumbTerm = $mediaCategoryTerm ?: $postCategory;
 
-$breadcrumbTerm = $mediaCategoryTerm ?: $postCategory;
+        // -----------------------------
+        // ✅ STRICT SAME-CATEGORY RELATED (RANDOM)
+        // -----------------------------
+        $related = collect();
+        $relatedLinks = collect();
 
-// -----------------------------
-// ✅ STRICT SAME-CATEGORY RELATED (RANDOM)
-// -----------------------------
-$related = collect();
-$relatedLinks = collect();
+        $fetchSameCategoryRandom = function (array $excludeIds, int $limit) use (
+            $mediaCategoryTaxId,
+            $mediaCategoryIds,
+        ) {
+            if (!$mediaCategoryTaxId || empty($mediaCategoryIds)) {
+                return collect();
+            }
 
-$fetchSameCategoryRandom = function (array $excludeIds, int $limit) use (
-    $mediaCategoryTaxId,
-    $mediaCategoryIds,
-) {
-    if (!$mediaCategoryTaxId || empty($mediaCategoryIds)) {
-        return collect();
-    }
+            try {
+                return \App\Models\Media::query()
+                    ->whereNotIn('id', $excludeIds)
+                    ->whereHas('terms', function ($q) use ($mediaCategoryTaxId, $mediaCategoryIds) {
+                        $q->where('terms.taxonomy_id', $mediaCategoryTaxId)->whereIn('terms.id', $mediaCategoryIds);
+                    })
+                    ->inRandomOrder()
+                    ->limit($limit)
+                    ->get()
+                    ->filter(fn($m) => $m instanceof \App\Models\Media && $m->isImage())
+                    ->unique('id')
+                    ->values();
+            } catch (\Throwable $e) {
+                return collect();
+            }
+        };
 
-    try {
-        return \App\Models\Media::query()
-            ->whereNotIn('id', $excludeIds)
-            ->whereHas('terms', function ($q) use ($mediaCategoryTaxId, $mediaCategoryIds) {
-                $q->where('terms.taxonomy_id', $mediaCategoryTaxId)->whereIn('terms.id', $mediaCategoryIds);
-            })
-            ->inRandomOrder()
-            ->limit($limit)
-            ->get()
-            ->filter(fn($m) => $m instanceof \App\Models\Media && $m->isImage())
-            ->unique('id')
-            ->values();
-    } catch (\Throwable $e) {
-        return collect();
-    }
-};
+        if ($mediaCategoryTaxId && !empty($mediaCategoryIds)) {
+            $related = $fetchSameCategoryRandom([$media->id], 80)
+                ->take(10)
+                ->values();
 
-if ($mediaCategoryTaxId && !empty($mediaCategoryIds)) {
-    $related = $fetchSameCategoryRandom([$media->id], 80)
-        ->take(10)
-        ->values();
+            $excludeForLinks = collect([$media->id])
+                ->merge($related->pluck('id'))
+                ->unique()
+                ->values()
+                ->all();
 
-    $excludeForLinks = collect([$media->id])
-        ->merge($related->pluck('id'))
-        ->unique()
-        ->values()
-        ->all();
+            $relatedLinks = $fetchSameCategoryRandom($excludeForLinks, 80)->take(10)->values();
 
-    $relatedLinks = $fetchSameCategoryRandom($excludeForLinks, 80)->take(10)->values();
+            $need = 10 - $relatedLinks->count();
+            if ($need > 0) {
+                $more = $fetchSameCategoryRandom([$media->id], 120)
+                    ->reject(fn($m) => $relatedLinks->contains('id', $m->id))
+                    ->take($need)
+                    ->values();
 
-    $need = 10 - $relatedLinks->count();
-    if ($need > 0) {
-        $more = $fetchSameCategoryRandom([$media->id], 120)
-            ->reject(fn($m) => $relatedLinks->contains('id', $m->id))
-            ->take($need)
-            ->values();
+                $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
+            }
+        }
 
-        $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
-    }
-}
+        // -----------------------------
+        // ✅ Custom JSON (WP-like) loader
+        // -----------------------------
+        $customJsonRaw = data_get($meta, 'custom_json', null);
+        if ($customJsonRaw === null || $customJsonRaw === '') {
+            $customJsonRaw = data_get($meta, 'frontend.custom_json', null);
+        }
 
-// -----------------------------
-// ✅ Custom JSON (WP-like) loader
-// -----------------------------
-$customJsonRaw = data_get($media->meta ?? [], 'custom_json', null);
-if ($customJsonRaw === null || $customJsonRaw === '') {
-    $customJsonRaw = data_get($media->meta ?? [], 'frontend.custom_json', null);
-}
+        $customJson = null;
 
-$customJson = null;
+        if (is_array($customJsonRaw)) {
+            $customJson = $customJsonRaw;
+        } elseif (is_string($customJsonRaw)) {
+            $str = trim($customJsonRaw);
 
-if (is_array($customJsonRaw)) {
-    $customJson = $customJsonRaw;
-} elseif (is_string($customJsonRaw)) {
-    $str = trim($customJsonRaw);
+            if ($str !== '') {
+                $openTag = '<' . 'script';
+                $closeTag = '</' . 'script' . '>';
 
-    if ($str !== '') {
-        $openTag = '<' . 'script';
-        $closeTag = '</' . 'script' . '>';
+                $openPos = stripos($str, $openTag);
 
-        $openPos = stripos($str, $openTag);
+                if ($openPos !== false) {
+                    $gtPos = strpos($str, '>', $openPos);
+                    if ($gtPos !== false) {
+                        $endPos = stripos($str, $closeTag, $gtPos + 1);
+                        if ($endPos !== false) {
+                            $str = substr($str, $gtPos + 1, $endPos - ($gtPos + 1));
+                            $str = trim((string) $str);
+                        }
+                    }
+                }
 
-        if ($openPos !== false) {
-            $gtPos = strpos($str, '>', $openPos);
-            if ($gtPos !== false) {
-                $endPos = stripos($str, $closeTag, $gtPos + 1);
-                if ($endPos !== false) {
-                    $str = substr($str, $gtPos + 1, $endPos - ($gtPos + 1));
-                    $str = trim((string) $str);
+                $decoded = json_decode($str, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $customJson = $decoded;
                 }
             }
         }
 
-        $decoded = json_decode($str, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            $customJson = $decoded;
-        }
-    }
-}
-
-$isJsonLd = is_array($customJson) && (isset($customJson['@context']) || isset($customJson['@type']));
+        $isJsonLd = is_array($customJson) && (isset($customJson['@context']) || isset($customJson['@type']));
         $printJsonLdHere = false;
     @endphp
 
@@ -286,11 +341,52 @@ $isJsonLd = is_array($customJson) && (isset($customJson['@context']) || isset($c
                                     ) !!}
                                 </div>
 
+                                @php
+                                    // ✅ meta can be array or JSON string
+                                    $rMeta = $r->meta ?? [];
+                                    if (is_string($rMeta) && trim($rMeta) !== '') {
+                                        $decoded = json_decode($rMeta, true);
+                                        $rMeta = is_array($decoded) ? $decoded : [];
+                                    }
+                                    if (!is_array($rMeta)) {
+                                        $rMeta = [];
+                                    }
+
+                                    // ✅ extract html safely (string OR array like ['html' => '...'])
+                                    $rMetaDescRaw = data_get($rMeta, 'frontend.meta_description', '');
+                                    if (is_array($rMetaDescRaw)) {
+                                        $rMetaDescRaw = $rMetaDescRaw['html'] ?? ($rMetaDescRaw['value'] ?? '');
+                                    }
+                                    if (is_object($rMetaDescRaw)) {
+                                        $arr = (array) $rMetaDescRaw;
+                                        $rMetaDescRaw = $arr['html'] ?? ($arr['value'] ?? '');
+                                    }
+                                    $rMetaDescHtml = is_string($rMetaDescRaw) ? trim($rMetaDescRaw) : '';
+                                    $rMetaDescHtml =
+                                        $rMetaDescHtml !== '' ? strip_tags($rMetaDescHtml, $allowedHtml) : '';
+
+                                    // optional: subtitle
+                                    $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
+                                @endphp
+
                                 <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
                                     <h3 class="text-sm font-semibold leading-snug line-clamp-2">
                                         {{ $rTitle }}
                                     </h3>
+
+                                    @if ($rMetaTitle !== '')
+                                        <div class="mt-1 text-xs text-slate-500 line-clamp-1">
+                                            {{ $rMetaTitle }}
+                                        </div>
+                                    @endif
+
+                                    @if ($rMetaDescHtml !== '')
+                                        <div class="mt-2 text-xs leading-5 text-slate-600 line-clamp-3 text-left">
+                                            {!! $rMetaDescHtml !!}
+                                        </div>
+                                    @endif
                                 </div>
+
                             </a>
                         @endforeach
                     </div>

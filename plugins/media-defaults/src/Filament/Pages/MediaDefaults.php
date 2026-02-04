@@ -3,9 +3,9 @@
 namespace Plugins\MediaDefaults\Filament\Pages;
 
 use App\Cms\Core\Settings;
+use App\Filament\Forms\Components\WpClassicEditor;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -60,24 +60,28 @@ class MediaDefaults extends Page implements HasForms
                 TextInput::make('default_title')
                     ->label('Default Title')
                     ->maxLength(255)
-                    ->helperText('Used only if Media title is empty.'),
-
-                Textarea::make('default_description')
-                    ->label('Default Description (Product)')
-                    ->rows(7)
-                    ->helperText('Used only if Media description is empty. (Plain text default)')
+                    ->helperText('Used only if Media title is empty.')
                     ->columnSpanFull(),
+
+                // ✅ TinyMCE editor for Product Description
+                WpClassicEditor::make('default_description')
+                    ->label('Default Description (Product)')
+                    ->height(260)
+                    ->columnSpanFull()
+                    ->helperText('Used only if Media description is empty.'),
 
                 TextInput::make('default_sub_title')
                     ->label('Default Sub title')
                     ->maxLength(255)
-                    ->helperText('Used only if Media Sub title is empty.'),
-
-                Textarea::make('default_sub_description')
-                    ->label('Default Sub description')
-                    ->rows(7)
-                    ->helperText('Used only if Media Sub description is empty. (Plain text default)')
+                    ->helperText('Used only if Media Sub title is empty.')
                     ->columnSpanFull(),
+
+                // ✅ TinyMCE editor for Sub Description
+                WpClassicEditor::make('default_sub_description')
+                    ->label('Default Sub description')
+                    ->height(260)
+                    ->columnSpanFull()
+                    ->helperText('Used only if Media Sub description is empty.'),
             ]);
     }
 

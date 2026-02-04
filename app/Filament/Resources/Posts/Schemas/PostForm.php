@@ -9,7 +9,6 @@ use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -21,6 +20,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use App\Filament\Forms\Components\WpClassicEditor;
 
 class PostForm
 {
@@ -120,26 +120,49 @@ class PostForm
                                         return $base . $preview;
                                     }),
 
-                                Textarea::make('excerpt')
-                                    ->rows(3)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        // ✅ SEO description fill (only if empty)
-                                        if (!filled($get('meta_json.seo.description'))) {
-                                            $text = trim((string) $state);
-                                            if ($text !== '') {
-                                                $set('meta_json.seo.description', Str::limit($text, 160, ''));
-                                            }
-                                        }
-                                    }),
+                                /*    Textarea::make('excerpt')
+                                       ->rows(3)
+                                       ->live(onBlur: true)
+                                       ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                           // ✅ SEO description fill (only if empty)
+                                           if (!filled($get('meta_json.seo.description'))) {
+                                               $text = trim((string) $state);
+                                               if ($text !== '') {
+                                                   $set('meta_json.seo.description', Str::limit($text, 160, ''));
+                                               }
+                                           }
+                                       }), */
 
                                 // ✅ Editor
-                                RichEditor::make('content_json')
+                                WpClassicEditor::make('content_json')
                                     ->label('Content')
+                                    ->height(320)
                                     ->columnSpanFull()
-                                    ->extraAttributes([
-                                        'style' => 'min-height: 420px;',
-                                    ]),
+
+                                    // ✅ editor always receives a STRING (not array)
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+
+                                    // ✅ when saving, convert string back into array for content_json
+                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get): array {
+                                        $current = $get('content_json');
+
+                                        if (!is_array($current)) {
+                                            $current = [];
+                                        }
+
+                                        $current['html'] = is_string($state) ? $state : '';
+
+                                        return $current;
+                                    }),
+
+
 
                                 // ✅ SEO (Premium-feel)
                                 Section::make('SEO (Premium)')

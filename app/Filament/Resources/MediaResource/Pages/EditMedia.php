@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\MediaResource\Pages;
 
+use App\Cms\Core\Settings;
 use App\Cms\Core\SettingsRepository;
 use App\Cms\Media\MediaUploader;
+use App\Filament\Forms\Components\WpClassicEditor;
 use App\Filament\Resources\MediaResource;
 use App\Jobs\GenerateMediaVariants;
 use App\Models\Media;
@@ -12,16 +14,15 @@ use App\Models\Term;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -64,6 +65,7 @@ class EditMedia extends EditRecord
             }
         }
     }
+
     /**
      * Allow plugins to auto-fill defaults when Edit Media loads.
      * Only affects the initial form fill (doesn't overwrite user values).
@@ -75,6 +77,75 @@ class EditMedia extends EditRecord
         return is_array($filtered) ? $filtered : $data;
     }
 
+    // ------------------------------------------------------------------
+    // ✅ Helpers for plugin-defaults-on-save (WP-like behavior)
+    // ------------------------------------------------------------------
+
+    protected function editorValueToString($value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            return (string) ($value['html'] ?? $value['value'] ?? '');
+        }
+
+        if (is_object($value)) {
+            $arr = (array) $value;
+            return (string) ($arr['html'] ?? $arr['value'] ?? '');
+        }
+
+        return (string) $value;
+    }
+
+    protected function htmlIsEmpty($value): bool
+    {
+        $html = trim($this->editorValueToString($value));
+        if ($html === '') {
+            return true;
+        }
+
+        // Convert &nbsp; and other entities, remove tags
+        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace("\xc2\xa0", ' ', $text); // NBSP char
+        $text = trim(strip_tags($text));
+
+        return $text === '';
+    }
+
+    protected function normalizeDefaultToHtml(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        // If already has tags, keep as-is
+        if ($value !== strip_tags($value)) {
+            return $value;
+        }
+
+        // Plain text -> <p>.. with <br>
+        $escaped = e($value);
+        return '<p>' . nl2br($escaped) . '</p>';
+    }
+
+    protected function sanitizeHtml(string $html): string
+    {
+        $html = trim($html);
+        if ($html === '') {
+            return '';
+        }
+
+        $allowed = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a>';
+        return strip_tags($html, $allowed);
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -83,9 +154,6 @@ class EditMedia extends EditRecord
                 'lg' => 3,
             ])
             ->components([
-                /**
-                 * LEFT (2/3): Tabs (Content + CSS/JS + JSON + Preview)
-                 */
                 Tabs::make('Editor')
                     ->columnSpan([
                         'default' => 1,
@@ -100,17 +168,14 @@ class EditMedia extends EditRecord
                                     ->maxLength(255)
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        // slug fill (if empty)
                                         if (!filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }
 
-                                        // ✅ SEO title auto-fill (only if empty)
                                         if (!filled($get('meta.seo.title'))) {
                                             $set('meta.seo.title', (string) $state);
                                         }
 
-                                        // ✅ Frontend meta title auto-fill (only if empty)
                                         if (!filled($get('meta.frontend.meta_title'))) {
                                             $set('meta.frontend.meta_title', (string) $state);
                                         }
@@ -141,28 +206,42 @@ class EditMedia extends EditRecord
                                         return $base . '/' . ltrim($slug, '/');
                                     }),
 
-                                RichEditor::make('description')
+                                WpClassicEditor::make('description')
                                     ->label('Description (Product)')
-                                    ->toolbarButtons([
-                                        'bold',
-                                        'italic',
-                                        'underline',
-                                        'bulletList',
-                                        'orderedList',
-                                        'link',
-                                        'blockquote',
-                                        'undo',
-                                        'redo',
+                                    ->height(260)
+                                    ->toolbar([
+                                        'blocks',
+                                        'bold italic underline',
+                                        'bullist numlist',
+                                        'link blockquote',
+                                        'removeformat',
                                     ])
-                                    ->extraAttributes(['style' => 'min-height: 260px;'])
+                                    ->formatStateUsing(function ($state) {
+                                        if (is_string($state))
+                                            return $state;
+                                        if (is_array($state))
+                                            return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        return '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        if (is_string($state))
+                                            return $state;
+                                        if (is_array($state))
+                                            return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        return '';
+                                    })
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        // ✅ Auto-fill Frontend meta description from Description (ONLY if empty)
-                                        if (!filled($get('meta.frontend.meta_description'))) {
-                                            $set('meta.frontend.meta_description', (string) $state); // store HTML
+                                        $current = data_get($get('meta') ?? [], 'frontend.meta_description');
+
+                                        $currentString = is_string($current)
+                                            ? $current
+                                            : (is_array($current) ? (string) ($current['html'] ?? $current['value'] ?? '') : '');
+
+                                        if (!filled($currentString)) {
+                                            $set('meta.frontend.meta_description', (string) $state);
                                         }
 
-                                        // (optional) keep SEO auto-fill too, if you want:
                                         if (!filled($get('meta.seo.description'))) {
                                             $plain = trim(strip_tags((string) $state));
                                             if ($plain !== '') {
@@ -171,46 +250,39 @@ class EditMedia extends EditRecord
                                         }
                                     }),
 
-                                /*     Textarea::make('caption')
-                                        ->label('Caption')
-                                        ->rows(3)
-                                        ->live(onBlur: true)
-                                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                            $text = trim((string) $state);
-
-                                            // ✅ If description is empty AND frontend meta desc is empty -> fill from caption
-                                            if (!filled($get('description')) && !filled($get('meta.frontend.meta_description')) && $text !== '') {
-                                                $set('meta.frontend.meta_description', $text);
-                                            }
-                                        }), */
-
-                                // ✅ Frontend meta
                                 TextInput::make('meta.frontend.meta_title')
                                     ->label('Sub title')
                                     ->helperText('Used on attachment page (frontend) under related section.')
                                     ->maxLength(255)
                                     ->live(onBlur: true),
 
-                                RichEditor::make('meta.frontend.meta_description')
+                                WpClassicEditor::make('meta.frontend.meta_description')
                                     ->label('Sub description')
                                     ->helperText('Used on attachment page (frontend) under related section.')
-                                    ->toolbarButtons([
-                                        'bold',
-                                        'italic',
-                                        'underline',
-                                        'bulletList',
-                                        'orderedList',
-                                        'link',
-                                        'blockquote',
-                                        'undo',
-                                        'redo',
+                                    ->height(220)
+                                    ->toolbar([
+                                        'blocks',
+                                        'bold italic underline',
+                                        'bullist numlist',
+                                        'link blockquote',
+                                        'removeformat',
                                     ])
-                                    ->extraAttributes([
-                                        'style' => 'min-height: 220px;',
-                                    ])
+                                    ->formatStateUsing(function ($state) {
+                                        if (is_string($state))
+                                            return $state;
+                                        if (is_array($state))
+                                            return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        return '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        if (is_string($state))
+                                            return $state;
+                                        if (is_array($state))
+                                            return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        return '';
+                                    })
                                     ->live(onBlur: true),
 
-                                // ✅ SEO (Premium) — KEEP SAME
                                 Section::make('SEO (Premium)')
                                     ->description('Control how this attachment page appears in Google and when shared on social media.')
                                     ->collapsible()
@@ -274,6 +346,7 @@ class EditMedia extends EditRecord
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
                                     ])
                                     ->live(onBlur: true),
+
                                 Textarea::make('meta.custom_json')
                                     ->label('Custom JSON (WP-like)')
                                     ->helperText('Valid JSON only. Saved per media record. (Do not include <script> tag)')
@@ -292,7 +365,6 @@ class EditMedia extends EditRecord
                                             ) ?: '';
                                         }
 
-                                        // If older data was saved as string JSON, keep it editable.
                                         return (string) $state;
                                     })
                                     ->dehydrateStateUsing(function ($state) {
@@ -304,7 +376,6 @@ class EditMedia extends EditRecord
 
                                         $decoded = json_decode($state, true);
 
-                                        // extra safety: if decode fails, keep null (rules(['json']) should prevent this anyway)
                                         if (json_last_error() !== JSON_ERROR_NONE) {
                                             return null;
                                         }
@@ -312,11 +383,7 @@ class EditMedia extends EditRecord
                                         return $decoded;
                                     })
                                     ->live(onBlur: true),
-
                             ]),
-
-
-
 
                         Tab::make('Frontend Preview')
                             ->schema([
@@ -351,9 +418,6 @@ class EditMedia extends EditRecord
                             ]),
                     ]),
 
-                /**
-                 * RIGHT (1/3): Media / Settings
-                 */
                 Section::make('Media')
                     ->columnSpan([
                         'default' => 1,
@@ -394,7 +458,6 @@ class EditMedia extends EditRecord
                             ->storeFiles(false)
                             ->helperText('Replaces original file. Variants regenerate for images.'),
 
-                        // ✅ Media Categories (multi) + runtime create
                         Select::make('category_term_ids')
                             ->label('Categories')
                             ->helperText('Assign categories to this media. You can create new categories here.')
@@ -541,7 +604,6 @@ class EditMedia extends EditRecord
 
         unset($data['replace_file']);
 
-        // ✅ categories (store for afterSave sync, then remove from record payload)
         $this->pendingCategoryTermIds = isset($data['category_term_ids']) && is_array($data['category_term_ids'])
             ? collect($data['category_term_ids'])
                 ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
@@ -569,9 +631,64 @@ class EditMedia extends EditRecord
             $data['attachment_indexable'] = (bool) $data['attachment_indexable'];
         }
 
-        // ✅ ensure meta is array so nested keys save properly
         if (isset($data['meta']) && !is_array($data['meta'])) {
             $data['meta'] = [];
+        }
+
+        // ------------------------------------------------------------------
+        // ✅ WP-LIKE: FORCE plugin defaults into DB ON SAVE if fields are blank
+        // ------------------------------------------------------------------
+        $settings = app(Settings::class);
+        $group = 'plugins.media-defaults';
+
+        $defaultTitle = trim((string) $settings->get('default_title', '', $group));
+        $defaultDescRaw = (string) $settings->get('default_description', '', $group);
+        $defaultSubTitle = trim((string) $settings->get('default_sub_title', '', $group));
+        $defaultSubDescRaw = (string) $settings->get('default_sub_description', '', $group);
+
+        $defaultDesc = $this->sanitizeHtml($this->normalizeDefaultToHtml($defaultDescRaw));
+        $defaultSubDesc = $this->sanitizeHtml($this->normalizeDefaultToHtml($defaultSubDescRaw));
+
+        // Title (only if empty in DB AND empty in form)
+        if (
+            !filled($data['title'] ?? null)
+            && $defaultTitle !== ''
+            && !filled($this->record?->title)
+        ) {
+            $data['title'] = $defaultTitle;
+        }
+
+        // Description (Product)
+        if (
+            $this->htmlIsEmpty($data['description'] ?? null)
+            && $defaultDesc !== ''
+            && $this->htmlIsEmpty($this->record?->description)
+        ) {
+            $data['description'] = $defaultDesc;
+        }
+
+        // Sub title
+        $currentSubTitle = data_get($data, 'meta.frontend.meta_title');
+        $recordSubTitle = data_get($this->record?->meta ?? [], 'frontend.meta_title');
+
+        if (
+            !filled($currentSubTitle)
+            && $defaultSubTitle !== ''
+            && !filled($recordSubTitle)
+        ) {
+            data_set($data, 'meta.frontend.meta_title', $defaultSubTitle);
+        }
+
+        // Sub description
+        $currentSubDesc = data_get($data, 'meta.frontend.meta_description');
+        $recordSubDesc = data_get($this->record?->meta ?? [], 'frontend.meta_description');
+
+        if (
+            $this->htmlIsEmpty($currentSubDesc)
+            && $defaultSubDesc !== ''
+            && $this->htmlIsEmpty($recordSubDesc)
+        ) {
+            data_set($data, 'meta.frontend.meta_description', $defaultSubDesc);
         }
 
         return $data;
@@ -582,7 +699,6 @@ class EditMedia extends EditRecord
         /** @var Media $record */
         $record = $this->record;
 
-        // ✅ sync categories every save
         $record->syncCategoryTerms($this->pendingCategoryTermIds);
 
         if (!$this->pendingReplaceFile) {
@@ -607,8 +723,6 @@ class EditMedia extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-
-
             Action::make('delete')
                 ->label('Delete')
                 ->icon('heroicon-o-trash')
@@ -645,6 +759,7 @@ class EditMedia extends EditRecord
                         ->success()
                         ->send();
                 }),
+
             Action::make('visit')
                 ->label('Visit')
                 ->icon('heroicon-o-arrow-top-right-on-square')

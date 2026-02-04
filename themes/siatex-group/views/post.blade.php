@@ -4,8 +4,9 @@
     @php
         /** @var \App\Models\Post $post */
 
+        use Illuminate\Support\Str;
+
         $title = (string) ($post->title ?? '');
-        $excerpt = trim((string) ($post->excerpt ?? ''));
         $media = $post->featuredMedia;
 
         $category = null;
@@ -14,6 +15,37 @@
         } catch (\Throwable $e) {
             $category = null;
         }
+
+        // -----------------------------
+        // ✅ HERO CONTENT (under title)
+        // Priority:
+        // 1) content_json['html'] (WpClassicEditor / content_html virtual)
+        // 2) BlockRenderer render(content_json) (if you still store blocks)
+        // -----------------------------
+
+        $allowedHtml = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>';
+
+        $rawHtml = '';
+
+        // 1) Preferred: WpClassicEditor stored HTML inside content_json['html']
+        $htmlFromJson = data_get($post->content_json ?? [], 'html');
+        if (is_string($htmlFromJson) && trim($htmlFromJson) !== '') {
+            $rawHtml = $htmlFromJson;
+        }
+
+        // 2) Fallback: render blocks if not using html key
+        if (trim($rawHtml) === '') {
+            try {
+                $rawHtml = (string) app(\App\Cms\Content\Blocks\BlockRenderer::class)->render(
+                    $post->content_json ?? [],
+                );
+            } catch (\Throwable $e) {
+                $rawHtml = '';
+            }
+        }
+
+        // Sanitize for safe frontend output
+        $heroHtml = trim($rawHtml) !== '' ? strip_tags($rawHtml, $allowedHtml) : '';
     @endphp
 
     {{-- Breadcrumb --}}
@@ -47,10 +79,11 @@
                         {{ $title }}
                     </h1>
 
-                    @if ($excerpt !== '')
-                        <p class="mt-4 text-sm leading-7 text-slate-700">
-                            {{ $excerpt }}
-                        </p>
+                    {{-- ✅ SHOW POST CONTENT UNDER TITLE (HTML from editor) --}}
+                    @if ($heroHtml !== '')
+                        <div class="prose prose-slate mt-4 max-w-none text-sm leading-7 text-slate-700">
+                            {!! $heroHtml !!}
+                        </div>
                     @endif
 
                     <a href="#"
@@ -81,22 +114,10 @@
         </div>
     </section>
 
-    {{-- Content --}}
-    <section class="bg-white">
-        <div class="cms-container mx-auto px-4 py-10">
-            <div class="prose prose-slate max-w-none">
-                {!! app(\App\Cms\Content\Blocks\BlockRenderer::class)->render($post->content_json ?? []) !!}
-            </div>
-        </div>
-    </section>
+
 
     {{-- ✅ Custom JSON (per post) for frontend + optional JSON-LD --}}
     @php
-        // Supports:
-        // - meta_json.custom_json (array OR string JSON)
-        // - meta_json.seo.custom_json (legacy)
-        // - if user pasted <script type="application/ld+json">...</script>, extract JSON
-
         $customJsonRaw =
             data_get($post->meta_json ?? [], 'custom_json', null) ?:
             data_get($post->meta_json ?? [], 'seo.custom_json', null);
@@ -109,7 +130,6 @@
             $str = trim($customJsonRaw);
 
             if ($str !== '') {
-                // Extract JSON from script tag if user pasted whole tag
                 $openTag = '<' . 'script';
                 $closeTag = '</' . 'script' . '>';
 

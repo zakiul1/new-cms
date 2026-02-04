@@ -16,6 +16,10 @@ class Post extends Model
         'title',
         'slug',
         'excerpt',
+
+        // ✅ virtual (editor) field
+        'content_html',
+
         'content_json',
         'status',
         'published_at',
@@ -60,9 +64,6 @@ class Post extends Model
         return $this->belongsTo(Media::class, 'featured_media_id');
     }
 
-    /**
-     * ✅ Base pivot relation (WRITE HERE)
-     */
     public function mediaPivot(): BelongsToMany
     {
         return $this->belongsToMany(Media::class, 'post_media')
@@ -70,9 +71,6 @@ class Post extends Model
             ->withTimestamps();
     }
 
-    /**
-     * ✅ Read relations (OK)
-     */
     public function productMedia(): BelongsToMany
     {
         return $this->mediaPivot()
@@ -86,28 +84,57 @@ class Post extends Model
             ->wherePivot('role', 'gallery')
             ->orderBy('post_media.sort_order');
     }
-    public function getContentJsonAttribute($value): ?array
-{
-    if (is_array($value)) {
-        return $value;
-    }
-
-    if ($value === null) {
-        return null;
-    }
-
-    if (is_string($value) && trim($value) !== '') {
-        $decoded = json_decode($value, true);
-        return is_array($decoded) ? $decoded : null;
-    }
-
-    return null;
-}
-
 
     /**
-     * ✅ Sync media for a role (product/gallery) with sort_order
+     * ✅ Virtual string field for WP Classic editor
+     * Reads HTML from content_json['html']
      */
+    public function getContentHtmlAttribute(): string
+    {
+        $json = $this->content_json;
+
+        // tolerate legacy string
+        if (is_string($json)) {
+            $decoded = json_decode($json, true);
+            $json = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($json)) {
+            $json = [];
+        }
+
+        $html = $json['html'] ?? '';
+
+        return is_string($html) ? $html : '';
+    }
+
+    /**
+     * ✅ Save HTML into content_json['html'] (same DB column)
+     */
+    public function setContentHtmlAttribute($value): void
+    {
+        $html = is_string($value) ? $value : '';
+
+        $json = $this->content_json;
+
+        // tolerate legacy string
+        if (is_string($json)) {
+            $decoded = json_decode($json, true);
+            $json = is_array($decoded) ? $decoded : [];
+        }
+
+        if (!is_array($json)) {
+            $json = [];
+        }
+
+        $json['html'] = $html;
+
+        $this->attributes['content_json'] = json_encode(
+            $json,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+    }
+
     public function syncMediaRole(string $role, array $mediaIds): void
     {
         $role = trim($role);
