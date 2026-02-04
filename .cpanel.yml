@@ -1,26 +1,16 @@
 deployment:
   tasks:
-    # ====== Paths (change only if your username/folders are different) ======
     - export APPPATH=/home/siatexglobal/laravel-app/
     - export PUBLICPATH=/home/siatexglobal/public_html/
 
-    # ====== Ensure folders exist ======
     - /bin/mkdir -p $APPPATH
     - /bin/mkdir -p $PUBLICPATH
 
-    # ====== Deploy app code (EXCLUDING .env and storage) ======
-    # This updates code files but keeps runtime data safe.
-    - /bin/rsync -a --exclude=".git/" --exclude=".env" --exclude="storage/" ./ $APPPATH
+    # Copy ALL files to laravel-app (including hidden like .htaccess if any in root)
+    - /bin/cp -a . $APPPATH
 
-    # ====== Deploy public folder to public_html ======
-    - /bin/rsync -a $APPPATH/public/ $PUBLICPATH/
+    # Remove git folder from deployed app
+    - /bin/rm -rf $APPPATH/.git
 
-    # ====== Ensure storage exists (but do not delete anything) ======
-    - /bin/mkdir -p $APPPATH/storage/app
-    - /bin/mkdir -p $APPPATH/storage/framework/cache
-    - /bin/mkdir -p $APPPATH/storage/framework/sessions
-    - /bin/mkdir -p $APPPATH/storage/framework/views
-    - /bin/mkdir -p $APPPATH/storage/logs
-
-    # ====== Remind if .env missing ======
-    - if [ -f "$APPPATH/.env" ]; then echo "OK: .env exists (kept)"; else echo "WARNING: .env missing - create it manually in $APPPATH"; fi
+    # Copy public files to public_html (includes .htaccess inside public)
+    - /bin/cp -a $APPPATH/public/. $PUBLICPATH
