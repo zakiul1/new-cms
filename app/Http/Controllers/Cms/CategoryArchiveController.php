@@ -17,12 +17,14 @@ class CategoryArchiveController extends Controller
         $term = Term::query()
             ->where('taxonomy_id', $taxonomyId)
             ->where('slug', $slug)
+            ->where('visibility', 'public')
             ->firstOrFail();
+
 
         $posts = Post::query()
             ->where('type', 'post')
             ->where('status', 'published')
-            ->whereHas('categories', fn ($q) => $q->whereKey($term->id))
+            ->whereHas('categories', fn($q) => $q->whereKey($term->id))
             ->latest('id')
             ->paginate(18);
 

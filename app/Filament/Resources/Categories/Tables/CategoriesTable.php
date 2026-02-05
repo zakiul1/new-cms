@@ -58,6 +58,11 @@ class CategoriesTable
                 TextColumn::make('parent.name')
                     ->label('Parent')
                     ->toggleable(),
+                TextColumn::make('visibility')
+                    ->label('Visibility')
+                    ->badge()
+                    ->sortable(),
+
 
                 TextColumn::make('updated_at')
                     ->since()

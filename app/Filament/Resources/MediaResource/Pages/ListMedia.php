@@ -21,6 +21,10 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
 use Filament\Tables\Columns\TagsColumn;
+use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Select;
+use Illuminate\Database\Eloquent\Collection;
+
 
 
 class ListMedia extends ListRecords
@@ -121,9 +125,92 @@ class ListMedia extends ListRecords
     protected function buildBulkActions(): array
     {
         return [
+            BulkAction::make('copy_to_media_category')
+                ->label('Copy to Category')
+                ->icon('heroicon-o-document-duplicate')
+                ->form([
+                    Select::make('category_id')
+                        ->label('Target Category')
+                        ->options(fn() => $this->categoryOptions())
+                        ->searchable()
+                        ->required(),
+                ])
+                ->action(function (Collection $records, array $data): void {
+                    $taxonomyId = Taxonomy::idByKey('media_category');
+                    $categoryId = (int) ($data['category_id'] ?? 0);
+
+                    if (!$taxonomyId || $categoryId <= 0) {
+                        return;
+                    }
+
+                    $valid = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->where('id', $categoryId)
+                        ->exists();
+
+                    if (!$valid) {
+                        Notification::make()->title('Invalid category selected')->danger()->send();
+                        return;
+                    }
+
+                    foreach ($records as $media) {
+                        /** @var \App\Models\Media $media */
+                        $media->terms()->syncWithoutDetaching([$categoryId]);
+                    }
+                })
+                ->deselectRecordsAfterCompletion(),
+
+            BulkAction::make('move_to_media_category')
+                ->label('Move to Category')
+                ->icon('heroicon-o-arrow-right')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->form([
+                    Select::make('category_id')
+                        ->label('Target Category')
+                        ->options(fn() => $this->categoryOptions())
+                        ->searchable()
+                        ->required(),
+                ])
+                ->action(function (Collection $records, array $data): void {
+                    $taxonomyId = Taxonomy::idByKey('media_category');
+                    $categoryId = (int) ($data['category_id'] ?? 0);
+
+                    if (!$taxonomyId || $categoryId <= 0) {
+                        return;
+                    }
+
+                    $valid = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->where('id', $categoryId)
+                        ->exists();
+
+                    if (!$valid) {
+                        Notification::make()->title('Invalid category selected')->danger()->send();
+                        return;
+                    }
+
+                    // Only detach media_category terms (do NOT touch media_folder)
+                    $allMediaCategoryTermIds = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->pluck('id')
+                        ->all();
+
+                    foreach ($records as $media) {
+                        /** @var \App\Models\Media $media */
+                        if (!empty($allMediaCategoryTermIds)) {
+                            $media->terms()->detach($allMediaCategoryTermIds);
+                        }
+
+                        $media->terms()->syncWithoutDetaching([$categoryId]);
+                    }
+                })
+                ->deselectRecordsAfterCompletion(),
+
             DeleteBulkAction::make(),
         ];
     }
+
 
     protected function frontendUrl(Media $record): string
     {

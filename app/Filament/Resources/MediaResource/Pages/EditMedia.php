@@ -146,6 +146,33 @@ class EditMedia extends EditRecord
         return strip_tags($html, $allowed);
     }
 
+    // ------------------------------------------------------------------
+    // ✅ Product field helpers (from selected media category term)
+    // ------------------------------------------------------------------
+
+    protected function guessProductFromSelectedCategory(array $categoryIds): string
+    {
+        $categoryIds = array_values(array_filter(array_map('intval', $categoryIds), fn($id) => $id > 0));
+
+        if (empty($categoryIds)) {
+            return '';
+        }
+
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxonomyId) {
+            return '';
+        }
+
+        $term = Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->whereIn('id', $categoryIds)
+            ->orderBy('name')
+            ->first();
+
+        // Term must have a `product` column for this to work.
+        return $term ? trim((string) ($term->product ?? '')) : '';
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -163,7 +190,7 @@ class EditMedia extends EditRecord
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
-                                    ->label('Title')
+                                    ->label('H1')
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
@@ -180,6 +207,41 @@ class EditMedia extends EditRecord
                                             $set('meta.frontend.meta_title', (string) $state);
                                         }
                                     }),
+
+                                // ✅ NEW: Product (auto from selected category's product; user can override)
+                                TextInput::make('meta.frontend.product')
+                                    ->label('Product')
+                                    ->maxLength(255)
+                                    ->helperText('Defaults from selected category Product. You can override per media.')
+                                    ->formatStateUsing(fn($state) => is_string($state) ? $state : '')
+                                    ->afterStateHydrated(function (Set $set, Get $get) {
+                                        $current = trim((string) $get('meta.frontend.product'));
+                                        if ($current !== '') {
+                                            return;
+                                        }
+
+                                        $ids = $get('category_term_ids');
+                                        $ids = is_array($ids) ? $ids : [];
+
+                                        // fallback to record terms if form hasn't hydrated category yet
+                                        if (empty($ids) && $this->record) {
+                                            $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+                                            if ($taxonomyId) {
+                                                $ids = $this->record->terms()
+                                                    ->where('terms.taxonomy_id', $taxonomyId)
+                                                    ->pluck('terms.id')
+                                                    ->map(fn($id) => (int) $id)
+                                                    ->all();
+                                            }
+                                        }
+
+                                        $product = $this->guessProductFromSelectedCategory($ids);
+
+                                        if ($product !== '') {
+                                            $set('meta.frontend.product', $product);
+                                        }
+                                    })
+                                    ->live(onBlur: true),
 
                                 TextInput::make('slug')
                                     ->label('Slug (optional)')
@@ -492,6 +554,20 @@ class EditMedia extends EditRecord
 
                                 $set('category_term_ids', $ids);
                             })
+                            // ✅ NEW: when categories change, auto-fill Product if empty
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                $current = trim((string) $get('meta.frontend.product'));
+                                if ($current !== '') {
+                                    return;
+                                }
+
+                                $ids = is_array($state) ? $state : [];
+                                $product = $this->guessProductFromSelectedCategory($ids);
+
+                                if ($product !== '') {
+                                    $set('meta.frontend.product', $product);
+                                }
+                            })
                             ->createOptionForm([
                                 TextInput::make('name')
                                     ->required()
@@ -691,6 +767,15 @@ class EditMedia extends EditRecord
             data_set($data, 'meta.frontend.meta_description', $defaultSubDesc);
         }
 
+        // ✅ NEW: if Product still empty, fill from selected category product (don’t overwrite)
+        $currentProduct = trim((string) data_get($data, 'meta.frontend.product', ''));
+        if ($currentProduct === '' && !empty($this->pendingCategoryTermIds)) {
+            $guess = $this->guessProductFromSelectedCategory($this->pendingCategoryTermIds);
+            if ($guess !== '') {
+                data_set($data, 'meta.frontend.product', $guess);
+            }
+        }
+
         return $data;
     }
 
@@ -771,19 +856,8 @@ class EditMedia extends EditRecord
 
                     return !($enabled && (bool) $record->attachment_public);
                 })
-                ->action(function (Media $record): void {
-                    $url = url('/' . ltrim((string) $record->slug, '/'));
-                    $jsUrl = json_encode($url, JSON_UNESCAPED_SLASHES);
-
-                    $this->js(<<<JS
-                        (function () {
-                            const w = window.open({$jsUrl}, '_blank', 'noopener,noreferrer');
-                            if (!w) {
-                                alert('Popup blocked. Please allow popups for this site, then click Visit again.');
-                            }
-                        })();
-                    JS);
-                }),
+                ->url(fn(Media $record): string => url('/' . ltrim((string) $record->slug, '/')))
+                ->openUrlInNewTab(),
 
             Action::make('back')
                 ->label('Back')

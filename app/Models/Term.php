@@ -15,14 +15,23 @@ class Term extends Model
     protected $fillable = [
         'taxonomy_id',
         'name',
+        'product',
         'slug',
         'description',
         'parent_id',
         'sort_order',
+        'visibility',
     ];
+
 
     protected static function booted(): void
     {
+        static::saving(function (Term $term) {
+            // ✅ WP-like behavior: if product is empty, keep it same as name
+            if (!filled($term->product)) {
+                $term->product = (string) ($term->name ?? '');
+            }
+        });
         static::creating(function (Term $term) {
             // ✅ auto slug (fixes "slug doesn't have default value")
             if (blank($term->slug)) {
@@ -151,4 +160,21 @@ class Term extends Model
         // 4) delete folder term itself
         $this->delete();
     }
+
+
+    public function scopePublic($query)
+    {
+        return $query->where('visibility', 'public');
+    }
+
+    public function scopePrivate($query)
+    {
+        return $query->where('visibility', 'private');
+    }
+
+    public function isPublic(): bool
+    {
+        return $this->visibility === 'public';
+    }
+
 }

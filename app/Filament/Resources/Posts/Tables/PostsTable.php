@@ -12,10 +12,16 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\HtmlString;
+use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Select;
+use Illuminate\Database\Eloquent\Collection;
+
+
 
 class PostsTable
 {
@@ -116,8 +122,120 @@ class PostsTable
 
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('copy_to_category')
+                        ->label('Copy to Category')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->form([
+                            Select::make('category_id')
+                                ->label('Target Category')
+                                ->options(function (): array {
+                                    $taxonomyId = Taxonomy::idByKey('category');
+                                    if (!$taxonomyId) {
+                                        return [];
+                                    }
+
+                                    return Term::query()
+                                        ->where('taxonomy_id', $taxonomyId)
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->all();
+                                })
+                                ->searchable()
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $taxonomyId = Taxonomy::idByKey('category');
+                            $categoryId = (int) ($data['category_id'] ?? 0);
+
+                            if (!$taxonomyId || $categoryId <= 0) {
+                                return;
+                            }
+
+                            // Ensure selected term is really a "category" term
+                            $valid = Term::query()
+                                ->where('taxonomy_id', $taxonomyId)
+                                ->where('id', $categoryId)
+                                ->exists();
+
+                            if (!$valid) {
+                                Notification::make()
+                                    ->title('Invalid category selected')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+
+                            foreach ($records as $post) {
+                                /** @var \App\Models\Post $post */
+                                $post->terms()->syncWithoutDetaching([$categoryId]);
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
+                    BulkAction::make('move_to_category')
+                        ->label('Move to Category')
+                        ->icon('heroicon-o-arrow-right')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->form([
+                            Select::make('category_id')
+                                ->label('Target Category')
+                                ->options(function (): array {
+                                    $taxonomyId = Taxonomy::idByKey('category');
+                                    if (!$taxonomyId) {
+                                        return [];
+                                    }
+
+                                    return Term::query()
+                                        ->where('taxonomy_id', $taxonomyId)
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->all();
+                                })
+                                ->searchable()
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $taxonomyId = Taxonomy::idByKey('category');
+                            $categoryId = (int) ($data['category_id'] ?? 0);
+
+                            if (!$taxonomyId || $categoryId <= 0) {
+                                return;
+                            }
+
+                            $valid = Term::query()
+                                ->where('taxonomy_id', $taxonomyId)
+                                ->where('id', $categoryId)
+                                ->exists();
+
+                            if (!$valid) {
+                                Notification::make()
+                                    ->title('Invalid category selected')
+                                    ->danger()
+                                    ->send();
+                                return;
+                            }
+
+                            // Get all term IDs for the "category" taxonomy (so we only detach categories, not tags)
+                            $allCategoryTermIds = Term::query()
+                                ->where('taxonomy_id', $taxonomyId)
+                                ->pluck('id')
+                                ->all();
+
+                            foreach ($records as $post) {
+                                /** @var \App\Models\Post $post */
+                                if (!empty($allCategoryTermIds)) {
+                                    $post->terms()->detach($allCategoryTermIds);
+                                }
+
+                                $post->terms()->syncWithoutDetaching([$categoryId]);
+                            }
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
                     DeleteBulkAction::make(),
                 ]),
             ]);
+
     }
 }

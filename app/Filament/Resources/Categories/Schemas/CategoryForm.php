@@ -28,7 +28,17 @@ class CategoryForm
                                 if (!filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
                                 }
+
+                                // ✅ auto-fill Product from Name (only if empty)
+                                if (!filled($get('product'))) {
+                                    $set('product', (string) $state);
+                                }
                             }),
+
+                        TextInput::make('product')
+                            ->label('Product')
+                            ->maxLength(255)
+                            ->helperText('Defaults to Name. You can change it.'),
 
                         TextInput::make('slug')
                             ->label('Slug (optional)')
@@ -38,6 +48,15 @@ class CategoryForm
                         Textarea::make('description')
                             ->rows(6),
                     ]),
+                Select::make('visibility')
+                    ->label('Visibility')
+                    ->options([
+                        'public' => 'Public (shown on frontend)',
+                        'private' => 'Private (admin/internal only)',
+                    ])
+                    ->default('public')
+                    ->required(),
+
 
                 \Filament\Schemas\Components\Section::make('Parent')
                     ->columnSpan(['default' => 1, 'lg' => 1])

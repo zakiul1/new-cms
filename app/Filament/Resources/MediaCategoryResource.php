@@ -76,7 +76,18 @@ class MediaCategoryResource extends Resource
                                 if (!filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
                                 }
+
+                                // ✅ auto-fill Product from Name (only if empty)
+                                if (!filled($get('product'))) {
+                                    $set('product', (string) $state);
+                                }
                             }),
+
+                        TextInput::make('product')
+                            ->label('Product')
+                            ->maxLength(255)
+                            ->helperText('Defaults to Name. You can change it.'),
+
 
                         TextInput::make('slug')
                             ->label('Slug (optional)')
@@ -84,6 +95,16 @@ class MediaCategoryResource extends Resource
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn($state, Set $set) => $set('slug', filled($state) ? Str::slug((string) $state) : null))
                             ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null),
+
+                        Select::make('visibility')
+                            ->label('Visibility')
+                            ->options([
+                                'public' => 'Public (can be shown on frontend)',
+                                'private' => 'Private (admin/internal only)',
+                            ])
+                            ->default('public')
+                            ->required(),
+
 
                         Select::make('parent_id')
                             ->label('Parent (optional)')
@@ -122,6 +143,11 @@ class MediaCategoryResource extends Resource
                 TextColumn::make('parent.name')
                     ->label('Parent')
                     ->toggleable(),
+                TextColumn::make('visibility')
+                    ->label('Visibility')
+                    ->badge()
+                    ->sortable(),
+
             ])
             ->actions([
                 EditAction::make(),

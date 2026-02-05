@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Cms;
 
-use App\Cms\Core\SettingsRepository;
 use App\Cms\Content\PermalinkManager;
+use App\Cms\Core\SettingsRepository;
 use App\Http\Controllers\Controller;
 use App\Models\Media;
 use App\Models\Post;
@@ -12,6 +12,7 @@ use App\Models\SlugHistory;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Illuminate\Http\Request;
+use App\Cms\Content\CurrentContentContext;
 
 class ContentRouterController extends Controller
 {
@@ -135,7 +136,7 @@ class ContentRouterController extends Controller
         }
 
         // 3) Attachment pages (Media) - only after no page and no post
-        // Root-level /{media-slug} like your example
+        // Root-level /{media-slug}
         if ($slug !== '' && !str_contains($slug, '/')) {
             $attachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
@@ -146,7 +147,7 @@ class ContentRouterController extends Controller
                     ->first();
 
                 if ($media) {
-                    // Canonical: ensure correct slug path (usually always true)
+                    // Canonical: ensure correct slug path
                     $canonicalPath = '/' . $media->slug;
                     if ($path !== $canonicalPath) {
                         return redirect()->to($canonicalPath, 301);
@@ -168,10 +169,33 @@ class ContentRouterController extends Controller
 
                     [$css, $js] = $this->extractMediaAssets($media);
 
+                    // ✅ Auto-save defaults on frontend (fills only missing fields)
+                    if (function_exists('do_action')) {
+                        do_action('media.attachment.defaults.persist', $media);
+
+                        // Refresh the model so the view gets newly saved values immediately
+                        $media->refresh();
+                    }
+
+                    // ✅ Public media categories (for top navigation) + active category
+                    $publicMediaCategories = $this->publicMediaCategories();
+
+                    $activeMediaCategory = null;
+                    if (method_exists($media, 'categories')) {
+                        $activeMediaCategory = $media->categories()
+                            ->where('terms.visibility', 'public')
+                            ->orderBy('terms.name')
+                            ->first();
+                    }
+                    app(CurrentContentContext::class)->setMedia($media);
                     return view('attachment', [
                         'media' => $media,
                         'usedIn' => $usedIn,
                         'seo' => $this->buildAttachmentSeo($media, $indexable),
+
+                        // ✅ For frontend category navigation
+                        'mediaCategories' => $publicMediaCategories,
+                        'activeMediaCategory' => $activeMediaCategory,
 
                         // ✅ per-page assets
                         'pageAssetsCss' => $css,
@@ -182,7 +206,6 @@ class ContentRouterController extends Controller
         }
 
         // 4) Slug history fallback (auto-heal redirect row if missing)
-        // For multi-segment permalinks, try extracting the %postname% part if possible.
         $oldSlugCandidate = null;
 
         if (is_array($match) && isset($match['slug'])) {
@@ -245,7 +268,6 @@ class ContentRouterController extends Controller
             'description' => $desc,
             'canonical' => $canonical,
             'robots' => $robots,
-
             'og' => [
                 'title' => $title,
                 'description' => $desc,
@@ -264,7 +286,6 @@ class ContentRouterController extends Controller
 
         $fallbackTitle = (string) ($media->title ?: $media->original_filename ?: config('app.name'));
 
-        // For description: prefer saved SEO description; fallback to description/caption (strip tags for SEO)
         $fallbackDesc = (string) ($media->description ?: $media->caption ?: '');
         $fallbackDesc = trim(strip_tags($fallbackDesc));
 
@@ -276,7 +297,6 @@ class ContentRouterController extends Controller
             $canonical = url('/' . $media->slug);
         }
 
-        // If SEO robots set, respect it; otherwise use indexable bool.
         $robots = trim((string) ($seo['robots'] ?? ''));
         if ($robots === '') {
             $robots = $indexable ? 'index, follow' : 'noindex, follow';
@@ -284,8 +304,12 @@ class ContentRouterController extends Controller
 
         $ogImage = trim((string) ($seo['og_image'] ?? ''));
 
-        // If no og_image specified, use image URL if this is image.
-        if ($ogImage === '' && method_exists($media, 'isImage') && $media->isImage() && method_exists($media, 'url')) {
+        if (
+            $ogImage === '' &&
+            method_exists($media, 'isImage') &&
+            $media->isImage() &&
+            method_exists($media, 'url')
+        ) {
             $ogImage = (string) $media->url();
         }
 
@@ -345,9 +369,15 @@ class ContentRouterController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
+        // ✅ FIX: scheduled-safe (same logic as posts/pages)
+        $now = now();
+
         $posts = Post::query()
             ->where('type', 'post')
             ->where('status', 'published')
+            ->where(function ($q) use ($now) {
+                $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
+            })
             ->whereHas($taxonomyKey === 'category' ? 'categories' : 'tags', fn($q) => $q->whereKey($term->id))
             ->latest('id')
             ->paginate(18);
@@ -377,6 +407,27 @@ class ContentRouterController extends Controller
         $js = (string) ($assets['js'] ?? '');
 
         return [$css, $js];
+    }
+
+    private function publicMediaCategories(): array
+    {
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+
+        if (!$taxonomyId) {
+            return [];
+        }
+
+        return Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->where('visibility', 'public')
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug'])
+            ->map(fn(Term $t) => [
+                'id' => (int) $t->id,
+                'name' => (string) $t->name,
+                'slug' => (string) $t->slug,
+            ])
+            ->all();
     }
 
     /**

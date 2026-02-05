@@ -28,6 +28,9 @@ Route::get('/category/{slug}', [CategoryArchiveController::class, 'show'])
 // ✅ Home (now supports ?p=123 for "Plain" permalinks)
 Route::get('/', [ContentRouterController::class, 'home'])->name('cms.home');
 
+// ✅ Redirect /home -> / (SEO + fixes wrong menu links if any exist)
+Route::redirect('/home', '/', 301)->name('cms.home.redirect');
+
 // ✅ Preview helper routes
 require base_path('routes/cms_preview.php');
 

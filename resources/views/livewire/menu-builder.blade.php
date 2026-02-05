@@ -3,15 +3,15 @@
     <x-filament::section>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div class="space-y-2">
-                <div class="text-lg font-semibold">Menu Settings</div>
-                <div class="text-sm text-gray-500">
+                <div class="text-lg font-semibold text-slate-900 dark:text-gray-100">Menu Settings</div>
+                <div class="text-sm text-slate-500 dark:text-gray-400">
                     Create menus, rename, duplicate, and manage structure below.
                 </div>
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div class="w-full sm:w-72">
-                    <div class="text-xs text-gray-500 mb-1">Create new menu</div>
+                    <div class="mb-1 text-xs text-slate-500 dark:text-gray-400">Create new menu</div>
                     <x-filament::input.wrapper>
                         <x-filament::input wire:model.defer="newMenuName" placeholder="New menu name..." />
                     </x-filament::input.wrapper>
@@ -23,13 +23,13 @@
             </div>
         </div>
 
-        <div class="my-5 border-t"></div>
+        <div class="my-5 border-t border-slate-200/70 dark:border-gray-700"></div>
 
         {{-- ✅ Menu Select + ✅ Location Assign --}}
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+        <div class="grid grid-cols-1 gap-4 items-end lg:grid-cols-12">
             {{-- Select menu --}}
             <div class="lg:col-span-5">
-                <div class="text-xs text-gray-500 mb-1">Select menu to edit</div>
+                <div class="mb-1 text-xs text-slate-500 dark:text-gray-400">Select menu to edit</div>
                 <x-filament::input.wrapper>
                     <select class="fi-input w-full" wire:change="selectMenu($event.target.value)">
                         @foreach ($menus as $m)
@@ -43,23 +43,22 @@
 
             {{-- ✅ Location dropdown --}}
             <div class="lg:col-span-4">
-                <div class="text-xs text-gray-500 mb-1">Menu location</div>
+                <div class="mb-1 text-xs text-slate-500 dark:text-gray-400">Menu location</div>
+
                 <x-filament::input.wrapper>
-                  <select class="fi-input w-full"
-    wire:model="activeLocationKey"
-    wire:change="assignLocation($event.target.value)">
-    <option value="">— Not assigned —</option>
+                    <select class="fi-input w-full" wire:model="activeLocationKey"
+                        wire:change="assignLocation($event.target.value)">
+                        <option value="">— Not assigned —</option>
 
-    @foreach ($locations as $loc)
-        <option value="{{ $loc->key }}">
-            {{ $loc->label }} ({{ $loc->key }})
-        </option>
-    @endforeach
-</select>
-
+                        @foreach ($locations as $loc)
+                            <option value="{{ $loc->key }}">
+                                {{ $loc->label }} ({{ $loc->key }})
+                            </option>
+                        @endforeach
+                    </select>
                 </x-filament::input.wrapper>
 
-                <div class="text-xs text-gray-400 mt-1">
+                <div class="mt-1 text-xs text-slate-400 dark:text-gray-500">
                     Assign this menu to a theme location (ex: primary, footer).
                 </div>
             </div>
@@ -84,8 +83,9 @@
         </div>
 
         @if ($isRenaming)
-            <div class="mt-4 rounded-lg border p-4">
-                <div class="text-sm font-medium mb-2">Rename menu</div>
+            <div class="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                <div class="mb-2 text-sm font-medium text-slate-900 dark:text-gray-100">Rename menu</div>
+
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
                     <div class="flex-1">
                         <x-filament::input.wrapper>
@@ -101,28 +101,33 @@
     </x-filament::section>
 
     {{-- MAIN: Two panels --}}
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {{-- LEFT: Add items --}}
-        <div class="lg:col-span-4 space-y-4">
+        <div class="space-y-4 lg:col-span-4">
             <x-filament::section>
-                <div class="text-lg font-semibold">Add menu items</div>
-                <div class="text-sm text-gray-500">Select items and add them to the menu.</div>
+                <div class="text-lg font-semibold text-slate-900 dark:text-gray-100">Add menu items</div>
+                <div class="text-sm text-slate-500 dark:text-gray-400">Select items and add them to the menu.</div>
 
-                <div class="my-4 border-t"></div>
+                <div class="my-4 border-t border-slate-200/70 dark:border-gray-700"></div>
 
                 <div class="space-y-3">
-                    <details open>
-                        <summary class="cursor-pointer font-medium">Pages</summary>
+                    <details open
+                        class="rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                        <summary class="cursor-pointer font-medium text-slate-900 dark:text-gray-100">Pages</summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchPages" placeholder="Search pages..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchPages"
+                                    placeholder="Search pages..." />
                             </x-filament::input.wrapper>
 
-                            <div class="max-h-60 overflow-auto border rounded-lg p-2">
+                            <div
+                                class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900">
                                 @foreach ($pages as $p)
                                     <label class="flex items-center gap-2 py-1">
                                         <input type="checkbox" wire:model="selectedPageIds" value="{{ $p->id }}">
-                                        <span class="text-sm">{{ $p->title ?? ($p->name ?? '#' . $p->id) }}</span>
+                                        <span class="text-sm text-slate-700 dark:text-gray-200">
+                                            {{ $p->title ?? ($p->name ?? '#' . $p->id) }}
+                                        </span>
                                     </label>
                                 @endforeach
                             </div>
@@ -133,18 +138,23 @@
                         </div>
                     </details>
 
-                    <details>
-                        <summary class="cursor-pointer font-medium">Posts</summary>
+                    <details
+                        class="rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                        <summary class="cursor-pointer font-medium text-slate-900 dark:text-gray-100">Posts</summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchPosts" placeholder="Search posts..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchPosts"
+                                    placeholder="Search posts..." />
                             </x-filament::input.wrapper>
 
-                            <div class="max-h-60 overflow-auto border rounded-lg p-2">
+                            <div
+                                class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900">
                                 @foreach ($posts as $p)
                                     <label class="flex items-center gap-2 py-1">
                                         <input type="checkbox" wire:model="selectedPostIds" value="{{ $p->id }}">
-                                        <span class="text-sm">{{ $p->title ?? ($p->name ?? '#' . $p->id) }}</span>
+                                        <span class="text-sm text-slate-700 dark:text-gray-200">
+                                            {{ $p->title ?? ($p->name ?? '#' . $p->id) }}
+                                        </span>
                                     </label>
                                 @endforeach
                             </div>
@@ -155,18 +165,23 @@
                         </div>
                     </details>
 
-                    <details>
-                        <summary class="cursor-pointer font-medium">Categories / Terms</summary>
+                    <details
+                        class="rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                        <summary class="cursor-pointer font-medium text-slate-900 dark:text-gray-100">Categories / Terms
+                        </summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
-                                <x-filament::input wire:model.live.debounce.500ms="searchTerms" placeholder="Search terms..." />
+                                <x-filament::input wire:model.live.debounce.500ms="searchTerms"
+                                    placeholder="Search terms..." />
                             </x-filament::input.wrapper>
 
-                            <div class="max-h-60 overflow-auto border rounded-lg p-2">
+                            <div
+                                class="max-h-60 overflow-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-900">
                                 @foreach ($terms as $t)
                                     <label class="flex items-center gap-2 py-1">
                                         <input type="checkbox" wire:model="selectedTermIds" value="{{ $t->id }}">
-                                        <span class="text-sm">{{ $t->name }}</span>
+                                        <span
+                                            class="text-sm text-slate-700 dark:text-gray-200">{{ $t->name }}</span>
                                     </label>
                                 @endforeach
                             </div>
@@ -177,8 +192,10 @@
                         </div>
                     </details>
 
-                    <details>
-                        <summary class="cursor-pointer font-medium">Custom Link</summary>
+                    <details
+                        class="rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                        <summary class="cursor-pointer font-medium text-slate-900 dark:text-gray-100">Custom Link
+                        </summary>
                         <div class="mt-3 space-y-2">
                             <x-filament::input.wrapper>
                                 <x-filament::input wire:model.defer="customLabel" placeholder="Label" />
@@ -198,22 +215,23 @@
         </div>
 
         {{-- RIGHT: Menu structure --}}
-        <div class="lg:col-span-8 space-y-4">
+        <div class="space-y-4 lg:col-span-8">
             <x-filament::section>
                 <div class="flex items-center justify-between gap-4">
                     <div>
-                        <div class="text-lg font-semibold">Menu Structure</div>
-                        <div class="text-sm text-gray-500">
+                        <div class="text-lg font-semibold text-slate-900 dark:text-gray-100">Menu Structure</div>
+                        <div class="text-sm text-slate-500 dark:text-gray-400">
                             Drag & drop to reorder or nest items.
-                            <span class="ml-2 text-xs text-gray-400">(Drop onto the indented dropzone to nest)</span>
+                            <span class="ml-2 text-xs text-slate-400 dark:text-gray-500">(Drop onto the indented
+                                dropzone to nest)</span>
                         </div>
                     </div>
-                    <div class="text-sm text-gray-500">
-                        Auto-save: <span class="font-medium">ON</span>
+                    <div class="text-sm text-slate-500 dark:text-gray-400">
+                        Auto-save: <span class="font-medium text-slate-900 dark:text-gray-200">ON</span>
                     </div>
                 </div>
 
-                <div class="my-4 border-t"></div>
+                <div class="my-4 border-t border-slate-200/70 dark:border-gray-700"></div>
 
                 <div id="menu-tree-root" class="space-y-2">
                     @include('livewire.partials.menu-tree', [
@@ -228,7 +246,7 @@
     </div>
 
     {{-- keep your scripts section same --}}
-     @once
+    @once
         @push('scripts')
             <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
             <script>

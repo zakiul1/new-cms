@@ -37,7 +37,8 @@
             "app/Cms/Hooks/helpers.php",
             "app/Cms/Themes/theme_helpers.php",
             "app/Cms/helpers_plugin_settings.php",
-            "app/Cms/helpers_media.php"
+            "app/Cms/helpers_media.php",
+            "app/Cms/Shortcodes/shortcodes.php"
 
         ]
     },

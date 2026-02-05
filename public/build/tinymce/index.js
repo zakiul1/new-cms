@@ -1,7 +1,7 @@
-// Exports the "table" plugin for usage with module loaders
+// Exports the "visualchars" plugin for usage with module loaders
 // Usage:
 //   CommonJS:
-//     require('tinymce/plugins/table')
+//     require('tinymce/plugins/visualchars')
 //   ES2015:
-//     import 'tinymce/plugins/table'
+//     import 'tinymce/plugins/visualchars'
 require('./plugin.js');

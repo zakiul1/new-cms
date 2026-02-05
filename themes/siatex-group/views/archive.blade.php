@@ -6,8 +6,26 @@
         /** @var \App\Models\Term $term */
         /** @var \Illuminate\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection $posts */
 
-        $title = isset($title) && is_string($title) && trim($title) !== '' ? trim($title) : $term->name ?? 'Category';
+        $title = isset($title) && is_string($title) && trim($title) !== '' ? trim($title) : $term->name ?? 'Archive';
         $desc = trim((string) ($term->description ?? ''));
+
+        // ✅ Better empty state label (category / tag / archive)
+        $taxonomyKey = null;
+        try {
+            $taxonomyKey = (string) ($term->taxonomy?->key ?? '');
+        } catch (\Throwable $e) {
+            $taxonomyKey = null;
+        }
+
+        $label = match ($taxonomyKey) {
+            'category' => 'category',
+            'tag' => 'tag',
+            'media_category' => 'media category',
+            default => 'archive',
+        };
+
+        // ✅ Pagination-safe count check
+        $count = method_exists($posts, 'total') ? (int) $posts->total() : (int) $posts->count();
     @endphp
 
     <div class="cms-container mx-auto px-4 py-8">
@@ -32,9 +50,9 @@
         </header>
 
         {{-- Posts Grid --}}
-        @if ($posts->count() === 0)
+        @if ($count === 0)
             <div class="mt-10 rounded bg-slate-50 p-6 text-sm text-slate-600">
-                No posts found in this category.
+                No posts found in this {{ $label }}.
             </div>
         @else
             <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -42,15 +60,16 @@
                     @php
                         /** @var \App\Models\Post $post */
                         $postUrl = cms_post_url($post);
-                        $postTitle = (string) ($post->title ?? '');
+                        $postTitle = trim((string) ($post->title ?? ''));
+                        $postTitle = $postTitle !== '' ? $postTitle : 'Untitled';
                         $excerpt = trim(strip_tags((string) ($post->excerpt ?? '')));
                     @endphp
 
                     <a href="{{ $postUrl }}"
-                        class="group block rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-300">
+                        class="group block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
                         {{-- Featured image (if exists) --}}
                         @if (!empty($post->featuredMedia))
-                            <div class="mb-3 aspect-[16/10] overflow-hidden rounded bg-slate-50">
+                            <div class="mb-3 aspect-[16/10] overflow-hidden rounded-xl bg-slate-50">
                                 {!! cms_picture(
                                     $post->featuredMedia,
                                     [
@@ -78,10 +97,12 @@
                 @endforeach
             </div>
 
-            {{-- Pagination --}}
-            <div class="mt-10">
-                {{ $posts->links() }}
-            </div>
+            {{-- Pagination (only if paginator) --}}
+            @if (method_exists($posts, 'links'))
+                <div class="mt-10">
+                    {{ $posts->links() }}
+                </div>
+            @endif
         @endif
     </div>
 @endsection

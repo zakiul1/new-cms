@@ -76,7 +76,12 @@
         $title = trim($title) !== '' ? trim($title) : 'Attachment';
 
         // Description (Product) is HTML, Caption is plain text
-        $heroDescHtml = $sanitizeRichHtml($media->description ?? '');
+        $heroDescHtml = $sanitizeRichHtml(
+            function_exists('do_shortcode')
+                ? do_shortcode((string) ($media->description ?? ''), ['media' => $media])
+                : (string) ($media->description ?? ''),
+        );
+
         $heroCaption = trim($textValue($media->caption ?? ''));
 
         $heroHtml = '';
@@ -241,6 +246,9 @@
         $printJsonLdHere = false;
     @endphp
 
+
+
+
     {{-- Breadcrumb --}}
     <div class="cms-container mx-auto px-4 pt-6">
         <nav class="text-sm text-slate-500">
@@ -297,6 +305,8 @@
                     @if ($heroHtml !== '')
                         <div class="mt-4 space-y-4 text-justify text-sm leading-7 text-slate-700">
                             {!! $heroHtml !!}
+
+
                         </div>
                     @endif
 
@@ -342,7 +352,6 @@
                                 </div>
 
                                 @php
-                                    // ✅ meta can be array or JSON string
                                     $rMeta = $r->meta ?? [];
                                     if (is_string($rMeta) && trim($rMeta) !== '') {
                                         $decoded = json_decode($rMeta, true);
@@ -352,7 +361,6 @@
                                         $rMeta = [];
                                     }
 
-                                    // ✅ extract html safely (string OR array like ['html' => '...'])
                                     $rMetaDescRaw = data_get($rMeta, 'frontend.meta_description', '');
                                     if (is_array($rMetaDescRaw)) {
                                         $rMetaDescRaw = $rMetaDescRaw['html'] ?? ($rMetaDescRaw['value'] ?? '');
@@ -365,7 +373,6 @@
                                     $rMetaDescHtml =
                                         $rMetaDescHtml !== '' ? strip_tags($rMetaDescHtml, $allowedHtml) : '';
 
-                                    // optional: subtitle
                                     $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
                                 @endphp
 
@@ -374,19 +381,10 @@
                                         {{ $rTitle }}
                                     </h3>
 
-                                    @if ($rMetaTitle !== '')
-                                        <div class="mt-1 text-xs text-slate-500 line-clamp-1">
-                                            {{ $rMetaTitle }}
-                                        </div>
-                                    @endif
 
-                                    @if ($rMetaDescHtml !== '')
-                                        <div class="mt-2 text-xs leading-5 text-slate-600 line-clamp-3 text-left">
-                                            {!! $rMetaDescHtml !!}
-                                        </div>
-                                    @endif
+
+
                                 </div>
-
                             </a>
                         @endforeach
                     </div>

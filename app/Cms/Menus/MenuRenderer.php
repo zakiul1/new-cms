@@ -134,6 +134,30 @@ class MenuRenderer
         $label = (string) ($item->label ?? '');
         $url = (string) ($item->url ?? '#');
 
+        // ✅ Normalize HOME link
+        // Handles: "home", "/home", "http://cms.test/home", "https://cms.test/home"
+        $url = trim($url);
+
+        if ($url !== '' && $url !== '#') {
+            $parsed = parse_url($url);
+
+            // If it's a relative URL, treat it as path
+            $path = $parsed['path'] ?? null;
+
+            if ($path === null) {
+                // maybe "home" without slash
+                $path = $url;
+            }
+
+            $path = '/' . ltrim((string) $path, '/');
+
+            if ($path === '/home') {
+                // Keep query if exists (rare)
+                $query = isset($parsed['query']) && $parsed['query'] !== '' ? ('?' . $parsed['query']) : '';
+                $url = url('/') . $query;
+            }
+        }
+
         $target = (string) ($data['target'] ?? '');
         $relParts = [];
 
@@ -152,6 +176,7 @@ class MenuRenderer
 
         return '<a class="cms-menu__link" href="' . e($url) . '"' . $targetAttr . $relAttr . '>' . e($label) . '</a>';
     }
+
 
     protected function passesVisibility(?array $rules, array $ctx): bool
     {
