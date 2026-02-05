@@ -8,6 +8,7 @@ use App\Models\Taxonomy;
 use App\Models\Term;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -15,6 +16,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Section;
 use Illuminate\Support\Collection;
 use UnitEnum;
 
@@ -116,7 +118,10 @@ class MediaDefaults extends Page implements HasForms
             'default_sub_description' => (string) ($cat['default_sub_description'] ?? $global['default_sub_description']),
         ];
 
-        $this->form->fill($this->data);
+        $this->form->fill([
+            'activeCategoryId' => $this->activeCategoryId,
+            'data' => $this->data,
+        ]);
     }
 
     /**
@@ -136,53 +141,82 @@ class MediaDefaults extends Page implements HasForms
         $this->loadDefaultsIntoForm();
     }
 
-    /**
-     * A small schema for the category picker section in the header area.
-     * We'll render it from the blade using $this->categoryForm.
-     */
-    public function categoryForm(Schema $schema): Schema
-    {
-        return $schema
-            ->statePath('activeCategoryId')
-            ->schema([
-                Select::make('')
-                    ->label('Media Category')
-                    ->options(fn() => $this->categoryOptions)
-                    ->searchable()
-                    ->native(false)
-                    ->placeholder('Select category...')
-                    ->required(),
-            ]);
-    }
-
     public function form(Schema $schema): Schema
     {
         return $schema
-            ->statePath('data')
+            // ✅ 2/1 layout
+            ->columns([
+                'default' => 1,
+                'lg' => 3,
+            ])
             ->schema([
-                TextInput::make('default_title')
-                    ->label('Default Title')
-                    ->maxLength(255)
-                    ->helperText('Used only if Media title is empty.')
-                    ->columnSpanFull(),
 
-                WpClassicEditor::make('default_description')
-                    ->label('Default Description (Product)')
-                    ->height(260)
-                    ->columnSpanFull()
-                    ->helperText('Used only if Media description is empty.'),
+                // LEFT: Defaults (statePath=data)
+                Section::make('Media Defaults')
+                    ->description('These defaults are applied when you open Edit Media. Only empty fields are auto-filled (existing values are never overwritten).')
+                    ->columnSpan([
+                        'default' => 1,
+                        'lg' => 2,
+                    ])
+                    ->statePath('data')
+                    ->schema([
+                        TextInput::make('default_title')
+                            ->label('Default Title')
+                            ->maxLength(255)
+                            ->helperText('Used only if Media title is empty.')
+                            ->columnSpanFull(),
 
-                TextInput::make('default_sub_title')
-                    ->label('Default Sub title')
-                    ->maxLength(255)
-                    ->helperText('Used only if Media Sub title is empty.')
-                    ->columnSpanFull(),
+                        WpClassicEditor::make('default_description')
+                            ->label('Default Description (Product)')
+                            ->height(260)
+                            ->columnSpanFull()
+                            ->helperText('Used only if Media description is empty.'),
 
-                WpClassicEditor::make('default_sub_description')
-                    ->label('Default Sub description')
-                    ->height(260)
-                    ->columnSpanFull()
-                    ->helperText('Used only if Media Sub description is empty.'),
+                        TextInput::make('default_sub_title')
+                            ->label('Default Sub title')
+                            ->maxLength(255)
+                            ->helperText('Used only if Media Sub title is empty.')
+                            ->columnSpanFull(),
+
+                        WpClassicEditor::make('default_sub_description')
+                            ->label('Default Sub description')
+                            ->height(260)
+                            ->columnSpanFull()
+                            ->helperText('Used only if Media Sub description is empty.'),
+                    ]),
+
+                // RIGHT: Category (statePath=root activeCategoryId)
+                Section::make('Media Category')
+                    ->description('Select a category to set its defaults.')
+                    ->columnSpan([
+                        'default' => 1,
+                        'lg' => 1,
+                    ])
+                    ->extraAttributes([
+                        'class' => 'lg:sticky lg:top-6',
+                    ])
+                    ->schema([
+                        // ✅ “Active: t-shirt”
+                        Placeholder::make('active_label')
+                            ->label('Active')
+                            ->content(function (): string {
+                                if ($this->activeCategoryId === null) {
+                                    return '—';
+                                }
+
+                                return (string) ($this->categoryOptions[$this->activeCategoryId] ?? '—');
+                            }),
+
+                        // ✅ MUST have a real name -> fixes your TypeError
+                        Select::make('activeCategoryId')
+                            ->label('Choose category')
+                            ->options(fn() => $this->categoryOptions)
+                            ->searchable()
+                            ->native(false)
+                            ->placeholder('Select category...')
+                            ->required()
+                            ->live(),
+                    ]),
             ]);
     }
 
@@ -201,7 +235,16 @@ class MediaDefaults extends Page implements HasForms
         $group = 'plugins.media-defaults';
 
         $state = $this->form->getState();
-        $this->data = is_array($state) ? $state : $this->data;
+
+        // Now state is: ['data' => [...], 'activeCategoryId' => X]
+        if (is_array($state) && isset($state['data']) && is_array($state['data'])) {
+            $this->data = $state['data'];
+        }
+
+        if (is_array($state) && array_key_exists('activeCategoryId', $state)) {
+            $val = $state['activeCategoryId'];
+            $this->activeCategoryId = is_numeric($val) ? (int) $val : null;
+        }
 
         if ($this->activeCategoryId === null) {
             Notification::make()->title('Please select a category')->danger()->send();

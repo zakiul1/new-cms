@@ -102,6 +102,27 @@ class EditMedia extends EditRecord
 
         return (string) $value;
     }
+    protected function isFrontendBlockedByPrivateCategory(Media $record): bool
+    {
+        // If Media has categories() relation, best:
+        if (method_exists($record, 'categories')) {
+            return $record->categories()
+                ->where('terms.visibility', 'private')
+                ->exists();
+        }
+
+        // Fallback: use terms() with media_category taxonomy
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxonomyId || !method_exists($record, 'terms')) {
+            return false;
+        }
+
+        return $record->terms()
+            ->where('terms.taxonomy_id', $taxonomyId)
+            ->where('terms.visibility', 'private')
+            ->exists();
+    }
+
 
     protected function htmlIsEmpty($value): bool
     {
@@ -851,13 +872,34 @@ class EditMedia extends EditRecord
                 ->color('primary')
                 ->visible(fn(Media $record): bool => filled($record->slug))
                 ->disabled(function (Media $record): bool {
+                    // Block for private category
+                    if ($this->isFrontendBlockedByPrivateCategory($record)) {
+                        return true;
+                    }
+
+                    // Existing attachment enabled/public checks
                     $settings = app(SettingsRepository::class);
                     $enabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
                     return !($enabled && (bool) $record->attachment_public);
                 })
+                ->tooltip(function (Media $record): ?string {
+                    if ($this->isFrontendBlockedByPrivateCategory($record)) {
+                        return 'This is a private link.';
+                    }
+
+                    $settings = app(SettingsRepository::class);
+                    $enabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
+
+                    if (!($enabled && (bool) $record->attachment_public)) {
+                        return 'Attachment page is disabled or not public.';
+                    }
+
+                    return null;
+                })
                 ->url(fn(Media $record): string => url('/' . ltrim((string) $record->slug, '/')))
                 ->openUrlInNewTab(),
+
 
             Action::make('back')
                 ->label('Back')

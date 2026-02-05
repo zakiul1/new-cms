@@ -6,11 +6,20 @@ deployment:
     - /bin/mkdir -p $APPPATH
     - /bin/mkdir -p $PUBLICPATH
 
-    # Copy ALL files to laravel-app (including hidden like .htaccess if any in root)
-    - /bin/cp -a . $APPPATH
+    # Copy everything EXCEPT sensitive/runtime files and your server-specific config
+    - /bin/rsync -a --delete \
+        --exclude=".git/" \
+        --exclude=".env" \
+        --exclude="storage/" \
+        --exclude="bootstrap/cache/" \
+        --exclude="node_modules/" \
+        --exclude="vendor/" \
+        --exclude="config/filesystems.php" \
+        ./ $APPPATH
 
-    # Remove git folder from deployed app
-    - /bin/rm -rf $APPPATH/.git
+    # Copy public files to public_html
+    - /bin/rsync -a --delete $APPPATH/public/ $PUBLICPATH/
 
-    # Copy public files to public_html (includes .htaccess inside public)
-    - /bin/cp -a $APPPATH/public/. $PUBLICPATH
+    # Force your custom public_html entry + htaccess (optional but recommended)
+    - /bin/cp -f $APPPATH/deploy/index.php $PUBLICPATH/index.php
+    - /bin/cp -f $APPPATH/deploy/.htaccess $PUBLICPATH/.htaccess

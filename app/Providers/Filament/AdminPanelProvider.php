@@ -37,8 +37,9 @@ class AdminPanelProvider extends PanelProvider
             ])
 
             ->navigationGroups([
-                NavigationGroup::make()->label('Appearance')->collapsed(),
+
                 NavigationGroup::make()->label('Media')->collapsed(),
+                NavigationGroup::make()->label('Appearance')->collapsed(),
                 NavigationGroup::make()->label('CMS')->collapsed(),
                 NavigationGroup::make()->label('SEO')->collapsed(),
                 NavigationGroup::make()->label('Tools')->collapsed(),

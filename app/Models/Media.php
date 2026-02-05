@@ -56,7 +56,17 @@ class Media extends Model
             if (!filled($media->slug)) {
                 $base = Str::slug(Str::limit((string) ($media->title ?: $media->original_filename ?: 'attachment'), 120, ''));
                 $base = $base !== '' ? $base : 'attachment';
-                $media->slug = $base . '-' . Str::random(10);
+
+                // ✅ WP-style numeric uniqueness: base, base-2, base-3...
+                $slug = $base;
+                $i = 2;
+
+                while (self::query()->where('slug', $slug)->exists()) {
+                    $slug = $base . '-' . $i;
+                    $i++;
+                }
+
+                $media->slug = $slug;
             }
 
             // Defaults if not set (migration defaults also cover this)
@@ -250,6 +260,23 @@ class Media extends Model
         return $rel
             ->where('terms.taxonomy_id', $taxonomyId)
             ->orderBy('terms.name');
+    }
+    public function scopeFrontendVisible($query)
+    {
+        // Only public attachment items
+        $query->where('attachment_public', true);
+
+        // Exclude any media that has a PRIVATE media_category term
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+
+        if ($taxonomyId) {
+            $query->whereDoesntHave('terms', function ($q) use ($taxonomyId) {
+                $q->where('terms.taxonomy_id', $taxonomyId)
+                    ->where('terms.visibility', 'private');
+            });
+        }
+
+        return $query;
     }
 
     /**

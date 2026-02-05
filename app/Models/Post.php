@@ -134,6 +134,12 @@ class Post extends Model
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         );
     }
+    public function scopeFrontendVisible($query)
+    {
+        return $query->whereDoesntHave('categories', function ($q) {
+            $q->where('terms.visibility', 'private');
+        });
+    }
 
     public function syncMediaRole(string $role, array $mediaIds): void
     {

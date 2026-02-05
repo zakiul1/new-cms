@@ -80,7 +80,6 @@ class MediaUploader
         $title = trim(preg_replace('/\s+/', ' ', str_replace(['-', '_'], ' ', $baseName)) ?: '');
         $title = $title !== '' ? Str::title($title) : 'Untitled';
 
-
         $media = Media::create([
             'uploaded_by' => Auth::id(),
             'disk' => $disk,
@@ -95,7 +94,7 @@ class MediaUploader
 
             // ✅ Attachment fields
             'title' => $title,
-            'slug' => $this->makeUniqueAttachmentSlug($title),
+            'slug' => $this->makeUniqueAttachmentSlug($title), // ✅ now numeric style
             'attachment_public' => true,
             'attachment_indexable' => true,
 
@@ -159,7 +158,6 @@ class MediaUploader
 
         // Ensure slug exists for older records (do NOT change existing slug)
         $titleForSlug = (string) ($media->title ?: pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
-
         $slug = $media->slug ?: $this->makeUniqueAttachmentSlug($titleForSlug);
 
         // Update DB
@@ -309,6 +307,10 @@ class MediaUploader
         GenerateMediaVariants::dispatchSync($mediaId, $force);
     }
 
+    /**
+     * Keep filename unique on disk (recommended).
+     * If you want numeric filenames too, tell me and I'll provide that version.
+     */
     private function safeUniqueFilename(UploadedFile|TemporaryUploadedFile $file): string
     {
         $name = Str::slug((string) pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
@@ -320,15 +322,22 @@ class MediaUploader
         return $name . '-' . Str::random(10) . '.' . $ext;
     }
 
+    /**
+     * ✅ Make attachment slug like posts/pages: base, base-2, base-3...
+     */
     private function makeUniqueAttachmentSlug(string $title): string
     {
         $name = pathinfo($title, PATHINFO_FILENAME);
         $base = Str::slug(Str::limit($name, 120, ''));
         $base = $base !== '' ? $base : 'attachment';
 
-        do {
-            $slug = $base . '-' . Str::random(10);
-        } while (Media::query()->where('slug', $slug)->exists());
+        $slug = $base;
+        $i = 2;
+
+        while (Media::query()->where('slug', $slug)->exists()) {
+            $slug = $base . '-' . $i;
+            $i++;
+        }
 
         return $slug;
     }

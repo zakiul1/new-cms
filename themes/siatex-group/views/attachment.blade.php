@@ -118,12 +118,14 @@
                 $mediaCategoryTerm = $media
                     ->terms()
                     ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->where('terms.visibility', 'public')
                     ->orderBy('terms.name')
                     ->first();
 
                 $mediaCategoryIds = $media
                     ->terms()
                     ->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                    ->where('terms.visibility', 'public')
                     ->pluck('terms.id')
                     ->map(fn($id) => (int) $id)
                     ->unique()
@@ -164,9 +166,15 @@
 
             try {
                 return \App\Models\Media::query()
+                    ->where('attachment_public', true)
                     ->whereNotIn('id', $excludeIds)
+                    ->whereDoesntHave('terms', function ($t) use ($mediaCategoryTaxId) {
+                        $t->where('terms.taxonomy_id', $mediaCategoryTaxId)->where('terms.visibility', 'private');
+                    })
                     ->whereHas('terms', function ($q) use ($mediaCategoryTaxId, $mediaCategoryIds) {
-                        $q->where('terms.taxonomy_id', $mediaCategoryTaxId)->whereIn('terms.id', $mediaCategoryIds);
+                        $q->where('terms.taxonomy_id', $mediaCategoryTaxId)
+                            ->whereIn('terms.id', $mediaCategoryIds)
+                            ->where('terms.visibility', 'public');
                     })
                     ->inRandomOrder()
                     ->limit($limit)
@@ -345,6 +353,7 @@
                                             'sizes' => '(max-width: 768px) 50vw, 220px',
                                             'loading' => 'lazy',
                                             'decoding' => 'async',
+                                            'fetchpriority' => 'high',
                                         ],
                                         'medium',
                                         ['thumb', 'medium', 'medium_large'],

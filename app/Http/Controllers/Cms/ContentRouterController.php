@@ -40,7 +40,11 @@ class ContentRouterController extends Controller
             }
         }
 
-        return view('home');
+        // ✅ show notice on home if redirected from private link
+        return view('home', [
+            'privateNotice' => $request->query('private') === '1',
+            'privateFrom' => (string) $request->query('from', ''),
+        ]);
     }
 
     public function show(Request $request, string $slug, PermalinkManager $permalinks, SettingsRepository $settings)
@@ -59,12 +63,12 @@ class ContentRouterController extends Controller
 
             if ($first === $permalinks->categoryBase()) {
                 $termSlug = explode('/', $slug, 2)[1] ?? '';
-                return $this->renderTermArchive('category', $termSlug);
+                return $this->renderTermArchive('category', $termSlug, $path);
             }
 
             if ($first === $permalinks->tagBase()) {
                 $termSlug = explode('/', $slug, 2)[1] ?? '';
-                return $this->renderTermArchive('tag', $termSlug);
+                return $this->renderTermArchive('tag', $termSlug, $path);
             }
         }
 
@@ -109,9 +113,6 @@ class ContentRouterController extends Controller
             $post = $this->findPublishedPostById((int) $match['id']);
         } elseif (is_array($match) && isset($match['slug'])) {
             $post = $this->findPublishedPostBySlug((string) $match['slug']);
-        } else {
-            // If structure is /%postname% and user requested single segment, it will match.
-            // Otherwise: no post match.
         }
 
         if ($post) {
@@ -141,12 +142,18 @@ class ContentRouterController extends Controller
             $attachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
             if ($attachmentsEnabled) {
+                // ✅ IMPORTANT: do NOT exclude private here; we want to catch it and redirect (not 404)
                 $media = Media::query()
                     ->where('slug', $slug)
                     ->where('attachment_public', true) // ✅ per-attachment show/hide
                     ->first();
 
                 if ($media) {
+                    // ✅ HARD BLOCK: private category => redirect to admin with notice
+                    if ($this->hasPrivateMediaCategory($media)) {
+                        return redirect()->to('/admin?private=1&from=' . urlencode($path));
+                    }
+
                     // Canonical: ensure correct slug path
                     $canonicalPath = '/' . $media->slug;
                     if ($path !== $canonicalPath) {
@@ -172,8 +179,6 @@ class ContentRouterController extends Controller
                     // ✅ Auto-save defaults on frontend (fills only missing fields)
                     if (function_exists('do_action')) {
                         do_action('media.attachment.defaults.persist', $media);
-
-                        // Refresh the model so the view gets newly saved values immediately
                         $media->refresh();
                     }
 
@@ -187,7 +192,9 @@ class ContentRouterController extends Controller
                             ->orderBy('terms.name')
                             ->first();
                     }
+
                     app(CurrentContentContext::class)->setMedia($media);
+
                     return view('attachment', [
                         'media' => $media,
                         'usedIn' => $usedIn,
@@ -239,6 +246,28 @@ class ContentRouterController extends Controller
         }
 
         abort(404);
+    }
+
+    /**
+     * ✅ If media has ANY "media_category" term with visibility=private
+     */
+    private function hasPrivateMediaCategory(Media $media): bool
+    {
+        if (method_exists($media, 'categories')) {
+            return $media->categories()
+                ->where('terms.visibility', 'private')
+                ->exists();
+        }
+
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxonomyId || !method_exists($media, 'terms')) {
+            return false;
+        }
+
+        return $media->terms()
+            ->where('terms.taxonomy_id', $taxonomyId)
+            ->where('terms.visibility', 'private')
+            ->exists();
     }
 
     private function buildSeo(Post $post, Request $request, PermalinkManager $permalinks): array
@@ -356,7 +385,7 @@ class ContentRouterController extends Controller
             ->first();
     }
 
-    private function renderTermArchive(string $taxonomyKey, string $slug)
+    private function renderTermArchive(string $taxonomyKey, string $slug, string $requestedPath)
     {
         $slug = trim($slug, '/');
         abort_if($slug === '', 404);
@@ -369,7 +398,12 @@ class ContentRouterController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
-        // ✅ FIX: scheduled-safe (same logic as posts/pages)
+        // ✅ HARD BLOCK: private term => redirect to admin with notice
+        if (($term->visibility ?? 'public') !== 'public') {
+            return redirect()->to('/admin?private=1&from=' . urlencode($requestedPath));
+        }
+
+        // ✅ scheduled-safe
         $now = now();
 
         $posts = Post::query()

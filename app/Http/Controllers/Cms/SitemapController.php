@@ -65,11 +65,20 @@ class SitemapController extends Controller
             $attachmentsIndexableGlobal = (bool) $settings->get('core', 'attachment_pages_indexable', true);
 
             if ($attachmentsEnabled && $attachmentsIndexableGlobal) {
+                $mediaCategoryTaxonomyId = \App\Models\Taxonomy::query()->where('key', 'media_category')->value('id');
+
                 $mediaItems = Media::query()
                     ->whereNotNull('slug')
                     ->where('slug', '!=', '')
                     ->where('attachment_public', true)
                     ->where('attachment_indexable', true)
+                    // ✅ exclude media that belongs to ANY private media_category
+                    ->when($mediaCategoryTaxonomyId, function ($q) use ($mediaCategoryTaxonomyId) {
+                        $q->whereDoesntHave('terms', function ($t) use ($mediaCategoryTaxonomyId) {
+                            $t->where('terms.taxonomy_id', $mediaCategoryTaxonomyId)
+                                ->where('terms.visibility', 'private');
+                        });
+                    })
                     ->orderByDesc('updated_at')
                     ->get(['slug', 'updated_at', 'created_at']);
 
