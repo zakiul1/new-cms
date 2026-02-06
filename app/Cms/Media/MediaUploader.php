@@ -19,9 +19,11 @@ class MediaUploader
      * Upload a file and return Media record.
      *
      * Supported $options:
-     * - folder_term_id: int|null
-     * - category_term_ids: array<int|string>
+     * - category_term_id: int|null          (preferred - single category like WP)
+     * - category_term_ids: array<int|string> (legacy - if provided, first one is used)
      * - default_category_name: string (default: "Uncategorized")
+     *
+     * NOTE: folder_term_id is intentionally ignored (folder feature removed).
      *
      * @param  UploadedFile|TemporaryUploadedFile  $file
      * @param  array<string, mixed> $options
@@ -46,7 +48,7 @@ class MediaUploader
         $sha1 = $this->sha1OfUploadedFile($file);
         [$w, $h] = $this->imageSizeIfAny($file, $mime);
 
-        // ✅ Dedupe
+        // ✅ Dedupe (unchanged)
         if ((bool) config('cms-media.dedupe', true) && $sha1) {
             $existing = Media::query()
                 ->where('sha1', $sha1)
@@ -58,8 +60,8 @@ class MediaUploader
                 $existingDisk = (string) ($existing->disk ?: $disk);
 
                 if (Storage::disk($existingDisk)->exists($existing->path())) {
-                    // ✅ Ensure taxonomy attachments if needed (optional)
-                    $this->applyFolderAndCategoryOptions($existing, $options);
+                    // ✅ Apply category rules to deduped item too
+                    $this->applyCategoryOptionsOnly($existing, $options);
 
                     return $existing;
                 }
@@ -94,15 +96,15 @@ class MediaUploader
 
             // ✅ Attachment fields
             'title' => $title,
-            'slug' => $this->makeUniqueAttachmentSlug($title), // ✅ now numeric style
+            'slug' => $this->makeUniqueAttachmentSlug($title), // ✅ numeric style
             'attachment_public' => true,
             'attachment_indexable' => true,
 
             'processed_at' => null,
         ]);
 
-        // ✅ Apply folder + category rules
-        $this->applyFolderAndCategoryOptions($media, $options);
+        // ✅ Category only (folder removed)
+        $this->applyCategoryOptionsOnly($media, $options);
 
         if ($media->isImage()) {
             $this->dispatchVariantsJob($media->id, false);
@@ -203,37 +205,40 @@ class MediaUploader
     }
 
     /**
-     * ✅ Apply folder + categories.
-     * If category_term_ids empty => attach "Uncategorized" in media_category taxonomy.
+     * ✅ Category ONLY.
+     * - Accepts category_term_id (single) OR category_term_ids (array)
+     * - If none selected => attach/create "Uncategorized" in media_category taxonomy.
      *
      * @param array<string, mixed> $options
      */
-    private function applyFolderAndCategoryOptions(Media $media, array $options): void
+    private function applyCategoryOptionsOnly(Media $media, array $options): void
     {
-        // -------------------------
-        // Folder (optional)
-        // -------------------------
-        $folderTermId = $options['folder_term_id'] ?? null;
+        // Folder removed: ignore any folder_term_id silently (keeps compatibility)
+        // $options['folder_term_id'] is ignored on purpose.
 
-        if (filled($folderTermId) && is_numeric($folderTermId)) {
-            $folderTermId = (int) $folderTermId;
+        // Preferred: single category
+        $single = $options['category_term_id'] ?? null;
 
-            // Attach folder like your existing create flow
-            $media->terms()->syncWithoutDetaching([$folderTermId]);
+        $categoryIds = [];
+
+        if (filled($single) && is_numeric($single) && (int) $single > 0) {
+            $categoryIds = [(int) $single];
+        } else {
+            // Legacy: array categories (we take FIRST like WP)
+            $legacy = $options['category_term_ids'] ?? [];
+            $legacy = is_array($legacy) ? $legacy : [];
+
+            $legacyIds = collect($legacy)
+                ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!empty($legacyIds)) {
+                $categoryIds = [(int) $legacyIds[0]]; // WP-like single category
+            }
         }
-
-        // -------------------------
-        // Categories (optional, but default to Uncategorized)
-        // -------------------------
-        $categoryIds = $options['category_term_ids'] ?? [];
-        $categoryIds = is_array($categoryIds) ? $categoryIds : [];
-
-        $categoryIds = collect($categoryIds)
-            ->filter(fn($id) => is_numeric($id) && (int) $id > 0)
-            ->map(fn($id) => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
 
         if (!empty($categoryIds)) {
             // Your Media::syncCategoryTerms already validates taxonomy
@@ -241,7 +246,7 @@ class MediaUploader
             return;
         }
 
-        // If nothing selected -> attach default Uncategorized (taxonomy: media_category)
+        // If nothing selected -> attach default Uncategorized
         $defaultName = (string) ($options['default_category_name'] ?? 'Uncategorized');
         $this->attachDefaultMediaCategory($media, $defaultName);
     }
@@ -309,7 +314,6 @@ class MediaUploader
 
     /**
      * Keep filename unique on disk (recommended).
-     * If you want numeric filenames too, tell me and I'll provide that version.
      */
     private function safeUniqueFilename(UploadedFile|TemporaryUploadedFile $file): string
     {
@@ -376,4 +380,3 @@ class MediaUploader
         return [(int) $info[0], (int) $info[1]];
     }
 }
-//update

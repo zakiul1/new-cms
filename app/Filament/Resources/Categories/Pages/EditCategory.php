@@ -52,6 +52,11 @@ class EditCategory extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [DeleteAction::make()];
+        return [
+
+            DeleteAction::make(),
+            $this->getSaveFormAction()->formId('form'),
+            $this->getCancelFormAction(), // optional
+        ];
     }
 }

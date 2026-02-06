@@ -275,30 +275,22 @@ class PostForm
                             ->schema([
                                 Placeholder::make('frontend_preview')
                                     ->label('')
-                                    ->content(function (?Post $record, Get $get, PermalinkManager $permalinks) {
-                                        // Basic preview HTML (safe + simple)
-                                        $title = trim((string) ($get('title') ?? ''));
-                                        $title = $title !== '' ? $title : (string) ($record?->title ?: 'Post');
+                                    ->content(function (?Post $record, PermalinkManager $permalinks): \Illuminate\Support\HtmlString {
+                                        if (!$record) {
+                                            return new \Illuminate\Support\HtmlString(
+                                                '<div class="text-sm text-gray-600">Save the post first to preview the real frontend page.</div>'
+                                            );
+                                        }
 
-                                        $slug = trim((string) ($get('slug') ?? ''));
-                                        $slug = $slug !== '' ? Str::slug($slug) : (string) ($record?->slug ?? '');
+                                        $url = $permalinks->postUrl($record);
 
-                                        $excerpt = trim((string) ($get('excerpt') ?? ''));
-
-                                        $url = $record
-                                            ? $permalinks->postUrl($record)
-                                            : ($slug !== '' ? url('/' . ltrim($slug, '/')) : '');
-
-                                        $html = view('filament.posts.frontend-preview', [
-                                            'title' => $title,
-                                            'excerpt' => $excerpt,
-                                            'url' => $url,
-                                        ])->render();
-
-                                        return new \Illuminate\Support\HtmlString($html);
+                                        return new \Illuminate\Support\HtmlString(
+                                            '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'
+                                        );
                                     })
                                     ->dehydrated(false),
                             ]),
+
                     ]),
 
                 /**

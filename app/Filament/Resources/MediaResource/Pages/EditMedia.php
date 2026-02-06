@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\MediaResource\Pages;
 
-use App\Cms\Core\Settings;
 use App\Cms\Core\SettingsRepository;
 use App\Cms\Media\MediaUploader;
 use App\Filament\Forms\Components\WpClassicEditor;
@@ -66,19 +65,8 @@ class EditMedia extends EditRecord
         }
     }
 
-    /**
-     * Allow plugins to auto-fill defaults when Edit Media loads.
-     * Only affects the initial form fill (doesn't overwrite user values).
-     */
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        $filtered = apply_filters('media.edit.defaults.fill', $data, $this->record);
-
-        return is_array($filtered) ? $filtered : $data;
-    }
-
     // ------------------------------------------------------------------
-    // ✅ Helpers for plugin-defaults-on-save (WP-like behavior)
+    // Helpers (keep: used by your editors + private category logic)
     // ------------------------------------------------------------------
 
     protected function editorValueToString($value): string
@@ -102,6 +90,7 @@ class EditMedia extends EditRecord
 
         return (string) $value;
     }
+
     protected function isFrontendBlockedByPrivateCategory(Media $record): bool
     {
         // If Media has categories() relation, best:
@@ -121,50 +110,6 @@ class EditMedia extends EditRecord
             ->where('terms.taxonomy_id', $taxonomyId)
             ->where('terms.visibility', 'private')
             ->exists();
-    }
-
-
-    protected function htmlIsEmpty($value): bool
-    {
-        $html = trim($this->editorValueToString($value));
-        if ($html === '') {
-            return true;
-        }
-
-        // Convert &nbsp; and other entities, remove tags
-        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = str_replace("\xc2\xa0", ' ', $text); // NBSP char
-        $text = trim(strip_tags($text));
-
-        return $text === '';
-    }
-
-    protected function normalizeDefaultToHtml(string $value): string
-    {
-        $value = trim($value);
-        if ($value === '') {
-            return '';
-        }
-
-        // If already has tags, keep as-is
-        if ($value !== strip_tags($value)) {
-            return $value;
-        }
-
-        // Plain text -> <p>.. with <br>
-        $escaped = e($value);
-        return '<p>' . nl2br($escaped) . '</p>';
-    }
-
-    protected function sanitizeHtml(string $html): string
-    {
-        $html = trim($html);
-        if ($html === '') {
-            return '';
-        }
-
-        $allowed = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a>';
-        return strip_tags($html, $allowed);
     }
 
     // ------------------------------------------------------------------
@@ -229,7 +174,7 @@ class EditMedia extends EditRecord
                                         }
                                     }),
 
-                                // ✅ NEW: Product (auto from selected category's product; user can override)
+                                // ✅ Product (auto from selected category's product; user can override)
                                 TextInput::make('meta.frontend.product')
                                     ->label('Product')
                                     ->maxLength(255)
@@ -300,17 +245,21 @@ class EditMedia extends EditRecord
                                         'removeformat',
                                     ])
                                     ->formatStateUsing(function ($state) {
-                                        if (is_string($state))
+                                        if (is_string($state)) {
                                             return $state;
-                                        if (is_array($state))
+                                        }
+                                        if (is_array($state)) {
                                             return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        }
                                         return '';
                                     })
                                     ->dehydrateStateUsing(function ($state) {
-                                        if (is_string($state))
+                                        if (is_string($state)) {
                                             return $state;
-                                        if (is_array($state))
+                                        }
+                                        if (is_array($state)) {
                                             return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        }
                                         return '';
                                     })
                                     ->live(onBlur: true)
@@ -351,17 +300,21 @@ class EditMedia extends EditRecord
                                         'removeformat',
                                     ])
                                     ->formatStateUsing(function ($state) {
-                                        if (is_string($state))
+                                        if (is_string($state)) {
                                             return $state;
-                                        if (is_array($state))
+                                        }
+                                        if (is_array($state)) {
                                             return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        }
                                         return '';
                                     })
                                     ->dehydrateStateUsing(function ($state) {
-                                        if (is_string($state))
+                                        if (is_string($state)) {
                                             return $state;
-                                        if (is_array($state))
+                                        }
+                                        if (is_array($state)) {
                                             return (string) ($state['html'] ?? $state['value'] ?? '');
+                                        }
                                         return '';
                                     })
                                     ->live(onBlur: true),
@@ -472,30 +425,19 @@ class EditMedia extends EditRecord
                             ->schema([
                                 Placeholder::make('frontend_preview')
                                     ->label('')
-                                    ->content(function (Get $get): HtmlString {
-                                        /** @var Media|null $record */
+                                    ->content(function (): \Illuminate\Support\HtmlString {
+                                        /** @var \App\Models\Media|null $record */
                                         $record = $this->record;
 
-                                        $title = trim((string) ($get('title') ?? ''));
-                                        $title = $title !== '' ? $title : (string) ($record?->title ?: $record?->original_filename ?: 'Attachment');
+                                        if (!$record) {
+                                            return new \Illuminate\Support\HtmlString('');
+                                        }
 
-                                        $slug = trim((string) ($get('slug') ?? ''));
-                                        $slug = $slug !== '' ? Str::slug($slug) : (string) ($record?->slug ?? '');
+                                        $url = url('/' . ltrim($record->slug, '/'));
 
-                                        $desc = trim((string) ($get('description') ?? ''));
-                                        $caption = trim((string) ($get('caption') ?? ''));
-
-                                        $url = $slug !== '' ? url('/' . ltrim($slug, '/')) : '';
-                                        $imageUrl = $record?->isImage() ? $record->url() : null;
-
-                                        $html = view('filament.media.frontend-preview', [
-                                            'title' => $title,
-                                            'description' => $desc !== '' ? $desc : $caption,
-                                            'url' => $url,
-                                            'imageUrl' => $imageUrl,
-                                        ])->render();
-
-                                        return new HtmlString($html);
+                                        return new \Illuminate\Support\HtmlString(
+                                            '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'
+                                        );
                                     })
                                     ->dehydrated(false),
                             ]),
@@ -575,7 +517,7 @@ class EditMedia extends EditRecord
 
                                 $set('category_term_ids', $ids);
                             })
-                            // ✅ NEW: when categories change, auto-fill Product if empty
+                            // ✅ when categories change, auto-fill Product if empty
                             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 $current = trim((string) $get('meta.frontend.product'));
                                 if ($current !== '') {
@@ -732,63 +674,7 @@ class EditMedia extends EditRecord
             $data['meta'] = [];
         }
 
-        // ------------------------------------------------------------------
-        // ✅ WP-LIKE: FORCE plugin defaults into DB ON SAVE if fields are blank
-        // ------------------------------------------------------------------
-        $settings = app(Settings::class);
-        $group = 'plugins.media-defaults';
-
-        $defaultTitle = trim((string) $settings->get('default_title', '', $group));
-        $defaultDescRaw = (string) $settings->get('default_description', '', $group);
-        $defaultSubTitle = trim((string) $settings->get('default_sub_title', '', $group));
-        $defaultSubDescRaw = (string) $settings->get('default_sub_description', '', $group);
-
-        $defaultDesc = $this->sanitizeHtml($this->normalizeDefaultToHtml($defaultDescRaw));
-        $defaultSubDesc = $this->sanitizeHtml($this->normalizeDefaultToHtml($defaultSubDescRaw));
-
-        // Title (only if empty in DB AND empty in form)
-        if (
-            !filled($data['title'] ?? null)
-            && $defaultTitle !== ''
-            && !filled($this->record?->title)
-        ) {
-            $data['title'] = $defaultTitle;
-        }
-
-        // Description (Product)
-        if (
-            $this->htmlIsEmpty($data['description'] ?? null)
-            && $defaultDesc !== ''
-            && $this->htmlIsEmpty($this->record?->description)
-        ) {
-            $data['description'] = $defaultDesc;
-        }
-
-        // Sub title
-        $currentSubTitle = data_get($data, 'meta.frontend.meta_title');
-        $recordSubTitle = data_get($this->record?->meta ?? [], 'frontend.meta_title');
-
-        if (
-            !filled($currentSubTitle)
-            && $defaultSubTitle !== ''
-            && !filled($recordSubTitle)
-        ) {
-            data_set($data, 'meta.frontend.meta_title', $defaultSubTitle);
-        }
-
-        // Sub description
-        $currentSubDesc = data_get($data, 'meta.frontend.meta_description');
-        $recordSubDesc = data_get($this->record?->meta ?? [], 'frontend.meta_description');
-
-        if (
-            $this->htmlIsEmpty($currentSubDesc)
-            && $defaultSubDesc !== ''
-            && $this->htmlIsEmpty($recordSubDesc)
-        ) {
-            data_set($data, 'meta.frontend.meta_description', $defaultSubDesc);
-        }
-
-        // ✅ NEW: if Product still empty, fill from selected category product (don’t overwrite)
+        // ✅ KEEP: if Product still empty, fill from selected category product (don’t overwrite)
         $currentProduct = trim((string) data_get($data, 'meta.frontend.product', ''));
         if ($currentProduct === '' && !empty($this->pendingCategoryTermIds)) {
             $guess = $this->guessProductFromSelectedCategory($this->pendingCategoryTermIds);
@@ -899,7 +785,6 @@ class EditMedia extends EditRecord
                 })
                 ->url(fn(Media $record): string => url('/' . ltrim((string) $record->slug, '/')))
                 ->openUrlInNewTab(),
-
 
             Action::make('back')
                 ->label('Back')

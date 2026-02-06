@@ -2,12 +2,13 @@
 
 @section('content')
     @php
-        $settings = app(\App\Cms\Core\Settings::class);
+        $settings = app(\App\Cms\Core\SettingsRepository::class);
         $hooks = app(\App\Cms\Hooks\Hooks::class);
         $now = now();
 
         // ✅ Selected "Homepage Page" (must be a published PAGE)
-        $homePageId = (int) $settings->get('homepage_page_id', 0, 'core');
+        // IMPORTANT: use SettingsRepository so it matches Filament ManageCmsSettings save()
+        $homePageId = (int) $settings->get('core', 'homepage_page_id', 0);
 
         $homePage = $homePageId
             ? \App\Models\Post::query()

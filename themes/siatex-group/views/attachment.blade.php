@@ -5,6 +5,14 @@
     @php
         /** @var \App\Models\Media $media */
 
+        // ✅ Admin edit URL should come from controller.
+        // If not provided, generate safely (no override if already set).
+        $adminEditUrl =
+            $adminEditUrl ??
+            (class_exists(\App\Filament\Resources\MediaResource::class)
+                ? \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $media])
+                : url('/lara-admin'));
+
         // -----------------------------
         // Helpers
         // -----------------------------
@@ -69,9 +77,116 @@
             return '';
         };
 
+        // ✅ detect empty editor html (<p><br></p>, &nbsp;, etc.)
+        $htmlIsEmpty = function ($value) use ($htmlValue): bool {
+            $html = trim($htmlValue($value));
+            if ($html === '') {
+                return true;
+            }
+
+            $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $text = str_replace("\xc2\xa0", ' ', $text); // NBSP char
+            $text = trim(strip_tags($text));
+
+            return $text === '';
+        };
+
+        // ✅ normalize plain text to html for defaults
+        $normalizeToHtml = function (string $value): string {
+            $value = trim($value);
+            if ($value === '') {
+                return '';
+            }
+
+            // If already has HTML tags, keep as-is
+            if ($value !== strip_tags($value)) {
+                return $value;
+            }
+
+            return '<p>' . nl2br(e($value)) . '</p>';
+        };
+
+        // ------------------------------------------------------------------
+        // ✅ APPLY DEFAULTS ON FRONTEND (ALWAYS, not only preview)
+        // ------------------------------------------------------------------
+        if (function_exists('do_action')) {
+            // ✅ 1) Preview-only: apply Livewire session state first (for realtime iframe preview)
+            if (request()->query('md_preview') === '1') {
+                $previewState = session('media_defaults_preview_state', null);
+
+                if (is_array($previewState)) {
+                    $d = $previewState['data'] ?? null;
+
+                    if (is_array($d)) {
+                        // Title (only if empty)
+                        if (!filled($media->title ?? null) && filled($d['default_title'] ?? null)) {
+                            $media->title = (string) $d['default_title'];
+                        }
+
+                        // Description (Product) (only if empty)
+                        if ($htmlIsEmpty($media->description ?? null) && filled($d['default_description'] ?? null)) {
+                            $media->description = $normalizeToHtml((string) $d['default_description']);
+                        }
+
+                        // Meta fields
+                        $m = $media->meta ?? [];
+                        if (is_string($m) && trim($m) !== '') {
+                            $decoded = json_decode($m, true);
+                            $m = is_array($decoded) ? $decoded : [];
+                        }
+                        if (!is_array($m)) {
+                            $m = [];
+                        }
+
+                        // Sub title only if empty
+                        if (
+                            !filled(data_get($m, 'frontend.meta_title', '')) &&
+                            filled($d['default_sub_title'] ?? null)
+                        ) {
+                            data_set($m, 'frontend.meta_title', (string) $d['default_sub_title']);
+                        }
+
+                        // Sub description only if empty
+                        $curSub = data_get($m, 'frontend.meta_description', null);
+                        if ($htmlIsEmpty($curSub) && filled($d['default_sub_description'] ?? null)) {
+                            data_set(
+                                $m,
+                                'frontend.meta_description',
+                                $normalizeToHtml((string) $d['default_sub_description']),
+                            );
+                        }
+
+                        $media->meta = $m;
+                    }
+                }
+            }
+
+            // ✅ 2) Always apply DB-based defaults (category-wise + global fallback)
+            do_action('media.attachment.defaults.persist', $media);
+
+            // ✅ Re-read meta after plugin may have mutated it
+            $meta = $media->meta ?? [];
+            if (is_string($meta) && trim($meta) !== '') {
+                $decoded = json_decode($meta, true);
+                $meta = is_array($decoded) ? $decoded : [];
+            }
+            if (!is_array($meta)) {
+                $meta = [];
+            }
+        }
+
         // -----------------------------
-        // Base title + hero text
+        // ✅ Frontend meta (from meta.frontend.*)
         // -----------------------------
+        $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
+
+        $metaDescRaw = data_get($meta, 'frontend.meta_description', '');
+        $metaDescHtml = $sanitizeRichHtml($metaDescRaw);
+
+        // -----------------------------
+        // Base title + hero text (SEO-correct)
+        // -----------------------------
+        // ✅ H1 should be MAIN title (title/default_title), NOT sub title
         $title = (string) ($media->title ?: $media->original_filename ?? '');
         $title = trim($title) !== '' ? trim($title) : 'Attachment';
 
@@ -89,20 +204,13 @@
             $heroHtml = $heroDescHtml;
         } elseif ($heroCaption !== '') {
             $heroHtml = nl2br(e($heroCaption));
+        } elseif ($metaDescHtml !== '') {
+            // only as final fallback
+            $heroHtml = $metaDescHtml;
         }
 
         // -----------------------------
-        // ✅ Frontend meta (from meta.frontend.*)
-        // -----------------------------
-        $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
-
-        // ✅ This MUST be only the meta_description field (string/array handled)
-        $metaDescRaw = data_get($meta, 'frontend.meta_description', '');
-        $metaDescHtml = $sanitizeRichHtml($metaDescRaw);
-
-        // -----------------------------
-        // Breadcrumb:
-        // Prefer media_category taxonomy term, fallback to post category
+        // Breadcrumb taxonomy
         // -----------------------------
         $mediaCategoryTerm = null;
         $mediaCategoryTaxId = null;
@@ -254,20 +362,17 @@
         $printJsonLdHere = false;
     @endphp
 
-
-
-
     {{-- Breadcrumb --}}
     <div class="cms-container mx-auto px-4 pt-6">
         <nav class="text-sm text-slate-500">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
 
-            @if ($breadcrumbTerm)
+            {{--    @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
                 <a class="text-slate-600 hover:underline" href="{{ cms_term_url($breadcrumbTerm) }}">
                     {{ $breadcrumbTerm->name }}
                 </a>
-            @endif
+            @endif --}}
 
             <span class="mx-2 text-slate-300">/</span>
             <span class="text-slate-600">{{ $title }}</span>
@@ -313,8 +418,6 @@
                     @if ($heroHtml !== '')
                         <div class="mt-4 space-y-4 text-justify text-sm leading-7 text-slate-700">
                             {!! $heroHtml !!}
-
-
                         </div>
                     @endif
 
@@ -338,8 +441,30 @@
                         @foreach ($related as $r)
                             @php
                                 /** @var \App\Models\Media $r */
-                                $rTitle = (string) ($r->title ?: $r->original_filename ?? '');
+
+                                // ✅ Apply plugin defaults in-memory for related cards too (NO SAVE)
+                                if (function_exists('do_action')) {
+                                    do_action('media.attachment.defaults.persist', $r);
+                                }
+
+                                $rMeta = $r->meta ?? [];
+                                if (is_string($rMeta) && trim($rMeta) !== '') {
+                                    $decoded = json_decode($rMeta, true);
+                                    $rMeta = is_array($decoded) ? $decoded : [];
+                                }
+                                if (!is_array($rMeta)) {
+                                    $rMeta = [];
+                                }
+
+                                $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
+
+                                $rTitle =
+                                    (string) ($r->title ?:
+                                    ($rMetaTitle !== ''
+                                        ? $rMetaTitle
+                                        : $r->original_filename ?? ''));
                                 $rTitle = trim($rTitle) !== '' ? trim($rTitle) : 'Attachment';
+
                                 $rUrl = filled($r->slug) ? url('/' . ltrim((string) $r->slug, '/')) : $r->url();
                             @endphp
 
@@ -360,39 +485,10 @@
                                     ) !!}
                                 </div>
 
-                                @php
-                                    $rMeta = $r->meta ?? [];
-                                    if (is_string($rMeta) && trim($rMeta) !== '') {
-                                        $decoded = json_decode($rMeta, true);
-                                        $rMeta = is_array($decoded) ? $decoded : [];
-                                    }
-                                    if (!is_array($rMeta)) {
-                                        $rMeta = [];
-                                    }
-
-                                    $rMetaDescRaw = data_get($rMeta, 'frontend.meta_description', '');
-                                    if (is_array($rMetaDescRaw)) {
-                                        $rMetaDescRaw = $rMetaDescRaw['html'] ?? ($rMetaDescRaw['value'] ?? '');
-                                    }
-                                    if (is_object($rMetaDescRaw)) {
-                                        $arr = (array) $rMetaDescRaw;
-                                        $rMetaDescRaw = $arr['html'] ?? ($arr['value'] ?? '');
-                                    }
-                                    $rMetaDescHtml = is_string($rMetaDescRaw) ? trim($rMetaDescRaw) : '';
-                                    $rMetaDescHtml =
-                                        $rMetaDescHtml !== '' ? strip_tags($rMetaDescHtml, $allowedHtml) : '';
-
-                                    $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
-                                @endphp
-
                                 <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
                                     <h3 class="text-sm font-semibold leading-snug line-clamp-2">
                                         {{ $rTitle }}
                                     </h3>
-
-
-
-
                                 </div>
                             </a>
                         @endforeach
@@ -400,6 +496,7 @@
                 @endif
 
                 {{-- META + RELATED LINKS --}}
+                {{-- ✅ Mobile optimized: stack on mobile, hide Related Links on mobile --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
@@ -407,13 +504,14 @@
                         </h2>
 
                         @if ($metaDescHtml !== '')
-                            <div class="prose prose-slate mt-4 max-w-none text-sm leading-7">
+                            <div class="prose prose-slate mt-4 max-w-none text-sm leading-7 text-justify">
                                 {!! $metaDescHtml !!}
                             </div>
                         @endif
                     </div>
 
-                    <div class="lg:col-span-4">
+                    {{-- ✅ Hide on mobile --}}
+                    <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
 
@@ -422,8 +520,30 @@
                                     @foreach ($relatedLinks as $q)
                                         @php
                                             /** @var \App\Models\Media $q */
-                                            $qTitle = (string) ($q->title ?: $q->original_filename ?? '');
+
+                                            // ✅ Apply plugin defaults in-memory for link titles too (NO SAVE)
+                                            if (function_exists('do_action')) {
+                                                do_action('media.attachment.defaults.persist', $q);
+                                            }
+
+                                            $qMeta = $q->meta ?? [];
+                                            if (is_string($qMeta) && trim($qMeta) !== '') {
+                                                $decoded = json_decode($qMeta, true);
+                                                $qMeta = is_array($decoded) ? $decoded : [];
+                                            }
+                                            if (!is_array($qMeta)) {
+                                                $qMeta = [];
+                                            }
+
+                                            $qMetaTitle = trim((string) data_get($qMeta, 'frontend.meta_title', ''));
+
+                                            $qTitle =
+                                                (string) ($q->title ?:
+                                                ($qMetaTitle !== ''
+                                                    ? $qMetaTitle
+                                                    : $q->original_filename ?? ''));
                                             $qTitle = trim($qTitle) !== '' ? trim($qTitle) : 'Attachment';
+
                                             $qUrl = filled($q->slug)
                                                 ? url('/' . ltrim((string) $q->slug, '/'))
                                                 : $q->url();

@@ -29,6 +29,18 @@ class EditPost extends EditRecord
         return Width::Full;
     }
 
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    public function getTitle(): string
+    {
+        return 'Edit Post ';
+    }
+
+
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['product_media_ids'] = $this->record
@@ -164,9 +176,18 @@ class EditPost extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // ✅ LEFT SIDE: Add Post
+            Action::make('addPost')
+                ->label('Add Post')
+                ->icon('heroicon-o-plus')
+                ->color('primary')
+                ->url($this->getResource()::getUrl('create'))
+                // 👇 pushes everything else to the right
+                ->extraAttributes(['class' => 'me-auto']),
+
+            // ✅ RIGHT SIDE: existing buttons
             DeleteAction::make(),
 
-            // ✅ View on frontend (WP-style)
             Action::make('view')
                 ->label('View')
                 ->color('gray')
@@ -184,12 +205,14 @@ class EditPost extends EditRecord
                 ->icon('heroicon-o-arrow-left')
                 ->url($this->getResource()::getUrl('index')),
 
-            Action::make('save')
+            // ✅ Save (recommended Filament way)
+            $this->getSaveFormAction()
                 ->label('Save changes')
                 ->icon('heroicon-o-check')
                 ->color('info')
-                ->action(fn() => $this->save())
-                ->keyBindings(['mod+s']),
+                ->keyBindings(['mod+s'])
+                ->formId('form'),
         ];
     }
+
 }

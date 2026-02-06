@@ -4,10 +4,12 @@
     @php
         /** @var \App\Models\Post $post */
 
-        use Illuminate\Support\Str;
-
         $title = (string) ($post->title ?? '');
         $media = $post->featuredMedia;
+
+        // ✅ Do NOT build Filament URLs in Blade (avoid panel context issues / wrong resource 404).
+        // Controller should pass $adminEditUrl. If missing, fallback to dashboard only.
+        $adminEditUrl = $adminEditUrl ?? url('/lara-admin');
 
         $category = null;
         try {

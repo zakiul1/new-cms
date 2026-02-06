@@ -20,10 +20,12 @@ class CreatePost extends CreateRecord
     {
         return [
             $this->getCancelFormAction(),
-            $this->getCreateAnotherFormAction(),
-            $this->getCreateFormAction(),
+            $this->getCreateAnotherFormAction()->formId('form'),
+            $this->getCreateFormAction()->formId('form'),
         ];
     }
+
+
 
     protected function getRedirectUrl(): string
     {

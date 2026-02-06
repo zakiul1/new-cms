@@ -12,6 +12,8 @@ use App\Observers\PostSearchObserver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
+use App\Livewire\Filament\ToggleFrontendAdminBar;
+
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -61,5 +63,8 @@ class AppServiceProvider extends ServiceProvider
         if (function_exists('add_shortcode')) {
             CoreShortcodes::register();
         }
+
+        Livewire::component('filament.toggle-frontend-admin-bar', ToggleFrontendAdminBar::class);
+
     }
 }

@@ -40,6 +40,17 @@ class PostResource extends Resource
         return parent::getEloquentQuery()->where('type', 'post');
     }
 
+    /**
+     * ✅ Helper for CMS frontend admin bar
+     * Use record model (recommended) to avoid routing issues.
+     */
+    public static function cms_edit_post_url(Post $post): string
+    {
+        return static::getUrl('edit', ['record' => $post]);
+        // If you ever want to force key only:
+        // return static::getUrl('edit', ['record' => $post->getKey()]);
+    }
+
     public static function form(Schema $schema): Schema
     {
         return PostForm::configure($schema);

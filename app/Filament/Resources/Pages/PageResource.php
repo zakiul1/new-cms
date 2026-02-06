@@ -29,13 +29,23 @@ class PageResource extends Resource
 
     // Top-level (no group)
     protected static ?string $navigationLabel = 'Pages';
-    protected static string|\UnitEnum|null $navigationGroup = null;
+    protected static string|UnitEnum|null $navigationGroup = null;
 
     protected static ?int $navigationSort = 3;
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->where('type', 'page');
+    }
+
+    /**
+     * ✅ Helper for CMS frontend admin bar
+     */
+    public static function cms_edit_page_url(Post $page): string
+    {
+        return static::getUrl('edit', ['record' => $page]);
+        // If you ever want key only:
+        // return static::getUrl('edit', ['record' => $page->getKey()]);
     }
 
     public static function form(Schema $schema): Schema

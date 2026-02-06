@@ -12,6 +12,16 @@ class CreateCategory extends CreateRecord
 {
     protected static string $resource = CategoryResource::class;
 
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            $this->getCancelFormAction(),
+            $this->getCreateAnotherFormAction()->formId('form'),
+            $this->getCreateFormAction()->formId('form'),
+        ];
+    }
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $taxonomyId = Taxonomy::firstOrCreate(

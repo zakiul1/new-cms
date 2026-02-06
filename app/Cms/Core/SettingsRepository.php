@@ -22,25 +22,18 @@ class SettingsRepository
                     return $default;
                 }
 
+                // ✅ value is already decoded because CmsSetting::$casts['value' => 'json']
                 $value = $row->value;
 
-                if ($value === null) {
+                if ($value === null || $value === '') {
                     return $default;
                 }
 
-                // ✅ If value is JSON string, decode (arrays/settings)
+                // ✅ normalize common boolean-ish strings (only if it is string)
                 if (is_string($value)) {
                     $trim = trim($value);
-
-                    if ($trim !== '' && ($trim[0] === '{' || $trim[0] === '[')) {
-                        $decoded = json_decode($trim, true);
-                        if (json_last_error() === JSON_ERROR_NONE) {
-                            return $decoded;
-                        }
-                    }
-
-                    // ✅ Normalize common boolean strings safely
                     $lower = strtolower($trim);
+
                     if ($lower === 'true')
                         return true;
                     if ($lower === 'false')
@@ -49,6 +42,8 @@ class SettingsRepository
                         return true;
                     if ($trim === '0')
                         return false;
+
+                    return $trim;
                 }
 
                 return $value;
@@ -58,18 +53,18 @@ class SettingsRepository
 
     public function set(string $group, string $key, mixed $value): void
     {
-        $stored = $value;
-
-        if (is_array($value) || is_object($value)) {
-            $stored = json_encode($value, JSON_UNESCAPED_UNICODE);
-        }
-
+        // ✅ DO NOT json_encode manually (Eloquent json cast handles it)
         CmsSetting::query()->updateOrCreate(
             ['group' => $group, 'key' => $key],
-            ['value' => $stored]
+            ['value' => $value]
         );
 
+        // ✅ clear BOTH caches:
+        // 1) per-key cache used by SettingsRepository
         Cache::forget($this->cacheKey($group, $key));
+
+        // 2) per-group cache used by App\Cms\Core\Settings::all()
+        Cache::forget($this->settingsGroupCacheKey($group));
     }
 
     public function forget(string $group, string $key): void
@@ -80,10 +75,17 @@ class SettingsRepository
             ->delete();
 
         Cache::forget($this->cacheKey($group, $key));
+        Cache::forget($this->settingsGroupCacheKey($group));
     }
 
     private function cacheKey(string $group, string $key): string
     {
         return "cms_settings.{$group}.{$key}";
+    }
+
+    // ✅ MUST match Settings::CACHE_PREFIX + group ("cms:settings:group:" + group)
+    private function settingsGroupCacheKey(string $group): string
+    {
+        return 'cms:settings:group:' . $group;
     }
 }

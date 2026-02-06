@@ -5,7 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\MediaResource\Pages\CreateMedia;
 use App\Filament\Resources\MediaResource\Pages\EditMedia;
 use App\Filament\Resources\MediaResource\Pages\ListMedia;
-use App\Filament\Resources\MediaResource\Pages\UploadMedia; // ✅ NEW
+use App\Filament\Resources\MediaResource\Pages\UploadMedia;
 use App\Filament\Resources\MediaResource\Schemas\MediaForm;
 use App\Models\Media;
 use BackedEnum;
@@ -27,6 +27,17 @@ class MediaResource extends Resource
         return MediaForm::configure($schema);
     }
 
+    /**
+     * ✅ Helper for CMS frontend admin bar
+     * Use record model (recommended) to avoid routing issues.
+     */
+    public static function cms_edit_media_url(Media $media): string
+    {
+        return static::getUrl('edit', ['record' => $media]);
+        // If you ever want to force key only:
+        // return static::getUrl('edit', ['record' => $media->getKey()]);
+    }
+
     public static function getPages(): array
     {
         return [
@@ -36,5 +47,4 @@ class MediaResource extends Resource
             'edit' => EditMedia::route('/{record}/edit'),
         ];
     }
-
 }

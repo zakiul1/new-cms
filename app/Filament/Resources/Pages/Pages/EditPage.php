@@ -101,9 +101,14 @@ class EditPage extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('addPage')
+                ->label('Add Page')
+                ->icon('heroicon-o-plus')
+                ->color('primary')
+                ->url($this->getResource()::getUrl('create')),
+
             DeleteAction::make(),
 
-            // ✅ View on frontend (WP-style)
             Action::make('view')
                 ->label('View')
                 ->color('gray')
@@ -121,12 +126,14 @@ class EditPage extends EditRecord
                 ->icon('heroicon-o-arrow-left')
                 ->url($this->getResource()::getUrl('index')),
 
-            Action::make('save')
+            // ✅ Better: use Filament’s built-in save action for header
+            $this->getSaveFormAction()
                 ->label('Save changes')
                 ->icon('heroicon-o-check')
                 ->color('info')
-                ->action(fn() => $this->save())
-                ->keyBindings(['mod+s']),
+                ->keyBindings(['mod+s'])
+                ->formId('form'),
         ];
     }
+
 }

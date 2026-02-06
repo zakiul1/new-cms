@@ -235,26 +235,22 @@ class PageForm
                             ->schema([
                                 Placeholder::make('frontend_preview')
                                     ->label('')
-                                    ->content(function (?Post $record, Get $get, PermalinkManager $permalinks): HtmlString {
-                                        $title = trim((string) ($get('title') ?? ''));
-                                        $title = $title !== '' ? $title : (string) ($record?->title ?: 'Page');
+                                    ->content(function (?Post $record, PermalinkManager $permalinks): \Illuminate\Support\HtmlString {
+                                        if (!$record) {
+                                            return new \Illuminate\Support\HtmlString(
+                                                '<div class="text-sm text-gray-600">Save the page first to preview the real frontend page.</div>'
+                                            );
+                                        }
 
-                                        $excerpt = trim((string) ($get('excerpt') ?? ''));
+                                        $url = $permalinks->pageUrl($record);
 
-                                        $url = $record
-                                            ? $permalinks->pageUrl($record)
-                                            : '';
-
-                                        $html = view('filament.pages.frontend-preview', [
-                                            'title' => $title,
-                                            'excerpt' => $excerpt,
-                                            'url' => $url,
-                                        ])->render();
-
-                                        return new HtmlString($html);
+                                        return new \Illuminate\Support\HtmlString(
+                                            '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'
+                                        );
                                     })
                                     ->dehydrated(false),
                             ]),
+
                     ]),
 
                 /**
