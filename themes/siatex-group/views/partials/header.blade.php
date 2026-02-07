@@ -48,6 +48,7 @@
                     </a>
                 @endif
 
+
                 {!! app(\App\Cms\Hooks\Hooks::class)->applyFilters('theme.header.icons', '') !!}
             </div>
         </div>
