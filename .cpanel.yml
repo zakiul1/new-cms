@@ -1,29 +1,37 @@
 deployment:
   tasks:
-    - export APPPATH=/home/siatexglobal/laravel-app/
-    - export PUBLICPATH=/home/siatexglobal/public_html/
+    - export APPPATH=/home/siatexglobal/laravel-app
+    - export PUBLICPATH=/home/siatexglobal/public_html
     - export LOG=/home/siatexglobal/deploy.log
 
-    - echo "===== DEPLOY START $(date) =====" >> $LOG
+    # Ensure log exists and is writable
+    - /bin/touch "$LOG"
+    - /bin/chmod 664 "$LOG" || true
 
-    - /bin/mkdir -p $APPPATH >> $LOG 2>&1
-    - /bin/mkdir -p $PUBLICPATH >> $LOG 2>&1
+    - /bin/echo "===== DEPLOY START $(/bin/date) =====" >> "$LOG" 2>&1
+    - /bin/echo "PWD: $(/bin/pwd)" >> "$LOG" 2>&1
+    - /bin/echo "USER: $(/usr/bin/whoami)" >> "$LOG" 2>&1
+
+    - /bin/mkdir -p "$APPPATH" >> "$LOG" 2>&1
+    - /bin/mkdir -p "$PUBLICPATH" >> "$LOG" 2>&1
 
     # Copy app files (excluding runtime + sensitive)
-    - /bin/rsync -a --delete \
-        --exclude=".git/" \
-        --exclude=".env" \
-        --exclude="storage/" \
-        --exclude="bootstrap/cache/" \
-        --exclude="node_modules/" \
-        --exclude="vendor/" \
-        --exclude="config/filesystems.php" \
-        ./ $APPPATH >> $LOG 2>&1
+    - /bin/bash -lc "/bin/rsync -a --delete \
+        --exclude='.git/' \
+        --exclude='.env' \
+        --exclude='storage/' \
+        --exclude='bootstrap/cache/' \
+        --exclude='node_modules/' \
+        --exclude='vendor/' \
+        --exclude='config/filesystems.php' \
+        ./ \"$APPPATH/\" \
+      " >> "$LOG" 2>&1
 
     # Copy public assets but DO NOT overwrite server index.php/.htaccess
-    - /bin/rsync -a --delete \
-        --exclude="index.php" \
-        --exclude=".htaccess" \
-        $APPPATH/public/ $PUBLICPATH/ >> $LOG 2>&1
+    - /bin/bash -lc "/bin/rsync -a --delete \
+        --exclude='index.php' \
+        --exclude='.htaccess' \
+        \"$APPPATH/public/\" \"$PUBLICPATH/\" \
+      " >> "$LOG" 2>&1
 
-    - echo "===== DEPLOY END $(date) =====" >> $LOG
+    - /bin/echo "===== DEPLOY END $(/bin/date) =====" >> "$LOG" 2>&1
