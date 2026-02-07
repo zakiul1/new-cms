@@ -1,16 +1,22 @@
 deployment:
   tasks:
-    - export APPPATH=/home/siatexglobal/laravel-app
-    - export PUBLICPATH=/home/siatexglobal/public_html
+    - export APPPATH=/home/siatexglobal/laravel-app/
+    - export PUBLICPATH=/home/siatexglobal/public_html/
     - export LOG=/home/siatexglobal/deploy.log
 
-    - /bin/echo "===== DEPLOY START $(/bin/date) =====" >> $LOG
+    - echo "===== DEPLOY START $(date) =====" >> "$LOG"
 
-    - /bin/mkdir -p $APPPATH >> $LOG 2>&1
-    - /bin/mkdir -p $PUBLICPATH >> $LOG 2>&1
+    # Find rsync (common locations: /usr/bin/rsync, /usr/local/bin/rsync)
+    - export RSYNC="$(command -v rsync)"
+    - if [ -z "$RSYNC" ]; then echo "ERROR: rsync not installed or not in PATH" >> "$LOG"; exit 1; fi
+    - echo "Using rsync: $RSYNC" >> "$LOG"
 
-    - /bin/echo "[1] RSYNC APP -> $APPPATH" >> $LOG
-    - /usr/bin/timeout 300 /bin/rsync -a --delete \
+    - /bin/mkdir -p "$APPPATH" >> "$LOG" 2>&1
+    - /bin/mkdir -p "$PUBLICPATH" >> "$LOG" 2>&1
+
+    # Copy app files (excluding runtime + sensitive)
+    - echo "[1] RSYNC APP -> $APPPATH" >> "$LOG"
+    - /usr/bin/timeout 600 "$RSYNC" -a --delete \
         --exclude=".git/" \
         --exclude=".env" \
         --exclude="storage/" \
@@ -18,12 +24,13 @@ deployment:
         --exclude="node_modules/" \
         --exclude="vendor/" \
         --exclude="config/filesystems.php" \
-        ./ $APPPATH >> $LOG 2>&1
+        ./ "$APPPATH" >> "$LOG" 2>&1
 
-    - /bin/echo "[2] RSYNC PUBLIC -> $PUBLICPATH (keep index.php/.htaccess)" >> $LOG
-    - /usr/bin/timeout 300 /bin/rsync -a --delete \
+    # Copy public assets but DO NOT overwrite server index.php/.htaccess
+    - echo "[2] RSYNC PUBLIC -> $PUBLICPATH" >> "$LOG"
+    - /usr/bin/timeout 600 "$RSYNC" -a --delete \
         --exclude="index.php" \
         --exclude=".htaccess" \
-        $APPPATH/public/ $PUBLICPATH/ >> $LOG 2>&1
+        "$APPPATH/public/" "$PUBLICPATH/" >> "$LOG" 2>&1
 
-    - /bin/echo "===== DEPLOY END $(/bin/date) =====" >> $LOG
+    - echo "===== DEPLOY END $(date) =====" >> "$LOG"
