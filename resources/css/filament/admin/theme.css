@@ -1,0 +1,103 @@
+/* 1) Tailwind v4 (generates utilities for your custom views) */
+
+@import "tailwindcss";
+
+/* 2) Filament theme LAST so Filament’s table/grid/layout CSS wins */
+
+@import "../../../../vendor/filament/filament/resources/css/theme.css";
+
+/* 3) Scan your classes */
+
+@source "../../../../app/Filament/**/*.php";
+@source "../../../../resources/views/filament/**/*.blade.php";
+@source "../../../../resources/views/**/*.blade.php";
+@source "../../../../resources/js/**/*.js";
+
+/* ==========================================================
+   Media grid: premium tiles + checkbox overlay (no layout break)
+   ========================================================== */
+
+
+/* ==========================================================
+   Media grid (Filament contentGrid)
+   ========================================================== */
+
+
+/* ==========================================================
+   Media grid: FIX overflow in 5 columns + checkbox overlay
+   ========================================================== */
+
+
+/* Gap between tiles */
+
+.fi-ta-content-grid {
+    gap: 14px !important;
+}
+
+
+/* IMPORTANT: grid children must be allowed to shrink */
+
+.fi-ta-content-grid-item,
+.fi-ta-content-grid-item * {
+    min-width: 0 !important;
+}
+
+
+/* Remove Filament card wrapper look so YOUR tile controls size */
+
+.fi-ta-content-grid-item {
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+
+/* Make record + content container stretch FULL cell width (no centering!) */
+
+.fi-ta-content-grid-item .fi-ta-record,
+.fi-ta-content-grid-item .fi-ta-record-content-ctn {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+
+/* 🔥 This is the overflow killer: don't center the record container */
+
+.fi-ta-content-grid-item .fi-ta-record-content-ctn {
+    display: block !important;
+    /* or flex with stretch */
+}
+
+
+/* Ensure your blade root takes full width */
+
+.fi-ta-content-grid-item .fi-ta-record-content-ctn>* {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+
+/* Checkbox overlay (does not push layout) */
+
+.fi-ta-content-grid .fi-ta-record {
+    position: relative !important;
+}
+
+.fi-ta-content-grid .fi-ta-record-checkbox {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 50 !important;
+    margin: 0 !important;
+}
+
+
+/* Clean checkbox chip */
+
+.fi-ta-content-grid .fi-ta-record-checkbox label,
+.fi-ta-content-grid .fi-ta-record-checkbox .fi-checkbox {
+    background: rgba(255, 255, 255, 0.92) !important;
+    border-radius: 10px !important;
+    padding: 4px !important;
+}

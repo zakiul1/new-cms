@@ -1,0 +1,20 @@
+{
+    "name": "Siatex Group",
+    "slug": "siatex-group",
+    "version": "1.0.0",
+    "author": "Siatex",
+    "description": "Siatex Group theme (homepage + posts grid + plugin slider support).",
+    "screenshot": "dist/preview.png",
+    "menus": {
+        "topbar": "Top Bar Menu",
+        "primary": "Primary Menu",
+        "footer": "Footer Menu"
+    },
+    "sidebars": {
+        "footer-1": "Footer Widgets"
+    },
+    "assets": {
+        "styles": ["dist/theme.css"],
+        "scripts": [{ "src": "dist/theme.js", "defer": true }]
+    }
+}

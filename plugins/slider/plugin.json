@@ -1,0 +1,30 @@
+{
+    "name": "Slider",
+    "slug": "slider",
+    "version": "1.0.0",
+    "description": "Hero/content slider with indicators, navigation, autoplay, and Media Library images.",
+    "assets": {
+        "styles": [
+            "dist/slider.css"
+        ],
+        "scripts": [
+            "dist/slider.js"
+        ]
+    },
+    "settings": {
+        "group": "slider",
+        "fields": [{
+                "key": "autoplay",
+                "label": "Autoplay",
+                "type": "toggle",
+                "default": true
+            },
+            {
+                "key": "delay_ms",
+                "label": "Autoplay Delay (ms)",
+                "type": "text",
+                "default": 6000
+            }
+        ]
+    }
+}

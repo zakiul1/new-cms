@@ -1,0 +1,473 @@
+<?php
+
+namespace App\Filament\Resources\MediaResource\Pages;
+
+use App\Filament\Resources\MediaResource;
+use App\Models\Media;
+use App\Models\Taxonomy;
+use App\Models\Term;
+use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\Width;
+use Filament\Tables\Columns\Layout\Stack;
+use Filament\Tables\Columns\Layout\View as LayoutView;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
+use Filament\Tables\Columns\TagsColumn;
+use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Select;
+use Illuminate\Database\Eloquent\Collection;
+
+
+
+class ListMedia extends ListRecords
+{
+    protected static string $resource = MediaResource::class;
+
+    public string $viewMode = 'list'; // grid | list
+    public bool $selectMode = false;  // bulk actions only when true (grid only)
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        $this->viewMode = (string) session()->get('media.viewMode', 'list');
+        $this->selectMode = (bool) session()->get('media.selectMode', false);
+
+        if (!in_array($this->viewMode, ['grid', 'list'], true)) {
+            $this->viewMode = 'list';
+        }
+
+        if ($this->viewMode !== 'grid') {
+            $this->selectMode = false;
+            session()->put('media.selectMode', false);
+        }
+    }
+
+    public function getMaxContentWidth(): Width
+    {
+        return Width::Full;
+    }
+
+    protected function setViewMode(string $mode): void
+    {
+        $this->viewMode = in_array($mode, ['grid', 'list'], true) ? $mode : 'list';
+        session()->put('media.viewMode', $this->viewMode);
+
+        if ($this->viewMode !== 'grid') {
+            $this->selectMode = false;
+            session()->put('media.selectMode', false);
+        }
+
+        $this->resetTable();
+        $this->resetTablePage();
+    }
+
+    protected function toggleSelectMode(): void
+    {
+        if ($this->viewMode !== 'grid') {
+            $this->viewMode = 'grid';
+            session()->put('media.viewMode', 'grid');
+        }
+
+        $this->selectMode = !$this->selectMode;
+        session()->put('media.selectMode', $this->selectMode);
+
+        $this->resetTable();
+        $this->resetTablePage();
+    }
+
+    protected function folderOptions(): array
+    {
+        $taxonomyId = Taxonomy::query()->where('key', 'media_folder')->value('id');
+        if (!$taxonomyId) {
+            return [];
+        }
+
+        return Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    protected function categoryOptions(): array
+    {
+        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxonomyId) {
+            return [];
+        }
+
+        return Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    protected function mediaCategoryTaxonomyId(): ?int
+    {
+        return Taxonomy::query()->where('key', 'media_category')->value('id');
+    }
+
+    protected function mediaFolderTaxonomyId(): ?int
+    {
+        return Taxonomy::query()->where('key', 'media_folder')->value('id');
+    }
+
+    protected function buildBulkActions(): array
+    {
+        return [
+            BulkAction::make('copy_to_media_category')
+                ->label('Copy to Category')
+                ->icon('heroicon-o-document-duplicate')
+                ->form([
+                    Select::make('category_id')
+                        ->label('Target Category')
+                        ->options(fn() => $this->categoryOptions())
+                        ->searchable()
+                        ->required(),
+                ])
+                ->action(function (Collection $records, array $data): void {
+                    $taxonomyId = Taxonomy::idByKey('media_category');
+                    $categoryId = (int) ($data['category_id'] ?? 0);
+
+                    if (!$taxonomyId || $categoryId <= 0) {
+                        return;
+                    }
+
+                    $valid = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->where('id', $categoryId)
+                        ->exists();
+
+                    if (!$valid) {
+                        Notification::make()->title('Invalid category selected')->danger()->send();
+                        return;
+                    }
+
+                    foreach ($records as $media) {
+                        /** @var \App\Models\Media $media */
+                        $media->terms()->syncWithoutDetaching([$categoryId]);
+                    }
+                })
+                ->deselectRecordsAfterCompletion(),
+
+            BulkAction::make('move_to_media_category')
+                ->label('Move to Category')
+                ->icon('heroicon-o-arrow-right')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->form([
+                    Select::make('category_id')
+                        ->label('Target Category')
+                        ->options(fn() => $this->categoryOptions())
+                        ->searchable()
+                        ->required(),
+                ])
+                ->action(function (Collection $records, array $data): void {
+                    $taxonomyId = Taxonomy::idByKey('media_category');
+                    $categoryId = (int) ($data['category_id'] ?? 0);
+
+                    if (!$taxonomyId || $categoryId <= 0) {
+                        return;
+                    }
+
+                    $valid = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->where('id', $categoryId)
+                        ->exists();
+
+                    if (!$valid) {
+                        Notification::make()->title('Invalid category selected')->danger()->send();
+                        return;
+                    }
+
+                    // Only detach media_category terms (do NOT touch media_folder)
+                    $allMediaCategoryTermIds = Term::query()
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->pluck('id')
+                        ->all();
+
+                    foreach ($records as $media) {
+                        /** @var \App\Models\Media $media */
+                        if (!empty($allMediaCategoryTermIds)) {
+                            $media->terms()->detach($allMediaCategoryTermIds);
+                        }
+
+                        $media->terms()->syncWithoutDetaching([$categoryId]);
+                    }
+                })
+                ->deselectRecordsAfterCompletion(),
+
+            DeleteBulkAction::make(),
+        ];
+    }
+
+
+    protected function frontendUrl(Media $record): string
+    {
+        return filled($record->slug)
+            ? url('/' . ltrim((string) $record->slug, '/'))
+            : $record->url();
+    }
+
+    /**
+     * ✅ WP-like Trash link handler (works without Actions column)
+     */
+    public function trashMedia(int $id): void
+    {
+        $record = Media::query()->find($id);
+
+        if (!$record) {
+            Notification::make()->title('Media not found')->danger()->send();
+            return;
+        }
+
+        try {
+            $record->delete();
+
+            Notification::make()
+                ->title('Moved to Trash')
+                ->success()
+                ->send();
+
+            $this->resetTable();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Delete failed')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    // --- Header Actions (WP-like) ---
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('grid')
+                ->label('Grid')
+                ->icon('heroicon-o-squares-2x2')
+                ->color($this->viewMode === 'grid' ? 'primary' : 'gray')
+                ->action(fn() => $this->setViewMode('grid')),
+
+            Action::make('list')
+                ->label('List')
+                ->icon('heroicon-o-list-bullet')
+                ->color($this->viewMode === 'list' ? 'primary' : 'gray')
+                ->action(fn() => $this->setViewMode('list')),
+
+            Action::make('select')
+                ->label($this->selectMode ? 'Done' : 'Select')
+                ->icon($this->selectMode ? 'heroicon-o-check' : 'heroicon-o-check-circle')
+                ->color($this->selectMode ? 'primary' : 'gray')
+                ->visible(fn() => $this->viewMode === 'grid')
+                ->action(fn() => $this->toggleSelectMode()),
+
+            Action::make('upload')
+                ->label('Upload')
+                ->icon('heroicon-o-arrow-up-tray')
+                ->url(MediaResource::getUrl('upload')),
+        ];
+    }
+
+    public function table(Table $table): Table
+    {
+        $bulkActions = $this->buildBulkActions();
+        $catTaxId = $this->mediaCategoryTaxonomyId();
+        $folderTaxId = $this->mediaFolderTaxonomyId();
+
+        $table = $table
+            ->modifyQueryUsing(fn(Builder $query) => $query->with(['variantRecords', 'terms']))
+            ->defaultSort('id', 'desc')
+            ->searchDebounce(400)
+            ->persistSearchInSession()
+            ->persistFiltersInSession()
+            ->paginationPageOptions([24, 36, 48, 72])
+            ->defaultPaginationPageOption(36)
+            ->filters([
+                SelectFilter::make('type')
+                    ->label('Type')
+                    ->options([
+                        'image' => 'Images',
+                        'video' => 'Video',
+                        'pdf' => 'PDF',
+                        'other' => 'Other',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        $v = $data['value'] ?? null;
+
+                        return match ($v) {
+                            'image' => $query->where('mime_type', 'like', 'image/%'),
+                            'video' => $query->where('mime_type', 'like', 'video/%'),
+                            'pdf' => $query->where('mime_type', 'application/pdf'),
+                            'other' => $query->where(function (Builder $q) {
+                                    $q->where('mime_type', 'not like', 'image/%')
+                                    ->where('mime_type', 'not like', 'video/%')
+                                    ->where('mime_type', '!=', 'application/pdf');
+                                }),
+                            default => $query,
+                        };
+                    }),
+
+                SelectFilter::make('category')
+                    ->label('Category')
+                    ->searchable()
+                    ->preload()
+                    ->options(fn(): array => ['__uncat__' => 'Uncategorized'] + $this->categoryOptions())
+                    ->query(function (Builder $query, array $data) use ($catTaxId) {
+                        $value = $data['value'] ?? null;
+
+                        if (!filled($value)) {
+                            return $query;
+                        }
+
+                        if ($value === '__uncat__') {
+                            if (!$catTaxId) {
+                                return $query;
+                            }
+
+                            return $query->whereDoesntHave(
+                                'terms',
+                                fn(Builder $q) => $q->where('terms.taxonomy_id', $catTaxId)
+                            );
+                        }
+
+                        return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', (int) $value));
+                    }),
+
+                SelectFilter::make('folder')
+                    ->label('Folder')
+                    ->searchable()
+                    ->preload()
+                    ->options(fn(): array => ['__none__' => 'No folder'] + $this->folderOptions())
+                    ->query(function (Builder $query, array $data) use ($folderTaxId) {
+                        $value = $data['value'] ?? null;
+
+                        if (!filled($value)) {
+                            return $query;
+                        }
+
+                        if ($value === '__none__') {
+                            if (!$folderTaxId) {
+                                return $query;
+                            }
+
+                            return $query->whereDoesntHave(
+                                'terms',
+                                fn(Builder $q) => $q->where('terms.taxonomy_id', $folderTaxId)
+                            );
+                        }
+
+                        return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', (int) $value));
+                    }),
+            ]);
+
+        // ✅ GRID MODE
+        if ($this->viewMode === 'grid') {
+            return $table
+                ->recordClasses(fn() => 'min-w-0')
+                ->columns([
+                    Stack::make([
+                        LayoutView::make('card')->view('filament.media.grid-card'),
+                    ]),
+                ])
+                ->contentGrid([
+                    'default' => 2,
+                    'sm' => 3,
+                    'md' => 4,
+                    'lg' => 5,
+                    'xl' => 6,
+                ])
+                ->recordUrl(fn(Media $record) => MediaResource::getUrl('edit', ['record' => $record]))
+                ->recordAction(null)
+                ->actions([
+
+                ])
+                // ✅ no extra column
+                ->bulkActions($this->selectMode ? $bulkActions : []);
+        }
+
+        // ✅ LIST MODE (NO actions column, WP-like actions under title)
+        return $table
+            ->recordClasses(fn() => 'group')
+            ->columns([
+                ViewColumn::make('thumb')
+                    ->label('')
+                    ->view('filament.media.list-thumb'),
+
+                TextColumn::make('title')
+                    ->label('Title')
+                    ->searchable()
+                    ->sortable()
+                    ->wrap(false)
+                    ->limit(40)
+                    ->extraAttributes(['class' => 'min-w-0 max-w-[320px]'])
+                    ->description(function (Media $record): HtmlString {
+                        $editUrl = MediaResource::getUrl('edit', ['record' => $record]);
+                        $viewUrl = $this->frontendUrl($record);
+
+                        $actions =
+                            '<div class="mt-1 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">' .
+                            '<a class="hover:underline text-primary-600" href="' . e($editUrl) . '">Edit</a>' .
+                            ' <span class="text-slate-300">|</span> ' .
+                            '<a class="hover:underline text-slate-600" href="' . e($viewUrl) . '" target="_blank" rel="noopener noreferrer">View</a>' .
+                            '</div>';
+
+                        return new HtmlString($actions);
+                    }),
+
+
+                TagsColumn::make('categories')
+                    ->label('Categories')
+                    ->state(function (Media $record) use ($catTaxId): array {
+                        if (!$catTaxId) {
+                            return [];
+                        }
+
+                        return $record->terms
+                            ->filter(fn($t) => (int) $t->taxonomy_id === (int) $catTaxId)
+                            ->pluck('name')
+                            ->filter(fn($name) => is_string($name) && trim($name) !== '')
+                            ->map(fn($name) => trim($name))
+                            ->values()
+                            ->all();
+                    })
+                    ->separator(',') // optional (UI only)
+                    ->placeholder('—')
+                    ->toggleable(),
+
+                TextColumn::make('mime_type')
+                    ->label('Type')
+                    ->extraAttributes(['class' => 'whitespace-nowrap']),
+
+                TextColumn::make('size')
+                    ->label('Size')
+                    ->formatStateUsing(fn($state) => number_format(((int) $state) / 1024, 1) . ' KB')
+                    ->extraAttributes(['class' => 'whitespace-nowrap'])
+                    ->sortable(),
+
+                TextColumn::make('created_at')
+                    ->label('Uploaded')
+                    ->since()
+                    ->sortable()
+                    ->extraAttributes(['class' => 'whitespace-nowrap']),
+            ])
+            ->actions([
+                DeleteAction::make()
+                    ->label('Trash')
+                    ->icon('heroicon-o-trash')
+                    ->requiresConfirmation()
+                    ->successNotificationTitle('Moved to trash'),
+            ])          // ✅ removes the last action column
+            ->bulkActions($bulkActions);
+    }
+}

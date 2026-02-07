@@ -1,0 +1,6 @@
+{
+  "name": "G Console",
+  "slug": "g-console",
+  "version": "1.0.0",
+  "description": "Inject custom header meta tags and footer scripts into the active theme via hooks."
+}

@@ -1,0 +1,41 @@
+{
+  "name": "Hello Plugin",
+  "slug": "hello",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php",
+
+  "settings": {
+    "group": "plugin:hello",
+    "title": "Hello Settings",
+    "description": "Configure Hello Plugin behavior.",
+    "fields": [
+      {
+        "key": "enabled",
+        "label": "Enable Plugin Features",
+        "type": "toggle",
+        "default": true
+      },
+      {
+        "key": "greeting",
+        "label": "Greeting Text",
+        "type": "text",
+        "default": "Hello",
+        "required": true,
+        "helper": "This text will be used in the shortcode output."
+      },
+      {
+        "key": "style",
+        "label": "Style",
+        "type": "select",
+        "default": "simple",
+        "options": ["simple", "badge", "highlight"]
+      },
+      {
+        "key": "max_items",
+        "label": "Max Items",
+        "type": "number",
+        "default": 5
+      }
+    ]
+  }
+}
