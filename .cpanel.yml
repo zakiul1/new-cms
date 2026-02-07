@@ -18,8 +18,12 @@ deployment:
         ./ $APPPATH
 
     # Copy public files to public_html
-    - /bin/rsync -a --delete $APPPATH/public/ $PUBLICPATH/
+    # IMPORTANT: do NOT overwrite server existing index.php and .htaccess
+    - /bin/rsync -a --delete \
+        --exclude="index.php" \
+        --exclude=".htaccess" \
+        $APPPATH/public/ $PUBLICPATH/
 
-    # Force your custom public_html entry + htaccess (optional but recommended)
-    - /bin/cp -f $APPPATH/deploy/index.php $PUBLICPATH/index.php
-    - /bin/cp -f $APPPATH/deploy/.htaccess $PUBLICPATH/.htaccess
+    # IMPORTANT: removed these so deploy never changes them
+    # - /bin/cp -f $APPPATH/deploy/index.php $PUBLICPATH/index.php
+    # - /bin/cp -f $APPPATH/deploy/.htaccess $PUBLICPATH/.htaccess
