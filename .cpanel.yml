@@ -4,10 +4,12 @@ deployment:
     - export PUBLICPATH=/home/siatexglobal/public_html/
     - export LOG=/home/siatexglobal/deploy.log
 
-    - /bin/echo "==== DEPLOY START $(date) ====" >> $LOG
+    - echo "===== DEPLOY START $(date) =====" >> $LOG
+
     - /bin/mkdir -p $APPPATH >> $LOG 2>&1
     - /bin/mkdir -p $PUBLICPATH >> $LOG 2>&1
 
+    # Copy app files (excluding runtime + sensitive)
     - /bin/rsync -a --delete \
         --exclude=".git/" \
         --exclude=".env" \
@@ -18,9 +20,10 @@ deployment:
         --exclude="config/filesystems.php" \
         ./ $APPPATH >> $LOG 2>&1
 
+    # Copy public assets but DO NOT overwrite server index.php/.htaccess
     - /bin/rsync -a --delete \
         --exclude="index.php" \
         --exclude=".htaccess" \
         $APPPATH/public/ $PUBLICPATH/ >> $LOG 2>&1
 
-    - /bin/echo "==== DEPLOY END $(date) ====" >> $LOG
+    - echo "===== DEPLOY END $(date) =====" >> $LOG
