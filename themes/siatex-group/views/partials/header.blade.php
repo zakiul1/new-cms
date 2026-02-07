@@ -14,6 +14,11 @@
     if ($logoWidth <= 0) {
         $logoWidth = 180;
     }
+
+    // ✅ Favicon (from Customizer option)
+    $faviconId = (int) ($o['favicon_media_id'] ?? 0);
+    $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
+    $faviconUrl = $favicon ? $favicon->url() : null;
 @endphp
 
 <header class=" bg-white">
