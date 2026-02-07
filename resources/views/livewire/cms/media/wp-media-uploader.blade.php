@@ -1,10 +1,34 @@
 {{-- resources/views/livewire/cms/media/wp-media-uploader.blade.php --}}
 
-<div x-data="window.wpMediaUploader(@this)" x-init="init()" class="space-y-4">
+<div x-data="{
+    isDropping: false,
+    uploading: false,
+    progress: 0,
+
+    // Convert dropped files -> set into input -> trigger wire:model upload
+    dropFiles(files) {
+        const list = Array.from(files || []);
+        if (!list.length) return;
+
+        const dt = new DataTransfer();
+        list.forEach(f => dt.items.add(f));
+
+        this.$refs.picker.files = dt.files;
+        this.$refs.picker.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+}" class="space-y-4" {{-- ✅ Livewire upload progress events --}}
+    x-on:livewire-upload-start.window="uploading=true; progress=0"
+    x-on:livewire-upload-progress.window="progress = $event.detail.progress ?? 0"
+    x-on:livewire-upload-finish.window="uploading=false; progress=100; setTimeout(()=>progress=0,300)"
+    x-on:livewire-upload-error.window="uploading=false; progress=0">
 
     {{-- FULL PAGE MAGNET OVERLAY --}}
     <div x-cloak x-show="isDropping" x-transition.opacity class="fixed inset-0 z-[999999] bg-black/25"
-        style="display:none;" @dragover.prevent @drop.prevent.stop="onDrop($event)">
+        style="display:none;" @dragover.prevent
+        @drop.prevent.stop="
+            isDropping=false;
+            dropFiles($event.dataTransfer?.files);
+        ">
         <div class="flex h-full w-full items-center justify-center">
             <div
                 class="pointer-events-none rounded-xl border border-dashed border-slate-300 bg-white px-10 py-8 text-center shadow-lg">
@@ -13,6 +37,33 @@
             </div>
         </div>
     </div>
+
+    {{-- Global drag detector (no JS file needed) --}}
+    <div class="hidden" x-init="const prevent = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(n => window.addEventListener(n, prevent, { passive: false }));
+    
+    window.addEventListener('dragenter', (e) => {
+        prevent(e);
+        isDropping = true;
+    }, { passive: false });
+    window.addEventListener('dragover', (e) => {
+        prevent(e);
+        isDropping = true;
+    }, { passive: false });
+    window.addEventListener('dragleave', (e) => {
+        prevent(e);
+        if (
+            e.clientX <= 0 || e.clientY <= 0 ||
+            e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
+        ) isDropping = false;
+    }, { passive: false });
+    window.addEventListener('drop', (e) => {
+        prevent(e);
+        isDropping = false;
+    }, { passive: false });"></div>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
@@ -26,8 +77,10 @@
                     <label
                         class="mt-3 inline-flex cursor-pointer items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-900">
                         Select Files
-                        <input type="file" class="hidden" multiple
-                            @change="startUpload($event.target.files); $event.target.value=null;" />
+
+                        {{-- ✅ KEY: wire:model does the upload --}}
+                        <input x-ref="picker" type="file" class="hidden" multiple wire:model="files"
+                            @change="$event.target.value=null" />
                     </label>
 
                     <div class="mt-3 text-[11px] text-gray-500">
@@ -113,7 +166,8 @@
                                 <img src="{{ $thumb }}" class="h-full w-full object-contain" alt="" />
                             @else
                                 <div class="flex h-full w-full items-center justify-center text-[10px] text-gray-400">
-                                    FILE</div>
+                                    FILE
+                                </div>
                             @endif
                         </div>
 
@@ -127,7 +181,6 @@
 
                             <div class="mt-1 flex items-center gap-3 text-xs">
                                 <a href="{{ $editUrl }}" class="text-primary-600 hover:underline">Edit</a>
-
                                 <button type="button" class="text-primary-600 hover:underline" x-data
                                     @click.prevent="navigator.clipboard.writeText(@js($copyUrl));">
                                     Copy URL to clipboard
@@ -144,130 +197,3 @@
         </div>
     @endif
 </div>
-
-{{-- Put JS AFTER the markup so Livewire/Alpine are loaded --}}
-<script>
-    document.addEventListener('alpine:init', () => {
-        window.wpMediaUploader = (component) => ({
-            isDropping: false,
-            uploading: false,
-            progress: 0,
-
-            init() {
-                // Block browser open-file-on-drop (capture + passive false)
-                const opts = {
-                    capture: true,
-                    passive: false
-                };
-                const prevent = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                };
-
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((name) => {
-                    window.addEventListener(name, prevent, opts);
-                    document.addEventListener(name, prevent, opts);
-                });
-
-                window.addEventListener('dragenter', (e) => {
-                    prevent(e);
-                    this.isDropping = true;
-                }, opts);
-
-                window.addEventListener('dragover', (e) => {
-                    prevent(e);
-                    this.isDropping = true;
-                }, opts);
-
-                window.addEventListener('dragleave', (e) => {
-                    prevent(e);
-                    if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e
-                        .clientY >= window.innerHeight) {
-                        this.isDropping = false;
-                    }
-                }, opts);
-
-                // Global drop starts upload even if overlay misses it
-                window.addEventListener('drop', (e) => {
-                    prevent(e);
-                    this.isDropping = false;
-
-                    const files = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer
-                        .files : null;
-                    if (files && files.length) this.startUpload(files);
-                }, opts);
-            },
-
-            onDrop(e) {
-                this.isDropping = false;
-                const files = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files : null;
-                if (files && files.length) this.startUpload(files);
-            },
-
-            startUpload(fileList) {
-                const incoming = Array.from(fileList || []);
-                if (!incoming.length) return;
-
-                // if already uploading, queue the files
-                this.queue = (this.queue || []).concat(incoming);
-
-                // start worker if not running
-                if (this.workerRunning) return;
-                this.workerRunning = true;
-
-                this.runQueue();
-            },
-
-            async runQueue() {
-                try {
-                    while ((this.queue || []).length) {
-                        // ✅ Upload in batches (5 at a time). Change to 3 if server is weaker.
-                        const batch = this.queue.splice(0, 5);
-
-                        this.uploading = true;
-                        this.progress = 0;
-
-                        await new Promise((resolve, reject) => {
-                            component.uploadMultiple(
-                                'files',
-                                batch,
-                                () => {
-                                    this.uploading = false;
-                                    this.progress = 100;
-
-                                    // save Media records on backend
-                                    component.call('filesUploaded');
-
-                                    setTimeout(() => {
-                                        this.progress = 0;
-                                    }, 300);
-                                    resolve();
-                                },
-                                (err) => {
-                                    console.error(err);
-                                    this.uploading = false;
-                                    this.progress = 0;
-                                    reject(err);
-                                },
-                                (event) => {
-                                    const p = event && event.detail && event.detail
-                                        .progress ? event.detail.progress : 0;
-                                    this.progress = Math.max(0, Math.min(100, p));
-                                }
-                            );
-                        });
-
-                        // tiny delay to avoid hammering server
-                        await new Promise(r => setTimeout(r, 150));
-                    }
-                } finally {
-                    this.workerRunning = false;
-                    this.uploading = false;
-                    this.progress = 0;
-                }
-            },
-
-        });
-    });
-    //note
-</script>

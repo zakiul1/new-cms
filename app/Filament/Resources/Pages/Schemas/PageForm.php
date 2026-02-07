@@ -84,17 +84,7 @@ class PageForm
                                             : 'Will be generated after saving.';
                                     }),
 
-                                Textarea::make('excerpt')
-                                    ->rows(3)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        if (!filled($get('meta_json.seo.description'))) {
-                                            $text = trim((string) $state);
-                                            if ($text !== '') {
-                                                $set('meta_json.seo.description', Str::limit($text, 160, ''));
-                                            }
-                                        }
-                                    }),
+
 
                                 WpClassicEditor::make('content_json')
                                     ->label('Content')
@@ -123,6 +113,28 @@ class PageForm
 
                                         return $current;
                                     }),
+                                TextInput::make('meta_json.subtitle')
+                                    ->label('Sub Title')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
+
+                                WpClassicEditor::make('meta_json.sub_description')
+                                    ->label('Sub Description')
+                                    ->height(180)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get) {
+                                        // store as string html (simple)
+                                        return is_string($state) ? $state : '';
+                                    }),
+
 
 
                                 Section::make('SEO (Premium)')

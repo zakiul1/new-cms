@@ -56,6 +56,12 @@
 
     // ✅ Final target: edit if available else dashboard
     $adminTargetUrl = $adminEditUrl !== '' ? $adminEditUrl : $adminDashboardUrl;
+
+    // ✅ Favicon (Theme Customizer option)
+    $o = theme_options();
+    $faviconId = (int) ($o['favicon_media_id'] ?? 0);
+    $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
+    $faviconUrl = $favicon ? $favicon->url() : null;
 @endphp
 
 <head>
@@ -63,6 +69,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     @include('cms.partials.seo')
+
+    {{-- ✅ Favicon --}}
+    @if ($faviconUrl)
+        <link rel="icon" href="{{ $faviconUrl }}">
+        <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
+    @endif
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 

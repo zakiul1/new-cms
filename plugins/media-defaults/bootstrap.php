@@ -150,6 +150,9 @@ if (!function_exists('media_defaults_resolve_for_media')) {
         $globalCss = (string) $settings->get('default_assets_css', '', $group);
         $globalJs = (string) $settings->get('default_assets_js', '', $group);
 
+        // ✅ NEW: Default JSON (array|null), global fallback
+        $globalCustomJson = $settings->get('default_custom_json', null, $group);
+
         $titleRaw = trim((string) ($cat['default_title'] ?? $globalTitle));
         $descRaw = (string) ($cat['default_description'] ?? $globalDescRaw);
         $subTitleRaw = trim((string) ($cat['default_sub_title'] ?? $globalSubTitle));
@@ -157,6 +160,9 @@ if (!function_exists('media_defaults_resolve_for_media')) {
 
         $desc = media_defaults_sanitize_html(media_defaults_normalize_to_html($descRaw));
         $subDesc = media_defaults_sanitize_html(media_defaults_normalize_to_html($subDescRaw));
+
+        // ✅ NEW: category-wise json, fallback to global
+        $defaultCustomJson = $cat['default_custom_json'] ?? $globalCustomJson;
 
         return [
             'category_id' => $categoryId,
@@ -168,6 +174,9 @@ if (!function_exists('media_defaults_resolve_for_media')) {
             // optional
             'default_assets_css' => (string) $globalCss,
             'default_assets_js' => (string) $globalJs,
+
+            // ✅ NEW
+            'default_custom_json' => $defaultCustomJson, // array|null
         ];
     }
 }
@@ -231,7 +240,6 @@ add_action('media.attachment.defaults.persist', function ($media): void {
 
             /**
              * ✅ Optional: inject CSS/JS into media meta assets in preview only
-             * (so your controller can read meta.assets.css/js and output)
              */
             $css = (string) ($data['default_assets_css'] ?? '');
             $js = (string) ($data['default_assets_js'] ?? '');
@@ -241,6 +249,22 @@ add_action('media.attachment.defaults.persist', function ($media): void {
             }
             if ($js !== '') {
                 data_set($meta, 'assets.js', $js);
+            }
+
+            /**
+             * ✅ NEW: Custom JSON (WP-like) fallback
+             * If Edit Media already has custom_json, keep it.
+             * If empty, use default_custom_json from plugin preview state.
+             *
+             * Note: you have both keys used in project:
+             * - meta.custom_json (preferred)
+             * - meta.frontend.custom_json (legacy)
+             */
+            $existingJson = data_get($meta, 'custom_json', null);
+            $legacyJson = data_get($meta, 'frontend.custom_json', null);
+
+            if (blank($existingJson) && blank($legacyJson) && !blank($data['default_custom_json'] ?? null)) {
+                data_set($meta, 'custom_json', $data['default_custom_json']); // store array|null
             }
 
             $media->meta = $meta;
@@ -274,6 +298,16 @@ add_action('media.attachment.defaults.persist', function ($media): void {
     $currentMetaDescRaw = data_get($meta, 'frontend.meta_description', null);
     if (media_defaults_html_is_empty($currentMetaDescRaw) && filled($defaults['default_sub_description'] ?? null)) {
         data_set($meta, 'frontend.meta_description', (string) $defaults['default_sub_description']);
+    }
+
+    /**
+     * ✅ NEW: Custom JSON (WP-like) fallback (Normal mode)
+     */
+    $existingJson = data_get($meta, 'custom_json', null);
+    $legacyJson = data_get($meta, 'frontend.custom_json', null);
+
+    if (blank($existingJson) && blank($legacyJson) && !blank($defaults['default_custom_json'] ?? null)) {
+        data_set($meta, 'custom_json', $defaults['default_custom_json']); // array|null
     }
 
     $media->meta = $meta;

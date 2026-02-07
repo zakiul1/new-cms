@@ -18,7 +18,7 @@ class EditPost extends EditRecord
     protected static string $resource = PostResource::class;
 
     /** @var int[] */
-    protected array $productMediaIds = [];
+    protected array $featuredMediaIds = [];
 
     // ✅ For WP-like redirect/history
     protected string $oldSlug = '';
@@ -39,17 +39,22 @@ class EditPost extends EditRecord
         return 'Edit Post ';
     }
 
-
-
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['product_media_ids'] = $this->record
-            ->productMedia()
+        // ✅ Fill Featured Images (multiple) from pivot (role=featured)
+        $data['featured_media_ids'] = $this->record
+            ->mediaPivot()
+            ->wherePivot('role', 'featured')
             ->orderBy('post_media.sort_order')
             ->get()
             ->pluck('id')
             ->map(fn($id) => (int) $id)
             ->all();
+
+        // ✅ Fallback: if no pivot featured exists yet, use legacy single column
+        if (empty($data['featured_media_ids']) && !empty($data['featured_media_id'])) {
+            $data['featured_media_ids'] = [(int) $data['featured_media_id']];
+        }
 
         return $data;
     }
@@ -60,11 +65,15 @@ class EditPost extends EditRecord
         $this->oldSlug = (string) ($this->record->slug ?? '');
         $this->oldCanonicalPath = $this->canonicalPathFor($this->record);
 
-        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
-            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
+        // ✅ capture Featured Images (multiple)
+        $this->featuredMediaIds = is_array($data['featured_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['featured_media_ids'])))
             : [];
 
-        unset($data['product_media_ids']);
+        unset($data['featured_media_ids']);
+
+        // ✅ keep legacy column in sync (first featured image)
+        $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
 
         $data['type'] = 'post';
 
@@ -81,7 +90,7 @@ class EditPost extends EditRecord
 
     protected function afterSave(): void
     {
-        $this->syncProductGallery();
+        $this->syncFeaturedMedia();
 
         // ✅ refresh record (so categories/relations saved by Filament are visible)
         $this->record->refresh();
@@ -140,16 +149,17 @@ class EditPost extends EditRecord
         return $path;
     }
 
-    private function syncProductGallery(): void
+    private function syncFeaturedMedia(): void
     {
         if (!$this->record) {
             return;
         }
 
+        // ✅ unique, keep order
         $seen = [];
         $ids = [];
 
-        foreach ($this->productMediaIds as $id) {
+        foreach ($this->featuredMediaIds as $id) {
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
@@ -157,20 +167,30 @@ class EditPost extends EditRecord
             $ids[] = $id;
         }
 
-        if ($ids === []) {
-            $this->record->productMedia()->detach();
+        // Prefer helper if it exists on Post model
+        if (method_exists($this->record, 'syncMediaRole')) {
+            $this->record->syncMediaRole('featured', $ids);
             return;
         }
+
+        // Manual fallback
+        if ($ids === []) {
+            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            return;
+        }
+
+        // Clear only featured role items, then attach ordered
+        $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
 
         $sync = [];
         foreach ($ids as $i => $id) {
             $sync[$id] = [
-                'role' => 'product',
+                'role' => 'featured',
                 'sort_order' => $i,
             ];
         }
 
-        $this->record->productMedia()->sync($sync);
+        $this->record->mediaPivot()->attach($sync);
     }
 
     protected function getHeaderActions(): array
@@ -214,5 +234,4 @@ class EditPost extends EditRecord
                 ->formId('form'),
         ];
     }
-
 }

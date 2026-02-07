@@ -15,9 +15,6 @@ class WpMediaUploader extends Component
     use WithFileUploads;
 
     /**
-     * IMPORTANT:
-     * Don't type-hint this as array for Livewire uploads.
-     *
      * @var array<int, \Livewire\Features\SupportFileUploads\TemporaryUploadedFile>
      */
     public $files = [];
@@ -40,9 +37,16 @@ class WpMediaUploader extends Component
     }
 
     /**
-     * Called from JS AFTER Livewire finishes uploading temp files.
-     * This avoids race conditions with updatedFiles().
+     * ✅ KEY FIX:
+     * Livewire calls this after it finishes temp-uploading the selected files.
+     * Now we immediately persist them into your Media table.
      */
+    public function updatedFiles(): void
+    {
+        $this->uploadNow();
+    }
+
+    // (Optional) keep for backward compat
     public function filesUploaded(): void
     {
         $this->uploadNow();
@@ -50,26 +54,30 @@ class WpMediaUploader extends Component
 
     public function uploadNow(): void
     {
-        if (empty($this->files)) {
+        if (empty($this->files))
             return;
-        }
 
         $this->validateOnly('files.*');
 
         $uploader = app(MediaUploader::class);
+        $newIds = [];
 
         foreach ($this->files as $file) {
             $media = $uploader->upload($file, [
-                // ✅ your uploader expects category_term_ids array OR default to Uncategorized
                 'category_term_ids' => $this->categoryId ? [$this->categoryId] : [],
                 'default_category_name' => 'Uncategorized',
             ]);
 
-            array_unshift($this->uploadedIds, $media->id);
+            array_unshift($this->uploadedIds, (int) $media->id);
+            $newIds[] = (int) $media->id;
         }
 
-        // ✅ reset after processing
         $this->reset('files');
+
+        // ✅ tell parent browser to switch to library and refresh
+        if (!empty($newIds)) {
+            $this->dispatch('wp-media-uploaded', ids: $newIds);
+        }
     }
 
     public function createCategory(): void
@@ -126,9 +134,8 @@ class WpMediaUploader extends Component
     {
         $ids = array_values(array_unique(array_filter($this->uploadedIds)));
 
-        if (empty($ids)) {
+        if (empty($ids))
             return collect();
-        }
 
         return Media::query()
             ->whereIn('id', $ids)
@@ -150,4 +157,3 @@ class WpMediaUploader extends Component
         ]);
     }
 }
-//update

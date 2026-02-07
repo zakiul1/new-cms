@@ -162,6 +162,29 @@ class PostForm
                                         return $current;
                                     }),
 
+                                TextInput::make('meta_json.subtitle')
+                                    ->label('Sub Title')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
+
+                                WpClassicEditor::make('meta_json.sub_description')
+                                    ->label('Sub Description')
+                                    ->height(180)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get) {
+                                        // store as string html (simple)
+                                        return is_string($state) ? $state : '';
+                                    }),
+
+
 
 
                                 // ✅ SEO (Premium-feel)
@@ -311,14 +334,17 @@ class PostForm
                             ->default('published')
                             ->required(),
 
-                        MediaPicker::make('featured_media_id')
-                            ->label('Featured Image')
-                            ->modalHeading('Featured image'),
-
-                        MediaPicker::make('product_media_ids')
-                            ->label('Product Gallery')
+                        MediaPicker::make('featured_media_ids')
+                            ->label('Featured Images')
+                            ->modalHeading('Featured images')
                             ->multiple()
                             ->maxItems(20),
+
+
+                        /*   MediaPicker::make('product_media_ids')
+                              ->label('Product Gallery')
+                              ->multiple()
+                              ->maxItems(20), */
 
                         Select::make('categories')
                             ->label('Categories')

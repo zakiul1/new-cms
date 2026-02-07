@@ -40,9 +40,7 @@
     @if ($homePage)
         <section class="bg-white">
             <div class="cms-container mx-auto px-4 py-10">
-                <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">
-                    {{ $homePage->title }}
-                </h2>
+
 
                 <div class="prose prose-slate mt-4 max-w-none">
                     {!! $hooks->applyFilters(\App\Cms\Hooks\HookPoints::CMS_THE_CONTENT, (string) ($homePage->content ?? ''), [

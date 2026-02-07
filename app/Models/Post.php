@@ -24,7 +24,10 @@ class Post extends Model
         'status',
         'published_at',
         'author_id',
+
+        // ✅ legacy single featured image (kept for backward compatibility)
         'featured_media_id',
+
         'meta_json',
     ];
 
@@ -59,11 +62,17 @@ class Post extends Model
         return $this->terms()->whereHas('taxonomy', fn($q) => $q->where('key', 'tag'));
     }
 
+    /**
+     * ✅ Legacy single featured image (first featured image)
+     */
     public function featuredMedia(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'featured_media_id');
     }
 
+    /**
+     * ✅ Pivot relation for all post/page media (role-based)
+     */
     public function mediaPivot(): BelongsToMany
     {
         return $this->belongsToMany(Media::class, 'post_media')
@@ -71,13 +80,20 @@ class Post extends Model
             ->withTimestamps();
     }
 
-    public function productMedia(): BelongsToMany
+    /**
+     * ✅ New: multiple featured images (stored in post_media with role=featured)
+     */
+    public function featuredMediaPivot(): BelongsToMany
     {
         return $this->mediaPivot()
-            ->wherePivot('role', 'product')
+            ->wherePivot('role', 'featured')
             ->orderBy('post_media.sort_order');
     }
 
+    /**
+     * (Optional) Keep if you still use it somewhere.
+     * Stored in post_media with role=gallery
+     */
     public function galleryMedia(): BelongsToMany
     {
         return $this->mediaPivot()
@@ -134,6 +150,7 @@ class Post extends Model
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         );
     }
+
     public function scopeFrontendVisible($query)
     {
         return $query->whereDoesntHave('categories', function ($q) {
@@ -141,10 +158,30 @@ class Post extends Model
         });
     }
 
+    /**
+     * ✅ Sync media for a specific role in post_media (featured/gallery/etc)
+     * Keeps order via sort_order
+     * Also filters invalid/deleted media IDs to prevent FK errors.
+     */
     public function syncMediaRole(string $role, array $mediaIds): void
     {
         $role = trim($role);
+
+        // normalize to ints, remove zeros
         $mediaIds = array_values(array_filter(array_map('intval', $mediaIds)));
+
+        // ✅ keep only IDs that exist in media table (preserve given order)
+        if ($mediaIds !== []) {
+            $existing = Media::query()
+                ->whereIn('id', $mediaIds)
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            $set = array_flip($existing);
+
+            $mediaIds = array_values(array_filter($mediaIds, fn($id) => isset($set[$id])));
+        }
 
         DB::transaction(function () use ($role, $mediaIds) {
             DB::table('post_media')

@@ -72,88 +72,85 @@
             $query = '?' . $query;
         }
 
-        // If it's just a domain with no path, keep the single trailing slash.
-    $u = rtrim($u, '/') . '/';
+        $u = rtrim($u, '/') . '/';
 
-    return $u . $query . $hash;
-};
+        return $u . $query . $hash;
+    };
 
-// ------------------------------------
-// Canonical
-// ------------------------------------
-$canonical = trim((string) ($seoInput['canonical'] ?? ''));
-if ($canonical === '') {
-    $canonical = url()->current();
-}
-$canonical = $ensureTrailingSlash($canonical);
+    // ------------------------------------
+    // Canonical
+    // ------------------------------------
+    $canonical = trim((string) ($seoInput['canonical'] ?? ''));
+    if ($canonical === '') {
+        $canonical = url()->current();
+    }
+    $canonical = $ensureTrailingSlash($canonical);
 
-// ------------------------------------
-// Open Graph
-// ------------------------------------
-$og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
+    // ------------------------------------
+    // Open Graph
+    // ------------------------------------
+    $og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
 
-$ogTitle = trim((string) ($og['title'] ?? $title));
-$ogDesc = trim((string) ($og['description'] ?? $desc));
-$ogType = trim((string) ($og['type'] ?? 'article'));
-$ogUrl = $ensureTrailingSlash(trim((string) ($og['url'] ?? $canonical)));
+    $ogTitle = trim((string) ($og['title'] ?? $title));
+    $ogDesc = trim((string) ($og['description'] ?? $desc));
+    $ogType = trim((string) ($og['type'] ?? 'article'));
+    $ogUrl = $ensureTrailingSlash(trim((string) ($og['url'] ?? $canonical)));
 
-$ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
+    $ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
 
-// ------------------------------------
-// Twitter
-// ------------------------------------
-$tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
+    // ------------------------------------
+    // Twitter
+    // ------------------------------------
+    $tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
 
-$twTitle = trim((string) ($tw['title'] ?? $title));
-$twDesc = trim((string) ($tw['description'] ?? $desc));
-$twCard = trim((string) ($tw['card'] ?? ''));
+    $twTitle = trim((string) ($tw['title'] ?? $title));
+    $twDesc = trim((string) ($tw['description'] ?? $desc));
+    $twCard = trim((string) ($tw['card'] ?? ''));
 
-if ($twCard === '') {
-    $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
-}
+    if ($twCard === '') {
+        $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
+    }
 
-// ------------------------------------
-// Extra meta tags
-// ------------------------------------
-$extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
+    // ------------------------------------
+    // Extra meta tags
+    // ------------------------------------
+    $extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
 
-// ------------------------------------
-// ✅ JSON-LD (per record)
-//
-// Priority:
-// - Post/Page: meta_json.custom_json
-// - Post/Page legacy: meta_json.seo.custom_json
-// - Media: meta.custom_json
-// - Media legacy: meta.frontend.custom_json
-// ------------------------------------
-$rawJsonLd = '';
+    // ------------------------------------
+    // ✅ JSON-LD (per record)
+    //
+    // Priority:
+    // - Post/Page: meta_json.custom_json
+    // - Post/Page legacy: meta_json.seo.custom_json
+    // - Media: meta.custom_json
+    // - Media legacy: meta.frontend.custom_json
+    // ------------------------------------
+    $rawJsonLd = '';
 
-if (isset($post) && $post) {
-    $m = is_array($post->meta_json ?? null) ? $post->meta_json : [];
-    $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
-}
+    if (isset($post) && $post) {
+        $m = is_array($post->meta_json ?? null) ? $post->meta_json : [];
+        $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
+    }
 
-if (($rawJsonLd === '' || $rawJsonLd === null) && isset($media) && $media) {
-    $m2 = is_array($media->meta ?? null) ? $media->meta : [];
-    $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
-}
+    if (($rawJsonLd === '' || $rawJsonLd === null) && isset($media) && $media) {
+        $m2 = is_array($media->meta ?? null) ? $media->meta : [];
+        $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+    }
 
-// Normalize into a pure JSON string (NO regex, NO literal "<script")
-$jsonLd = '';
+    // Normalize into a pure JSON string (avoid literal "<script" and "</script" in source)
+    $jsonLd = '';
 
-if (is_array($rawJsonLd)) {
-    $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
-} else {
-    $jsonLd = trim((string) $rawJsonLd);
+    if (is_array($rawJsonLd)) {
+        $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
+    } else {
+        $jsonLd = trim((string) $rawJsonLd);
 
-    if ($jsonLd !== '') {
-        // Avoid literal "<script" so Blade formatter doesn't replace it
+        if ($jsonLd !== '') {
             $openTag = '<' . 'script';
             $closeTag = '</' . 'script' . '>';
 
             $openPos = stripos($jsonLd, $openTag);
             if ($openPos !== false) {
-                // find the ">" of the opening script tag
                 $gtPos = strpos($jsonLd, '>', $openPos);
                 if ($gtPos !== false) {
                     $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
@@ -168,9 +165,18 @@ if (is_array($rawJsonLd)) {
 
     // Validate JSON
     $jsonLdIsValid = false;
+
     if ($jsonLd !== '') {
         json_decode($jsonLd, true);
         $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
+
+        // ✅ prevent breaking out of the <script> tag if JSON contains a closing tag
+        // (avoid literal "</script" in this file because Blade formatter can break)
+        if ($jsonLdIsValid) {
+            $closing = '</' . 'script' . '>';
+            $safeClosing = '<' . '\\/' . 'script' . '>';
+            $jsonLd = str_replace($closing, $safeClosing, $jsonLd);
+        }
     }
 @endphp
 

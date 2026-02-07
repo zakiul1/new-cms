@@ -21,12 +21,35 @@ class MediaPicker extends Field
     {
         parent::setUp();
 
-        // Ensure state shape is correct after hydration
+        // ✅ Ensure state shape is correct after hydration AND filter invalid/deleted media IDs
         $this->afterStateHydrated(function (MediaPicker $component, $state): void {
             if ($component->isMultiple()) {
-                $component->state(array_values(array_filter(array_map('intval', (array) ($state ?? [])))));
+                $ids = array_values(array_filter(array_map('intval', (array) ($state ?? []))));
+
+                // ✅ keep only IDs that exist in `media` table (prevents FK errors on save)
+                if ($ids !== []) {
+                    $existing = Media::query()
+                        ->whereIn('id', $ids)
+                        ->pluck('id')
+                        ->map(fn($id) => (int) $id)
+                        ->all();
+
+                    $set = array_flip($existing);
+
+                    // keep original order, drop missing
+                    $ids = array_values(array_filter($ids, fn($id) => isset($set[$id])));
+                }
+
+                $component->state($ids);
             } else {
-                $component->state($state ? (int) $state : null);
+                $id = $state ? (int) $state : null;
+
+                // ✅ single: if selected media doesn't exist anymore, clear it
+                if ($id && !Media::query()->whereKey($id)->exists()) {
+                    $id = null;
+                }
+
+                $component->state($id);
             }
         });
     }

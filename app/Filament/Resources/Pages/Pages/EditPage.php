@@ -16,15 +16,52 @@ class EditPage extends EditRecord
 {
     protected static string $resource = PageResource::class;
 
+    /** @var int[] */
+    protected array $featuredMediaIds = [];
+
     // ✅ For WP-like redirect/history
     protected string $oldSlug = '';
     protected string $oldCanonicalPath = '';
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        // ✅ Fill Featured Images (multiple) from pivot (role=featured)
+        if ($this->record && method_exists($this->record, 'mediaPivot')) {
+            $data['featured_media_ids'] = $this->record
+                ->mediaPivot()
+                ->wherePivot('role', 'featured')
+                ->orderBy('post_media.sort_order')
+                ->get()
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+        } else {
+            $data['featured_media_ids'] = [];
+        }
+
+        // ✅ Fallback: if no pivot featured exists yet, use legacy single column
+        if (empty($data['featured_media_ids']) && !empty($data['featured_media_id'])) {
+            $data['featured_media_ids'] = [(int) $data['featured_media_id']];
+        }
+
+        return $data;
+    }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
         // ✅ capture old permalink BEFORE anything changes
         $this->oldSlug = (string) ($this->record->slug ?? '');
         $this->oldCanonicalPath = $this->canonicalPathFor($this->record);
+
+        // ✅ capture Featured Images (multiple)
+        $this->featuredMediaIds = is_array($data['featured_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['featured_media_ids'])))
+            : [];
+
+        unset($data['featured_media_ids']);
+
+        // ✅ keep legacy single column in sync (first featured image)
+        $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
 
         $data['type'] = 'page';
 
@@ -58,6 +95,9 @@ class EditPage extends EditRecord
 
     protected function afterSave(): void
     {
+        // ✅ sync featured images pivot
+        $this->syncFeaturedMedia();
+
         // refresh record so we get latest slug/meta
         $this->record->refresh();
 
@@ -98,6 +138,53 @@ class EditPage extends EditRecord
         return $permalinks->pagePath($page);
     }
 
+    private function syncFeaturedMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        // ✅ unique, keep order
+        $seen = [];
+        $ids = [];
+
+        foreach ($this->featuredMediaIds as $id) {
+            if ($id <= 0 || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $ids[] = $id;
+        }
+
+        // Prefer helper if it exists on the model
+        if (method_exists($this->record, 'syncMediaRole')) {
+            $this->record->syncMediaRole('featured', $ids);
+            return;
+        }
+
+        // Manual fallback (requires mediaPivot relation)
+        if (!method_exists($this->record, 'mediaPivot')) {
+            return;
+        }
+
+        if ($ids === []) {
+            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            return;
+        }
+
+        $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+
+        $sync = [];
+        foreach ($ids as $i => $id) {
+            $sync[$id] = [
+                'role' => 'featured',
+                'sort_order' => $i,
+            ];
+        }
+
+        $this->record->mediaPivot()->attach($sync);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -135,5 +222,4 @@ class EditPage extends EditRecord
                 ->formId('form'),
         ];
     }
-
 }

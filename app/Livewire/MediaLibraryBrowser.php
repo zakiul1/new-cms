@@ -7,7 +7,9 @@ use App\Models\Taxonomy;
 use App\Models\Term;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -17,6 +19,7 @@ class MediaLibraryBrowser extends Component
 
     protected string $paginationTheme = 'tailwind';
 
+    public string $tab = 'library'; // library|upload
     public ?int $activeId = null;
 
     public string $statePath = '';
@@ -26,11 +29,14 @@ class MediaLibraryBrowser extends Component
     /** @var array<int, int> */
     public array $selected = [];
 
-    // Filters (picker mode)
+    // WP-like filters
     public string $search = '';
-    public string $type = 'all'; // all|image|video|pdf|other
-    public ?int $folder = null;  // term id
-    public string $sort = 'newest'; // newest|oldest|name_asc|name_desc
+    public string $type = 'all';      // all|image|video|pdf|other
+    public string $date = '';         // '' or 'YYYY-MM'
+    public string $category = '';     // '' or term id
+
+    // forces refresh after uploads
+    public int $refreshTick = 0;
 
     public function mount(
         string $statePath = '',
@@ -44,32 +50,68 @@ class MediaLibraryBrowser extends Component
 
         $this->selected = array_values(array_filter(array_map('intval', $selected)));
         $this->activeId = $this->selected[0] ?? null;
+
+        $this->tab = 'library';
     }
 
-    public function updatedSearch(): void
+    public function setTab(string $tab): void
+    {
+        $this->tab = $tab === 'upload' ? 'upload' : 'library';
+    }
+
+    // Reset paging when filters change (Livewire best practice)
+    public function updatingSearch(): void
     {
         $this->resetPage();
     }
-    public function updatedType(): void
+    public function updatingType(): void
     {
         $this->resetPage();
     }
-    public function updatedFolder(): void
+    public function updatingDate(): void
     {
         $this->resetPage();
     }
-    public function updatedSort(): void
+    public function updatingCategory(): void
     {
         $this->resetPage();
     }
 
     /**
-     * Selected media models keyed by id (used for selected strip).
+     * Fired by uploader after upload completes.
      */
+    #[On('wp-media-uploaded')]
+    public function onUploaded(array $ids = []): void
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $ids = array_values(array_filter($ids, fn($x) => $x > 0));
+
+        $this->tab = 'library';
+        $this->refreshTick++;
+
+        if (!empty($ids)) {
+            if ($this->multiple) {
+                foreach ($ids as $id) {
+                    if ($this->maxItems && count($this->selected) >= $this->maxItems) {
+                        break;
+                    }
+                    if (!in_array($id, $this->selected, true)) {
+                        $this->selected[] = $id;
+                    }
+                }
+                $this->activeId = $this->activeId ?: ($this->selected[0] ?? $ids[0]);
+            } else {
+                $this->selected = [(int) $ids[0]];
+                $this->activeId = (int) $ids[0];
+            }
+        }
+
+        $this->resetPage();
+    }
+
     public function getSelectedMediaProperty(): Collection
     {
         $ids = array_values(array_filter(array_map('intval', $this->selected)));
-
         if (empty($ids)) {
             return collect();
         }
@@ -80,21 +122,14 @@ class MediaLibraryBrowser extends Component
             ->keyBy('id');
     }
 
-    /**
-     * Optional: folder options (uses taxonomy key: media_folder)
-     */
-    public function folderOptions(): array
+    public function getActiveMediaProperty(): ?Media
     {
-        $taxonomyId = Taxonomy::query()->where('key', 'media_folder')->value('id');
-        if (!$taxonomyId) {
-            return [];
+        $id = is_numeric($this->activeId) ? (int) $this->activeId : null;
+        if (!$id) {
+            return null;
         }
 
-        return Term::query()
-            ->where('taxonomy_id', $taxonomyId)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
+        return Media::query()->find($id);
     }
 
     public function toggle(int $id): void
@@ -108,15 +143,8 @@ class MediaLibraryBrowser extends Component
         }
 
         if (in_array($id, $this->selected, true)) {
-            $this->selected = array_values(array_filter(
-                $this->selected,
-                fn($x) => (int) $x !== $id
-            ));
-
-            if ($this->activeId === $id) {
-                $this->activeId = $this->selected[0] ?? null;
-            }
-
+            $this->selected = array_values(array_filter($this->selected, fn($x) => (int) $x !== $id));
+            $this->activeId = $this->selected[0] ?? null;
             return;
         }
 
@@ -125,6 +153,12 @@ class MediaLibraryBrowser extends Component
         }
 
         $this->selected[] = $id;
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+        $this->activeId = null;
     }
 
     public function removeSelected(int $id): void
@@ -139,12 +173,6 @@ class MediaLibraryBrowser extends Component
         if ($this->activeId === $id) {
             $this->activeId = $this->selected[0] ?? null;
         }
-    }
-
-    public function clearSelection(): void
-    {
-        $this->selected = [];
-        $this->activeId = null;
     }
 
     public function apply(): void
@@ -162,14 +190,61 @@ class MediaLibraryBrowser extends Component
         $this->dispatch('media-library-apply', ids: $ids, statePath: $this->statePath);
     }
 
+    public function dateOptions(): array
+    {
+        $rows = Media::query()
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym")
+            ->groupBy('ym')
+            ->orderByDesc('ym')
+            ->pluck('ym')
+            ->all();
+
+        $out = ['' => 'All dates'];
+
+        foreach ($rows as $ym) {
+            try {
+                $c = Carbon::createFromFormat('Y-m', (string) $ym)->startOfMonth();
+                $out[(string) $ym] = $c->format('F Y');
+            } catch (\Throwable $e) {
+                $out[(string) $ym] = (string) $ym;
+            }
+        }
+
+        return $out;
+    }
+
+    public function categoryOptions(): array
+    {
+        $taxId = Taxonomy::query()->where('key', 'media_category')->value('id');
+        if (!$taxId) {
+            return ['' => 'All categories'];
+        }
+
+        $terms = Term::query()
+            ->where('taxonomy_id', $taxId)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $out = ['' => 'All categories'];
+        foreach ($terms as $t) {
+            $out[(string) $t->id] = (string) $t->name;
+        }
+
+        return $out;
+    }
+
     public function getMediaProperty(): LengthAwarePaginator
     {
+        // touch refreshTick so Livewire considers it in dependency tracking
+        $refreshTick = $this->refreshTick;
+
         return Media::query()
             ->when($this->search !== '', function ($q) {
                 $s = '%' . trim($this->search) . '%';
                 $q->where(function ($qq) use ($s) {
                     $qq->where('title', 'like', $s)
-                        ->orWhere('original_filename', 'like', $s);
+                        ->orWhere('original_filename', 'like', $s)
+                        ->orWhere('filename', 'like', $s);
                 });
             })
             ->when($this->type !== 'all', function ($q) {
@@ -185,21 +260,20 @@ class MediaLibraryBrowser extends Component
                     default => $q,
                 };
             })
-            ->when($this->folder, function ($q) {
-                $termId = (int) $this->folder;
-                if ($termId > 0) {
-                    $q->whereHas('terms', fn($qq) => $qq->where('terms.id', $termId));
+            ->when($this->date !== '', function ($q) {
+                $ym = trim($this->date);
+                if (preg_match('/^\d{4}\-\d{2}$/', $ym)) {
+                    $q->whereRaw("DATE_FORMAT(created_at, '%Y-%m') = ?", [$ym]);
                 }
             })
-            ->when(true, function ($q) {
-                return match ($this->sort) {
-                    'oldest' => $q->orderBy('id', 'asc'),
-                    'name_asc' => $q->orderBy('title')->orderBy('id', 'desc'),
-                    'name_desc' => $q->orderByDesc('title')->orderBy('id', 'desc'),
-                    default => $q->orderByDesc('id'),
-                };
+            ->when($this->category !== '', function ($q) {
+                $termId = (int) $this->category;
+                if ($termId > 0) {
+                    $q->whereHas('categories', fn($qq) => $qq->where('terms.id', $termId));
+                }
             })
-            ->paginate(36);
+            ->orderByDesc('id')
+            ->paginate(40);
     }
 
     public function render(): View
@@ -207,7 +281,9 @@ class MediaLibraryBrowser extends Component
         return view('livewire.media-library-browser', [
             'media' => $this->media,
             'selectedMedia' => $this->selectedMedia,
-            'folders' => $this->folderOptions(),
+            'activeMedia' => $this->activeMedia,
+            'dateOptions' => $this->dateOptions(),
+            'categoryOptions' => $this->categoryOptions(),
         ]);
     }
 }
