@@ -52,7 +52,7 @@
     @endif
 
     {{-- ✅ Posts list --}}
-    <section class="bg-white">
+    {{--   <section class="bg-white">
         <div class="cms-container mx-auto px-4 py-6">
             @if ($posts->isEmpty())
                 <div class="rounded bg-slate-50 p-6 text-sm text-slate-600">
@@ -68,5 +68,5 @@
                 </div>
             @endif
         </div>
-    </section>
+    </section> --}}
 @endsection
