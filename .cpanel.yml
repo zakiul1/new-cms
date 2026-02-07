@@ -2,11 +2,12 @@ deployment:
   tasks:
     - export APPPATH=/home/siatexglobal/laravel-app/
     - export PUBLICPATH=/home/siatexglobal/public_html/
+    - export LOG=/home/siatexglobal/deploy.log
 
-    - /bin/mkdir -p $APPPATH
-    - /bin/mkdir -p $PUBLICPATH
+    - /bin/echo "==== DEPLOY START $(date) ====" >> $LOG
+    - /bin/mkdir -p $APPPATH >> $LOG 2>&1
+    - /bin/mkdir -p $PUBLICPATH >> $LOG 2>&1
 
-    # Copy everything EXCEPT sensitive/runtime files and your server-specific config
     - /bin/rsync -a --delete \
         --exclude=".git/" \
         --exclude=".env" \
@@ -15,15 +16,11 @@ deployment:
         --exclude="node_modules/" \
         --exclude="vendor/" \
         --exclude="config/filesystems.php" \
-        ./ $APPPATH
+        ./ $APPPATH >> $LOG 2>&1
 
-    # Copy public files to public_html
-    # IMPORTANT: do NOT overwrite server existing index.php and .htaccess
     - /bin/rsync -a --delete \
         --exclude="index.php" \
         --exclude=".htaccess" \
-        $APPPATH/public/ $PUBLICPATH/
+        $APPPATH/public/ $PUBLICPATH/ >> $LOG 2>&1
 
-    # IMPORTANT: removed these so deploy never changes them
-    # - /bin/cp -f $APPPATH/deploy/index.php $PUBLICPATH/index.php
-    # - /bin/cp -f $APPPATH/deploy/.htaccess $PUBLICPATH/.htaccess
+    - /bin/echo "==== DEPLOY END $(date) ====" >> $LOG
