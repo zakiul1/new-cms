@@ -1,3 +1,29 @@
 deployment:
   tasks:
-    - /bin/echo "DEPLOY OK $(/bin/date)" >> /home/siatexglobal/deploy-test.log 2>&1
+    - export APPPATH=/home/siatexglobal/laravel-app
+    - export PUBLICPATH=/home/siatexglobal/public_html
+    - export LOG=/home/siatexglobal/deploy.log
+
+    - /bin/echo "===== DEPLOY START $(/bin/date) =====" >> $LOG
+
+    - /bin/mkdir -p $APPPATH >> $LOG 2>&1
+    - /bin/mkdir -p $PUBLICPATH >> $LOG 2>&1
+
+    - /bin/echo "[1] RSYNC APP -> $APPPATH" >> $LOG
+    - /usr/bin/timeout 300 /bin/rsync -a --delete \
+        --exclude=".git/" \
+        --exclude=".env" \
+        --exclude="storage/" \
+        --exclude="bootstrap/cache/" \
+        --exclude="node_modules/" \
+        --exclude="vendor/" \
+        --exclude="config/filesystems.php" \
+        ./ $APPPATH >> $LOG 2>&1
+
+    - /bin/echo "[2] RSYNC PUBLIC -> $PUBLICPATH (keep index.php/.htaccess)" >> $LOG
+    - /usr/bin/timeout 300 /bin/rsync -a --delete \
+        --exclude="index.php" \
+        --exclude=".htaccess" \
+        $APPPATH/public/ $PUBLICPATH/ >> $LOG 2>&1
+
+    - /bin/echo "===== DEPLOY END $(/bin/date) =====" >> $LOG
