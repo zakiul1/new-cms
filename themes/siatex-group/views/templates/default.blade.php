@@ -63,7 +63,7 @@
 
     {{-- HERO / SLIDER --}}
     @if ($slides->count() > 0)
-        <section class="cms-hero">
+        <section class="cms-hero cms-container">
             <div class="cms-hero__wrap" data-slider-count="{{ $slides->count() }}">
                 <div class="cms-hero__track" id="cmsHeroTrack">
                     @foreach ($slides as $src)
