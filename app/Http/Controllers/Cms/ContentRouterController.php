@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Cms;
 
+use App\Cms\Content\CurrentContentContext;
 use App\Cms\Content\PermalinkManager;
 use App\Cms\Core\SettingsRepository;
-use App\Cms\Content\CurrentContentContext;
 use App\Http\Controllers\Controller;
 use App\Models\Media;
 use App\Models\Post;
@@ -15,17 +15,19 @@ use App\Models\Term;
 use Illuminate\Http\Request;
 
 // ✅ Correct Filament resources (fixes your admin bar edit URLs)
-use App\Filament\Resources\Posts\PostResource as FilamentPostResource;
-use App\Filament\Resources\Pages\PageResource as FilamentPageResource;
 use App\Filament\Resources\MediaResource as FilamentMediaResource;
+use App\Filament\Resources\Pages\PageResource as FilamentPageResource;
+use App\Filament\Resources\Posts\PostResource as FilamentPostResource;
 
 class ContentRouterController extends Controller
 {
     /**
      * Home route handler so "Plain" (?p=123) works like WP.
+     * Also renders the selected homepage page (WP "static front page").
      */
     public function home(Request $request, PermalinkManager $permalinks, SettingsRepository $settings)
     {
+        // Plain permalink: /?p=123
         $p = $request->query('p');
 
         if (is_numeric($p)) {
@@ -34,52 +36,68 @@ class ContentRouterController extends Controller
             if ($post) {
                 [$css, $js] = $this->extractPostAssets($post);
 
-                return view('post', [
+                return view($this->resolveFrontendView($post, fallback: 'post'), [
                     'post' => $post,
                     'seo' => $this->buildSeo($post, $request, $permalinks),
 
                     'pageAssetsCss' => $css,
                     'pageAssetsJs' => $js,
 
-                    // ✅ Post edit URL (safe hard URL)
-                    'adminEditUrl' => url('/lara-admin/posts/' . $post->getKey() . '/edit'),
+                    // ✅ Post edit URL
+                    'adminEditUrl' => class_exists(FilamentPostResource::class)
+                        ? FilamentPostResource::getUrl('edit', ['record' => $post])
+                        : url('/lara-admin'),
                 ]);
             }
         }
 
-        // ✅ Default: dashboard
-        $adminEditUrl = url('/lara-admin');
-
-        // ✅ IMPORTANT: read homepage id from the SAME settings class used by home.blade.php
-        $settingsLegacy = app(\App\Cms\Core\Settings::class);
-        $homepageId = $settingsLegacy->get('homepage_page_id', null, 'core');
-
+        // ✅ One standard homepage system: core.homepage_page_id
+        $homepageId = $settings->get('core', 'homepage_page_id', null);
         $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
         if ($homepageId !== null && $homepageId <= 0) {
             $homepageId = null;
         }
 
         if ($homepageId !== null) {
+            $now = now();
+
             $homePage = Post::query()
                 ->whereKey($homepageId)
                 ->where('type', 'page')
+                ->where('status', 'published')
+                ->where(function ($q) use ($now) {
+                    $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
+                })
                 ->first();
 
             if ($homePage) {
-                // ✅ Home edit URL (safe hard URL)
-                $adminEditUrl = url('/lara-admin/pages/' . $homePage->getKey() . '/edit');
+                [$css, $js] = $this->extractPostAssets($homePage);
+
+                // ✅ IMPORTANT:
+                // If template is empty OR template file missing => use theme home.blade.php (NOT page.blade.php)
+                return view($this->resolveFrontendView($homePage, fallback: 'home'), [
+                    'post' => $homePage,
+                    'seo' => $this->buildSeo($homePage, $request, $permalinks),
+
+                    // ✅ per-page assets
+                    'pageAssetsCss' => $css,
+                    'pageAssetsJs' => $js,
+
+                    // ✅ Admin bar edit url (PAGE resource)
+                    'adminEditUrl' => class_exists(FilamentPageResource::class)
+                        ? FilamentPageResource::getUrl('edit', ['record' => $homePage])
+                        : url('/lara-admin'),
+                ]);
             }
         }
 
+        // Fallback homepage view (if no homepage page is selected)
         return view('home', [
             'privateNotice' => $request->query('private') === '1',
             'privateFrom' => (string) $request->query('from', ''),
-            'adminEditUrl' => $adminEditUrl,
+            'adminEditUrl' => url('/lara-admin'),
         ]);
     }
-
-
-
 
     public function show(Request $request, string $slug, PermalinkManager $permalinks, SettingsRepository $settings)
     {
@@ -120,6 +138,7 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($page) {
+                // ✅ Homepage page canonical becomes "/" because PermalinkManager::pagePath() handles it
                 $canonicalPath = $permalinks->pagePath($page);
                 if ($path !== $canonicalPath) {
                     return redirect()->to($canonicalPath, 301);
@@ -127,15 +146,13 @@ class ContentRouterController extends Controller
 
                 [$css, $js] = $this->extractPostAssets($page);
 
-                return view('page', [
+                return view($this->resolveFrontendView($page, fallback: 'page'), [
                     'post' => $page,
                     'seo' => $this->buildSeo($page, $request, $permalinks),
 
-                    // ✅ per-page assets
                     'pageAssetsCss' => $css,
                     'pageAssetsJs' => $js,
 
-                    // ✅ Admin bar edit url (PAGE resource)
                     'adminEditUrl' => class_exists(FilamentPageResource::class)
                         ? FilamentPageResource::getUrl('edit', ['record' => $page])
                         : url('/lara-admin'),
@@ -165,40 +182,34 @@ class ContentRouterController extends Controller
 
             [$css, $js] = $this->extractPostAssets($post);
 
-            return view('post', [
+            return view($this->resolveFrontendView($post, fallback: 'post'), [
                 'post' => $post,
                 'seo' => $this->buildSeo($post, $request, $permalinks),
 
-                // ✅ per-page assets
                 'pageAssetsCss' => $css,
                 'pageAssetsJs' => $js,
 
-                // ✅ Admin bar edit url (POST resource)
                 'adminEditUrl' => class_exists(FilamentPostResource::class)
                     ? FilamentPostResource::getUrl('edit', ['record' => $post])
                     : url('/lara-admin'),
             ]);
         }
 
-        // 3) Attachment pages (Media) - only after no page and no post
-        // Root-level /{media-slug}
+        // 3) Attachment pages (Media)
         if ($slug !== '' && !str_contains($slug, '/')) {
             $attachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
             if ($attachmentsEnabled) {
-                // ✅ IMPORTANT: do NOT exclude private here; we want to catch it and redirect (not 404)
                 $media = Media::query()
                     ->where('slug', $slug)
-                    ->where('attachment_public', true) // ✅ per-attachment show/hide
+                    ->where('attachment_public', true)
                     ->first();
 
                 if ($media) {
-                    // ✅ HARD BLOCK: private category => redirect to admin with notice
                     if ($this->hasPrivateMediaCategory($media)) {
                         return redirect()->to('/lara-admin?private=1&from=' . urlencode($path));
                     }
 
-                    // Canonical: ensure correct slug path
                     $canonicalPath = '/' . $media->slug;
                     if ($path !== $canonicalPath) {
                         return redirect()->to($canonicalPath, 301);
@@ -207,7 +218,6 @@ class ContentRouterController extends Controller
                     $globalIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
                     $indexable = $globalIndexable && (bool) $media->attachment_indexable;
 
-                    // Optional: show where this media is used
                     $usedIn = $media->posts()
                         ->whereIn('type', ['post', 'page'])
                         ->where('status', 'published')
@@ -220,18 +230,14 @@ class ContentRouterController extends Controller
 
                     [$css, $js] = $this->extractMediaAssets($media);
 
-                    // ✅ Apply defaults for frontend rendering (NO DB save)
-                    // IMPORTANT: do NOT refresh(), otherwise in-memory defaults are lost.
                     if (function_exists('do_action')) {
                         do_action('media.attachment.defaults.persist', $media);
 
-                        // ✅ DO NOT refresh in preview mode, otherwise in-memory preview changes are lost
                         if ($request->query('md_preview') !== '1') {
                             $media->refresh();
                         }
                     }
 
-                    // ✅ Public media categories (for top navigation) + active category
                     $publicMediaCategories = $this->publicMediaCategories();
 
                     $activeMediaCategory = null;
@@ -249,15 +255,12 @@ class ContentRouterController extends Controller
                         'usedIn' => $usedIn,
                         'seo' => $this->buildAttachmentSeo($media, $indexable),
 
-                        // ✅ For frontend category navigation
                         'mediaCategories' => $publicMediaCategories,
                         'activeMediaCategory' => $activeMediaCategory,
 
-                        // ✅ per-page assets
                         'pageAssetsCss' => $css,
                         'pageAssetsJs' => $js,
 
-                        // ✅ Admin bar edit url (MEDIA resource)
                         'adminEditUrl' => class_exists(FilamentMediaResource::class)
                             ? FilamentMediaResource::getUrl('edit', ['record' => $media])
                             : url('/lara-admin'),
@@ -266,7 +269,7 @@ class ContentRouterController extends Controller
             }
         }
 
-        // 4) Slug history fallback (auto-heal redirect row if missing)
+        // 4) Slug history fallback
         $oldSlugCandidate = null;
 
         if (is_array($match) && isset($match['slug'])) {
@@ -303,8 +306,31 @@ class ContentRouterController extends Controller
     }
 
     /**
-     * ✅ If media has ANY "media_category" term with visibility=private
+     * Resolve which frontend view to render:
+     * - If meta_json.template is set AND the view exists => "templates.{key}"
+     * - Otherwise fallback to provided fallback view ("post", "page", "home")
+     *
+     * ✅ This prevents: View [templates.xyz] not found
      */
+    private function resolveFrontendView(Post $post, string $fallback): string
+    {
+        $meta = is_array($post->meta_json) ? $post->meta_json : [];
+        $template = trim((string) ($meta['template'] ?? ''));
+
+        // ✅ Not selected => theme fallback
+        if ($template === '') {
+            return $fallback;
+        }
+
+        // Try template view
+        $view = 'templates.' . $template;
+
+        // ✅ If the file doesn't exist, do NOT crash; fallback to theme default
+        return view()->exists($view) ? $view : $fallback;
+    }
+
+    // ------------------- Helpers below (unchanged) -------------------
+
     private function hasPrivateMediaCategory(Media $media): bool
     {
         if (method_exists($media, 'categories')) {
@@ -367,7 +393,6 @@ class ContentRouterController extends Controller
         $seo = data_get($meta, 'seo', []);
         $seo = is_array($seo) ? $seo : [];
 
-        // ✅ Prefer frontend meta defaults (from plugin) as fallback
         $frontendMetaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
         $frontendMetaDescRaw = data_get($meta, 'frontend.meta_description', '');
 
@@ -457,7 +482,6 @@ class ContentRouterController extends Controller
             ->first();
     }
 
-    // ✅ FIXED: now receives $request so $request is defined
     private function renderTermArchive(Request $request, string $taxonomyKey, string $slug, string $requestedPath)
     {
         $slug = trim($slug, '/');
@@ -471,12 +495,10 @@ class ContentRouterController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
-        // ✅ HARD BLOCK: private term => redirect to admin with notice
         if (($term->visibility ?? 'public') !== 'public') {
             return redirect()->to('/lara-admin?private=1&from=' . urlencode($request->getPathInfo()));
         }
 
-        // ✅ scheduled-safe
         $now = now();
 
         $posts = Post::query()
@@ -493,15 +515,11 @@ class ContentRouterController extends Controller
             'title' => $term->name,
             'term' => $term,
             'posts' => $posts,
-
-            // ✅ Archive doesn't map to a single record edit
             'adminEditUrl' => url('/lara-admin'),
         ]);
     }
 
     /**
-     * ✅ Per Post/Page assets from meta_json.assets.{css,js}
-     *
      * @return array{0:string,1:string} [css, js]
      */
     private function extractPostAssets(Post $post): array
@@ -541,8 +559,6 @@ class ContentRouterController extends Controller
     }
 
     /**
-     * ✅ Per Media assets from meta.assets.{css,js}
-     *
      * @return array{0:string,1:string} [css, js]
      */
     private function extractMediaAssets(Media $media): array

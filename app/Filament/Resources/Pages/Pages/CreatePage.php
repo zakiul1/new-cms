@@ -13,6 +13,9 @@ class CreatePage extends CreateRecord
     /** @var int[] */
     protected array $featuredMediaIds = [];
 
+    /** @var int[] */
+    protected array $productMediaIds = [];
+
     protected function getHeaderActions(): array
     {
         return [
@@ -36,7 +39,14 @@ class CreatePage extends CreateRecord
 
         unset($data['featured_media_ids']);
 
-        // ✅ Keep legacy single column in sync (first image)
+        // ✅ Product Images (multiple)
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
+            : [];
+
+        unset($data['product_media_ids']);
+
+        // ✅ Keep legacy single column in sync (first featured image)
         $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
 
         $data['type'] = 'page';
@@ -60,9 +70,17 @@ class CreatePage extends CreateRecord
         $data['content_json'] = is_array($data['content_json'] ?? null) ? $data['content_json'] : [];
 
         $data['meta_json'] = array_replace_recursive([
-            'template' => 'default',
+            // ✅ default template = null means "use theme page.blade.php"
+            'template' => null,
             'parent_id' => null,
             'menu_order' => 0,
+            'slider' => [
+                'title' => null,
+            ],
+            'duotone' => [
+                'color' => null,
+                'opacity' => 0,
+            ],
             'seo' => [
                 'title' => null,
                 'description' => null,
@@ -80,9 +98,34 @@ class CreatePage extends CreateRecord
     protected function afterCreate(): void
     {
         $this->syncFeaturedMedia();
+        $this->syncProductMedia();
     }
 
     private function syncFeaturedMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        $this->syncMediaRole('featured', $this->featuredMediaIds);
+    }
+
+    private function syncProductMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        $this->syncMediaRole('product', $this->productMediaIds);
+    }
+
+    /**
+     * Sync media IDs into post_media pivot for a given role, keeping order.
+     *
+     * @param  string  $role
+     * @param  int[]   $idsIn
+     */
+    private function syncMediaRole(string $role, array $idsIn): void
     {
         if (!$this->record) {
             return;
@@ -92,7 +135,8 @@ class CreatePage extends CreateRecord
         $seen = [];
         $ids = [];
 
-        foreach ($this->featuredMediaIds as $id) {
+        foreach ($idsIn as $id) {
+            $id = (int) $id;
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
@@ -102,23 +146,23 @@ class CreatePage extends CreateRecord
 
         // Prefer helper if it exists on the model
         if (method_exists($this->record, 'syncMediaRole')) {
-            $this->record->syncMediaRole('featured', $ids);
+            $this->record->syncMediaRole($role, $ids);
             return;
         }
 
         // Manual fallback: use relation if exists
         if (method_exists($this->record, 'mediaPivot')) {
             if ($ids === []) {
-                $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+                $this->record->mediaPivot()->wherePivot('role', $role)->detach();
                 return;
             }
 
-            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            $this->record->mediaPivot()->wherePivot('role', $role)->detach();
 
             $sync = [];
             foreach ($ids as $i => $id) {
                 $sync[$id] = [
-                    'role' => 'featured',
+                    'role' => $role,
                     'sort_order' => $i,
                 ];
             }

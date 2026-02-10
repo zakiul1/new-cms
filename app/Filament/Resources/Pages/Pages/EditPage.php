@@ -19,6 +19,9 @@ class EditPage extends EditRecord
     /** @var int[] */
     protected array $featuredMediaIds = [];
 
+    /** @var int[] */
+    protected array $productMediaIds = [];
+
     // ✅ For WP-like redirect/history
     protected string $oldSlug = '';
     protected string $oldCanonicalPath = '';
@@ -35,8 +38,19 @@ class EditPage extends EditRecord
                 ->pluck('id')
                 ->map(fn($id) => (int) $id)
                 ->all();
+
+            // ✅ Fill Product Images (multiple) from pivot (role=product)
+            $data['product_media_ids'] = $this->record
+                ->mediaPivot()
+                ->wherePivot('role', 'product')
+                ->orderBy('post_media.sort_order')
+                ->get()
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->all();
         } else {
             $data['featured_media_ids'] = [];
+            $data['product_media_ids'] = [];
         }
 
         // ✅ Fallback: if no pivot featured exists yet, use legacy single column
@@ -60,6 +74,13 @@ class EditPage extends EditRecord
 
         unset($data['featured_media_ids']);
 
+        // ✅ capture Product Images (multiple)
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
+            : [];
+
+        unset($data['product_media_ids']);
+
         // ✅ keep legacy single column in sync (first featured image)
         $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
 
@@ -77,9 +98,17 @@ class EditPage extends EditRecord
         $data['content_json'] = is_array($data['content_json'] ?? null) ? $data['content_json'] : [];
 
         $data['meta_json'] = array_replace_recursive([
-            'template' => 'default',
+            // ✅ default null = "use theme page.blade.php"
+            'template' => null,
             'parent_id' => null,
             'menu_order' => 0,
+            'slider' => [
+                'title' => null,
+            ],
+            'duotone' => [
+                'color' => null,
+                'opacity' => 0,
+            ],
             'seo' => [
                 'title' => null,
                 'description' => null,
@@ -95,8 +124,9 @@ class EditPage extends EditRecord
 
     protected function afterSave(): void
     {
-        // ✅ sync featured images pivot
+        // ✅ sync featured + product images pivot
         $this->syncFeaturedMedia();
+        $this->syncProductMedia();
 
         // refresh record so we get latest slug/meta
         $this->record->refresh();
@@ -144,11 +174,36 @@ class EditPage extends EditRecord
             return;
         }
 
+        $this->syncMediaRole('featured', $this->featuredMediaIds);
+    }
+
+    private function syncProductMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        $this->syncMediaRole('product', $this->productMediaIds);
+    }
+
+    /**
+     * Sync media IDs into post_media pivot for a given role, keeping order.
+     *
+     * @param  string  $role
+     * @param  int[]   $idsIn
+     */
+    private function syncMediaRole(string $role, array $idsIn): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
         // ✅ unique, keep order
         $seen = [];
         $ids = [];
 
-        foreach ($this->featuredMediaIds as $id) {
+        foreach ($idsIn as $id) {
+            $id = (int) $id;
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
@@ -158,7 +213,7 @@ class EditPage extends EditRecord
 
         // Prefer helper if it exists on the model
         if (method_exists($this->record, 'syncMediaRole')) {
-            $this->record->syncMediaRole('featured', $ids);
+            $this->record->syncMediaRole($role, $ids);
             return;
         }
 
@@ -168,16 +223,16 @@ class EditPage extends EditRecord
         }
 
         if ($ids === []) {
-            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            $this->record->mediaPivot()->wherePivot('role', $role)->detach();
             return;
         }
 
-        $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+        $this->record->mediaPivot()->wherePivot('role', $role)->detach();
 
         $sync = [];
         foreach ($ids as $i => $id) {
             $sync[$id] = [
-                'role' => 'featured',
+                'role' => $role,
                 'sort_order' => $i,
             ];
         }

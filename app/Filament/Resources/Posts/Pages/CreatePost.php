@@ -16,6 +16,9 @@ class CreatePost extends CreateRecord
     /** @var int[] */
     protected array $featuredMediaIds = [];
 
+    /** @var int[] */
+    protected array $productMediaIds = [];
+
     protected function getHeaderActions(): array
     {
         return [
@@ -44,7 +47,14 @@ class CreatePost extends CreateRecord
 
         unset($data['featured_media_ids']);
 
-        // ✅ Keep legacy single column in sync (first image)
+        // ✅ Product Images (multiple)
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
+            : [];
+
+        unset($data['product_media_ids']);
+
+        // ✅ Keep legacy single column in sync (first featured image)
         $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
 
         $data['type'] = 'post';
@@ -69,6 +79,7 @@ class CreatePost extends CreateRecord
     protected function afterCreate(): void
     {
         $this->syncFeaturedMedia();
+        $this->syncProductMedia();
 
         // ✅ clear sitemap cache (new post/page affects sitemap)
         Cache::forget('cms:sitemap:xml:v2');
@@ -86,11 +97,36 @@ class CreatePost extends CreateRecord
             return;
         }
 
+        $this->syncMediaRole('featured', $this->featuredMediaIds);
+    }
+
+    private function syncProductMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        $this->syncMediaRole('product', $this->productMediaIds);
+    }
+
+    /**
+     * Sync media IDs into post_media pivot for a given role, keeping order.
+     *
+     * @param  string  $role
+     * @param  int[]   $idsIn
+     */
+    private function syncMediaRole(string $role, array $idsIn): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
         // ✅ unique, keep order
         $seen = [];
         $ids = [];
 
-        foreach ($this->featuredMediaIds as $id) {
+        foreach ($idsIn as $id) {
+            $id = (int) $id;
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
@@ -98,30 +134,28 @@ class CreatePost extends CreateRecord
             $ids[] = $id;
         }
 
-        // ✅ If you already have helper: $this->record->syncMediaRole('featured', $ids);
-        // Use it if available, otherwise do manual sync below.
-
+        // ✅ If you already have helper on Post model, use it
         if (method_exists($this->record, 'syncMediaRole')) {
-            $this->record->syncMediaRole('featured', $ids);
+            $this->record->syncMediaRole($role, $ids);
             return;
         }
 
         // Manual sync (fallback)
         if ($ids === []) {
-            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            $this->record->mediaPivot()->wherePivot('role', $role)->detach();
             return;
         }
 
         $sync = [];
         foreach ($ids as $i => $id) {
             $sync[$id] = [
-                'role' => 'featured',
+                'role' => $role,
                 'sort_order' => $i,
             ];
         }
 
-        // Sync only featured role items
-        $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+        // Sync only this role items
+        $this->record->mediaPivot()->wherePivot('role', $role)->detach();
         $this->record->mediaPivot()->attach($sync);
     }
 }

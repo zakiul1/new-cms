@@ -17,6 +17,20 @@ do_action(HookPoints::CMS_ROUTES);
 Route::get('/robots.txt', [RobotsController::class, 'show'])->name('cms.robots');
 Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('cms.sitemap');
 
+/**
+ * ✅ Serve sub-sitemaps like:
+ * /pages.xml
+ * /posts.xml
+ * /posts-2.xml
+ * /media.xml
+ * /media-2.xml
+ *
+ * Must be before catch-all.
+ */
+Route::get('/{name}.xml', [SitemapController::class, 'file'])
+    ->where('name', '(pages|posts(?:-\d+)?|media(?:-\d+)?)')
+    ->name('cms.sitemap.file');
+
 // ✅ Customizer (FULL SCREEN, WP-like) - MUST be before catch-all
 Route::middleware(['web', 'auth'])
     ->get('/customizer', [ThemeCustomizerController::class, 'index'])
@@ -27,11 +41,8 @@ Route::get('/category/{slug}', [CategoryArchiveController::class, 'show'])
     ->where('slug', '.*')
     ->name('cms.category.archive');
 
-// ✅ Home (now supports ?p=123 for "Plain" permalinks)
+// ✅ Home (supports ?p=123 for "Plain" permalinks + static front page)
 Route::get('/', [ContentRouterController::class, 'home'])->name('cms.home');
-
-// ✅ Redirect /home -> / (SEO + fixes wrong menu links if any exist)
-Route::redirect('/home', '/', 301)->name('cms.home.redirect');
 
 /**
  * ✅ Logout route for frontend admin bar

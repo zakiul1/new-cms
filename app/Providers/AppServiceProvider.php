@@ -4,7 +4,8 @@ namespace App\Providers;
 
 use App\Cms\Core\SafeMode;
 use App\Cms\Plugins\PluginManager;
-use App\Cms\Shortcodes\CoreShortcodes; // ✅ ADD
+use App\Cms\Shortcodes\CoreShortcodes;
+use App\Cms\Content\Shortcodes\ShortcodeRegistry;
 use App\Livewire\MediaBrowser;
 use App\Models\Post;
 use App\Observers\PostObserver;
@@ -13,7 +14,6 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 use App\Livewire\Filament\ToggleFrontendAdminBar;
-
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -58,13 +58,14 @@ class AppServiceProvider extends ServiceProvider
 
         // ✅ Livewire components
         Livewire::component('media-browser', MediaBrowser::class);
-
-        // ✅ Register CORE shortcodes once (system-level)
-        if (function_exists('add_shortcode')) {
-            CoreShortcodes::register();
-        }
-
         Livewire::component('filament.toggle-frontend-admin-bar', ToggleFrontendAdminBar::class);
 
+        /**
+         * ✅ Register CORE shortcodes into ShortcodeRegistry (the one ShortcodeParser uses)
+         * NOTE: If you already call CoreShortcodes::register($shortcodes) inside CmsServiceProvider,
+         * you can REMOVE this block entirely to avoid double registration.
+         */
+        $registry = app(ShortcodeRegistry::class);
+        CoreShortcodes::register($registry);
     }
 }

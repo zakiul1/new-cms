@@ -7,6 +7,7 @@ use App\Filament\Forms\Components\MediaPicker;
 use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -58,6 +59,12 @@ class PostForm
                                             $set('meta_json.seo.title', (string) $state);
                                         }
                                     }),
+
+                                // ✅ NEW: Slider Title (meta_json.slider.title)
+                                TextInput::make('meta_json.slider.title')
+                                    ->label('Slider Title')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
 
                                 // ✅ GLOBAL uniqueness + slug safety
                                 TextInput::make('slug')
@@ -120,19 +127,6 @@ class PostForm
                                         return $base . $preview;
                                     }),
 
-                                /*    Textarea::make('excerpt')
-                                       ->rows(3)
-                                       ->live(onBlur: true)
-                                       ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                           // ✅ SEO description fill (only if empty)
-                                           if (!filled($get('meta_json.seo.description'))) {
-                                               $text = trim((string) $state);
-                                               if ($text !== '') {
-                                                   $set('meta_json.seo.description', Str::limit($text, 160, ''));
-                                               }
-                                           }
-                                       }), */
-
                                 // ✅ Editor
                                 WpClassicEditor::make('content_json')
                                     ->label('Content')
@@ -183,9 +177,6 @@ class PostForm
                                         // store as string html (simple)
                                         return is_string($state) ? $state : '';
                                     }),
-
-
-
 
                                 // ✅ SEO (Premium-feel)
                                 Section::make('SEO (Premium)')
@@ -252,6 +243,7 @@ class PostForm
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
                                     ])
                                     ->live(onBlur: true),
+
                                 Textarea::make('meta_json.custom_json')
                                     ->label('Custom JSON (Paste Valid JSON)')
                                     ->helperText('Valid JSON only. Saved per post. (Do not include <script> tag)')
@@ -292,8 +284,6 @@ class PostForm
                                     ->live(onBlur: true),
                             ]),
 
-
-
                         Tab::make('Frontend Preview')
                             ->schema([
                                 Placeholder::make('frontend_preview')
@@ -313,7 +303,6 @@ class PostForm
                                     })
                                     ->dehydrated(false),
                             ]),
-
                     ]),
 
                 /**
@@ -334,17 +323,55 @@ class PostForm
                             ->default('published')
                             ->required(),
 
+                        // ✅ Template select (stored in meta_json.template)
+                        Select::make('meta_json.template')
+                            ->label('Template')
+                            ->helperText('If selected, frontend will use that template. If empty, theme default view is used.')
+                            ->options([
+                                '' => 'Theme Default (post.blade.php)',
+                                'default' => 'Slider Template',
+                            ])
+                            ->default('') // ✅ empty by default
+                            ->native(false)
+                            ->dehydrateStateUsing(function ($state) {
+                                // ✅ always store as string; keep empty string if not selected
+                                return is_string($state) ? $state : '';
+                            }),
+
+
                         MediaPicker::make('featured_media_ids')
                             ->label('Featured Images')
                             ->modalHeading('Featured images')
                             ->multiple()
                             ->maxItems(20),
 
+                        // ✅ NEW: Product Images (multiple) - saving/sync handled in Create/Edit page classes
+                        MediaPicker::make('product_media_ids')
+                            ->label('Product Images')
+                            ->modalHeading('Product images')
+                            ->multiple()
+                            ->maxItems(50),
 
-                        /*   MediaPicker::make('product_media_ids')
-                              ->label('Product Gallery')
-                              ->multiple()
-                              ->maxItems(20), */
+                        // ✅ NEW: Duotone panel fields (stored in meta_json.duotone.*)
+                        Section::make('Duotone')
+                            ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
+                            ->collapsible()
+                            ->collapsed()
+                            ->schema([
+                                ColorPicker::make('meta_json.duotone.color')
+                                    ->label('Color')
+                                    ->nullable(),
+
+                                TextInput::make('meta_json.duotone.opacity')
+                                    ->label('Opacity')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->maxValue(100)
+                                    ->default(0)
+                                    ->suffix('%')
+                                    ->helperText('0 = transparent, 100 = fully opaque.')
+                                    ->nullable(),
+                            ]),
 
                         Select::make('categories')
                             ->label('Categories')

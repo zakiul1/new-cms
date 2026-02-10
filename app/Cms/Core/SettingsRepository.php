@@ -22,26 +22,53 @@ class SettingsRepository
                     return $default;
                 }
 
-                // ✅ value is already decoded because CmsSetting::$casts['value' => 'json']
+                // value is already decoded because CmsSetting::$casts['value' => 'json']
                 $value = $row->value;
 
                 if ($value === null || $value === '') {
                     return $default;
                 }
 
-                // ✅ normalize common boolean-ish strings (only if it is string)
+                // Normalize common string forms
                 if (is_string($value)) {
                     $trim = trim($value);
+
+                    if ($trim === '') {
+                        return $default;
+                    }
+
                     $lower = strtolower($trim);
 
-                    if ($lower === 'true')
+                    // null-ish strings
+                    if (in_array($lower, ['null', 'undefined'], true)) {
+                        return $default;
+                    }
+
+                    // boolean-ish strings
+                    if ($lower === 'true') {
                         return true;
-                    if ($lower === 'false')
+                    }
+                    if ($lower === 'false') {
                         return false;
-                    if ($trim === '1')
+                    }
+                    if ($trim === '1') {
                         return true;
-                    if ($trim === '0')
+                    }
+                    if ($trim === '0') {
                         return false;
+                    }
+
+                    // numeric strings → numbers
+                    // helps homepage_page_id stored as "12"
+                    if (is_numeric($trim)) {
+                        // if looks like an int, cast to int
+                        if (preg_match('/^-?\d+$/', $trim)) {
+                            return (int) $trim;
+                        }
+
+                        // otherwise float
+                        return (float) $trim;
+                    }
 
                     return $trim;
                 }
@@ -53,17 +80,14 @@ class SettingsRepository
 
     public function set(string $group, string $key, mixed $value): void
     {
-        // ✅ DO NOT json_encode manually (Eloquent json cast handles it)
+        // DO NOT json_encode manually (Eloquent json cast handles it)
         CmsSetting::query()->updateOrCreate(
             ['group' => $group, 'key' => $key],
             ['value' => $value]
         );
 
-        // ✅ clear BOTH caches:
-        // 1) per-key cache used by SettingsRepository
+        // clear BOTH caches:
         Cache::forget($this->cacheKey($group, $key));
-
-        // 2) per-group cache used by App\Cms\Core\Settings::all()
         Cache::forget($this->settingsGroupCacheKey($group));
     }
 
@@ -83,7 +107,7 @@ class SettingsRepository
         return "cms_settings.{$group}.{$key}";
     }
 
-    // ✅ MUST match Settings::CACHE_PREFIX + group ("cms:settings:group:" + group)
+    // MUST match Settings::CACHE_PREFIX + group ("cms:settings:group:" + group)
     private function settingsGroupCacheKey(string $group): string
     {
         return 'cms:settings:group:' . $group;

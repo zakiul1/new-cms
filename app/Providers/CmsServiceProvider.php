@@ -5,7 +5,6 @@ namespace App\Providers;
 use App\Cms\Assets\AssetManager;
 use App\Cms\Content\Blocks\BlockRegistry;
 use App\Cms\Content\Blocks\BlockRenderer;
-use App\Cms\Content\CurrentContentContext;
 use App\Cms\Content\Shortcodes\ShortcodeParser;
 use App\Cms\Content\Shortcodes\ShortcodeRegistry;
 use App\Cms\Core\CmsCacheVersions;
@@ -33,15 +32,10 @@ use App\Cms\Widgets\SidebarRenderer;
 use App\Cms\Widgets\WidgetRegistry;
 use App\Cms\Widgets\Types\MenuWidget;
 use App\Cms\Widgets\Types\TextWidget;
-use App\Models\Media;
-use App\Models\Post;
-use App\Models\Taxonomy;
-use App\Models\Term;
 use App\Models\Widget;
 use App\Models\WidgetPlacement;
 use App\Observers\WidgetCacheObserver;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Support\Collection;
 use Illuminate\Support\ServiceProvider;
 
 class CmsServiceProvider extends ServiceProvider
@@ -103,10 +97,6 @@ class CmsServiceProvider extends ServiceProvider
         // Content pipeline (shortcodes)
         $this->registerContentPipeline($hooks);
 
-        // IMPORTANT: Plugins are booted EARLY in AppServiceProvider::register()
-        // so they can register routes via CMS_ROUTES.
-        // DO NOT boot plugins here.
-
         // Theme: boot views / publish dist if missing
         $this->app->make(ThemeManager::class)->bootActiveTheme();
 
@@ -118,7 +108,7 @@ class CmsServiceProvider extends ServiceProvider
         $hooks->doAction(HookPoints::CMS_REGISTER_SIDEBARS);
         $hooks->doAction(HookPoints::CMS_REGISTER_WIDGETS);
 
-        // ✅ Register cache bump observer for widgets (important for sidebar caching)
+        // ✅ Register cache bump observer for widgets
         $this->registerWidgetCacheObserver();
 
         // Core blocks (HTTP only)
@@ -134,7 +124,6 @@ class CmsServiceProvider extends ServiceProvider
 
     /**
      * Register default core menu locations, widget areas, and widget types.
-     * Uses Hooks service directly so it works even if helper functions aren't loaded yet.
      */
     private function registerCoreMenusAndWidgets(Hooks $hooks): void
     {
@@ -164,7 +153,6 @@ class CmsServiceProvider extends ServiceProvider
 
     private function registerWidgetCacheObserver(): void
     {
-        // Avoid double registration if provider boots twice in some environments
         static $done = false;
         if ($done) {
             return;
@@ -180,6 +168,9 @@ class CmsServiceProvider extends ServiceProvider
         Widget::deleted(fn(Widget $w) => $observer->widgetDeleted($w));
     }
 
+    /**
+     * ✅ This is the ONLY correct place to register shortcodes for ShortcodeParser
+     */
     private function registerContentPipeline(Hooks $hooks): void
     {
         /** @var ShortcodeRegistry $shortcodes */
@@ -197,33 +188,8 @@ class CmsServiceProvider extends ServiceProvider
             return '<a href="' . e($url) . '"' . $target . ' class="btn">' . e($label) . '</a>';
         });
 
-        /**
-         * ✅ [products]
-         * - In Post/Page editor: shows current post categories "product" field values.
-         * - In Media editor (attachment page): shows current media_category terms "product" values.
-         * - Works anywhere the CMS content pipeline is used.
-         */
-        $shortcodes->register('products', function (array $attrs = [], ?string $content = null, array $ctx = []) {
-            $sep = is_string($attrs['sep'] ?? null) ? (string) $attrs['sep'] : ', ';
-
-            $terms = $this->resolveCurrentTermsForProducts($ctx);
-
-            if ($terms->isEmpty()) {
-                return '';
-            }
-
-            $values = $terms
-                ->map(fn(Term $t) => trim((string) ($t->product ?? '')))
-                ->filter(fn(string $v) => $v !== '')
-                ->values();
-
-            if ($values->isEmpty()) {
-                return '';
-            }
-
-            // Escape for safe HTML output
-            return e($values->implode($sep));
-        });
+        // ✅ Register your core shortcodes into the registry (HELLO, POSTS, PRODUCTS...)
+        \App\Cms\Shortcodes\CoreShortcodes::register($shortcodes);
 
         // Apply shortcodes through CMS_THE_CONTENT pipeline
         $hooks->addFilter(HookPoints::CMS_THE_CONTENT, function ($html, $ctx = []) {
@@ -232,72 +198,6 @@ class CmsServiceProvider extends ServiceProvider
                 is_array($ctx) ? $ctx : []
             );
         }, 20, 2);
-    }
-
-    /**
-     * @return Collection<int, Term>
-     */
-    private function resolveCurrentTermsForProducts(array $ctx): Collection
-    {
-        // 1) Direct term context (archive pages etc.)
-        if (($ctx['term'] ?? null) instanceof Term) {
-            return collect([$ctx['term']]);
-        }
-
-        // 2) Post context -> post categories
-        if (($ctx['post'] ?? null) instanceof Post) {
-            /** @var Post $post */
-            $post = $ctx['post'];
-
-            try {
-                return $post->categories()->orderBy('terms.name')->get();
-            } catch (\Throwable $e) {
-                return collect();
-            }
-        }
-
-        // 3) Media context -> media_category terms
-        if (($ctx['media'] ?? null) instanceof Media) {
-            return $this->mediaCategoryTerms($ctx['media']);
-        }
-
-        // 4) Fallback: CurrentContentContext (router sets media; some pages set post)
-        try {
-            /** @var CurrentContentContext $current */
-            $current = app(CurrentContentContext::class);
-
-            if (($current->media ?? null) instanceof Media) {
-                return $this->mediaCategoryTerms($current->media);
-            }
-
-            if (($current->post ?? null) instanceof Post) {
-                return $current->post->categories()->orderBy('terms.name')->get();
-            }
-        } catch (\Throwable $e) {
-            // ignore
-        }
-
-        return collect();
-    }
-
-    /**
-     * @return Collection<int, Term>
-     */
-    private function mediaCategoryTerms(Media $media): Collection
-    {
-        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
-        if (!$taxonomyId) {
-            return collect();
-        }
-
-        try {
-            return $media->terms()
-                ->where('terms.taxonomy_id', $taxonomyId)
-                ->orderBy('terms.name')
-                ->get();
-        } catch (\Throwable $e) {
-            return collect();
-        }
     }
 
     private function registerCoreBlocks(Application $app): void

@@ -20,6 +20,9 @@ class EditPost extends EditRecord
     /** @var int[] */
     protected array $featuredMediaIds = [];
 
+    /** @var int[] */
+    protected array $productMediaIds = [];
+
     // ✅ For WP-like redirect/history
     protected string $oldSlug = '';
     protected string $oldCanonicalPath = '';
@@ -56,6 +59,16 @@ class EditPost extends EditRecord
             $data['featured_media_ids'] = [(int) $data['featured_media_id']];
         }
 
+        // ✅ Fill Product Images (multiple) from pivot (role=product)
+        $data['product_media_ids'] = $this->record
+            ->mediaPivot()
+            ->wherePivot('role', 'product')
+            ->orderBy('post_media.sort_order')
+            ->get()
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+
         return $data;
     }
 
@@ -71,6 +84,13 @@ class EditPost extends EditRecord
             : [];
 
         unset($data['featured_media_ids']);
+
+        // ✅ capture Product Images (multiple)
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map(fn($v) => (int) $v, $data['product_media_ids'])))
+            : [];
+
+        unset($data['product_media_ids']);
 
         // ✅ keep legacy column in sync (first featured image)
         $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
@@ -91,6 +111,7 @@ class EditPost extends EditRecord
     protected function afterSave(): void
     {
         $this->syncFeaturedMedia();
+        $this->syncProductMedia();
 
         // ✅ refresh record (so categories/relations saved by Filament are visible)
         $this->record->refresh();
@@ -155,11 +176,36 @@ class EditPost extends EditRecord
             return;
         }
 
+        $this->syncMediaRole('featured', $this->featuredMediaIds);
+    }
+
+    private function syncProductMedia(): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
+        $this->syncMediaRole('product', $this->productMediaIds);
+    }
+
+    /**
+     * Sync media IDs into post_media pivot for a given role, keeping order.
+     *
+     * @param  string  $role
+     * @param  int[]   $idsIn
+     */
+    private function syncMediaRole(string $role, array $idsIn): void
+    {
+        if (!$this->record) {
+            return;
+        }
+
         // ✅ unique, keep order
         $seen = [];
         $ids = [];
 
-        foreach ($this->featuredMediaIds as $id) {
+        foreach ($idsIn as $id) {
+            $id = (int) $id;
             if ($id <= 0 || isset($seen[$id])) {
                 continue;
             }
@@ -169,23 +215,23 @@ class EditPost extends EditRecord
 
         // Prefer helper if it exists on Post model
         if (method_exists($this->record, 'syncMediaRole')) {
-            $this->record->syncMediaRole('featured', $ids);
+            $this->record->syncMediaRole($role, $ids);
             return;
         }
 
         // Manual fallback
         if ($ids === []) {
-            $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+            $this->record->mediaPivot()->wherePivot('role', $role)->detach();
             return;
         }
 
-        // Clear only featured role items, then attach ordered
-        $this->record->mediaPivot()->wherePivot('role', 'featured')->detach();
+        // Clear only this role items, then attach ordered
+        $this->record->mediaPivot()->wherePivot('role', $role)->detach();
 
         $sync = [];
         foreach ($ids as $i => $id) {
             $sync[$id] = [
-                'role' => 'featured',
+                'role' => $role,
                 'sort_order' => $i,
             ];
         }

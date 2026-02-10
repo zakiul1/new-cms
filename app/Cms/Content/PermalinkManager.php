@@ -37,6 +37,7 @@ class PermalinkManager
     {
         $base = (string) $this->settings->get('core', 'category_base', 'category');
         $base = trim($base);
+
         return trim($base, '/');
     }
 
@@ -44,6 +45,7 @@ class PermalinkManager
     {
         $base = (string) $this->settings->get('core', 'tag_base', 'tag');
         $base = trim($base);
+
         return trim($base, '/');
     }
 
@@ -72,9 +74,22 @@ class PermalinkManager
         return $this->normalizePath($replaced);
     }
 
+    /**
+     * WP-like behavior:
+     * - If this page is selected as "Homepage" (core.homepage_page_id),
+     *   then its canonical path is "/" (not "/home").
+     */
     public function pagePath(Post $page, ?string $overrideSlug = null): string
     {
+        $homepageId = $this->settings->get('core', 'homepage_page_id', null);
+        $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
+
+        if ($homepageId !== null && (int) $page->getKey() === $homepageId) {
+            return '/';
+        }
+
         $slug = trim((string) ($overrideSlug ?? $page->slug), '/');
+
         return $slug === '' ? '/' : '/' . $slug;
     }
 

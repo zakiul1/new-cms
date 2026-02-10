@@ -3,23 +3,25 @@
 namespace App\Filament\Resources\Pages\Schemas;
 
 use App\Cms\Content\PermalinkManager;
+use App\Cms\Core\SettingsRepository;
+use App\Filament\Forms\Components\MediaPicker;
 use App\Filament\Forms\Components\WpClassicEditor;
 use App\Models\Post;
+use App\Models\Slider;
 use App\Models\Taxonomy;
 use App\Models\Term;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -58,24 +60,26 @@ class PageForm
                                         }
                                     }),
 
-                                // ✅ GLOBAL uniqueness + slug safety
+                                // ✅ Slider Title (meta_json.slider.title)
+                                TextInput::make('meta_json.slider.title')
+                                    ->label('Slider Title')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
+
                                 TextInput::make('slug')
                                     ->label('Slug (optional)')
                                     ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                                    // ✅ sanitize on blur
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         $set('slug', filled($state) ? Str::slug((string) $state) : null);
                                     })
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
                                     ->rule(function (?Post $record) {
-                                        // ✅ Global across all posts table rows
                                         return Rule::unique('posts', 'slug')->ignore($record?->id);
                                     }),
 
-                                // ✅ Show actual frontend URL (uses permalink settings)
                                 Placeholder::make('permalink_preview')
                                     ->label('Permalink')
                                     ->content(function (?Post $record, PermalinkManager $permalinks) {
@@ -84,14 +88,10 @@ class PageForm
                                             : 'Will be generated after saving.';
                                     }),
 
-
-
                                 WpClassicEditor::make('content_json')
                                     ->label('Content')
                                     ->height(320)
                                     ->columnSpanFull()
-
-                                    // ✅ editor always receives a STRING (not array)
                                     ->formatStateUsing(function ($state): string {
                                         if (is_array($state)) {
                                             $html = $state['html'] ?? '';
@@ -100,9 +100,7 @@ class PageForm
 
                                         return is_string($state) ? $state : '';
                                     })
-
-                                    // ✅ when saving, convert string back into array for content_json
-                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get): array {
+                                    ->dehydrateStateUsing(function ($state, Get $get): array {
                                         $current = $get('content_json');
 
                                         if (!is_array($current)) {
@@ -113,6 +111,7 @@ class PageForm
 
                                         return $current;
                                     }),
+
                                 TextInput::make('meta_json.subtitle')
                                     ->label('Sub Title')
                                     ->maxLength(255)
@@ -130,12 +129,9 @@ class PageForm
 
                                         return is_string($state) ? $state : '';
                                     })
-                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get) {
-                                        // store as string html (simple)
+                                    ->dehydrateStateUsing(function ($state) {
                                         return is_string($state) ? $state : '';
                                     }),
-
-
 
                                 Section::make('SEO (Premium)')
                                     ->description('Control how this page appears in Google and when shared on social media.')
@@ -201,6 +197,7 @@ class PageForm
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
                                     ])
                                     ->live(onBlur: true),
+
                                 Textarea::make('meta_json.custom_json')
                                     ->label('Custom JSON (Paste Valid JSON)')
                                     ->helperText('Valid JSON only. Saved per post. (Do not include <script> tag)')
@@ -219,7 +216,6 @@ class PageForm
                                             ) ?: '';
                                         }
 
-                                        // keep legacy string JSON editable
                                         return (string) $state;
                                     })
                                     ->dehydrateStateUsing(function ($state) {
@@ -231,7 +227,6 @@ class PageForm
 
                                         $decoded = json_decode($state, true);
 
-                                        // extra safety (rules(['json']) should already prevent invalid)
                                         if (json_last_error() !== JSON_ERROR_NONE) {
                                             return null;
                                         }
@@ -240,8 +235,6 @@ class PageForm
                                     })
                                     ->live(onBlur: true),
                             ]),
-
-
 
                         Tab::make('Frontend Preview')
                             ->schema([
@@ -262,7 +255,6 @@ class PageForm
                                     })
                                     ->dehydrated(false),
                             ]),
-
                     ]),
 
                 /**
@@ -283,29 +275,113 @@ class PageForm
                             ->default('published')
                             ->required(),
 
+                        // ✅ Template select
                         Select::make('meta_json.template')
                             ->label('Template')
+                            ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
                             ->options([
-                                'default' => 'Default',
-                                'home' => 'Home',
-                                'about' => 'About',
-                                'landing' => 'Landing',
+                                '' => 'Theme Default (page.blade.php)',
+                                'default' => 'Slider Template',
                             ])
-                            ->default('default')
-                            ->native(false),
+                            ->default('')
+                            ->native(false)
+                            ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
+
+                        // ✅ Home Hero Slider (shows ONLY when this page is selected as homepage in Settings)
+                        Section::make('Home Hero Slider (Siatex)')
+                            ->collapsible()
+                            ->collapsed()
+                            ->visible(function (?Post $record): bool {
+                                if (!$record) {
+                                    return false; // Create page: no record yet
+                                }
+
+                                /** @var SettingsRepository $settings */
+                                $settings = app(SettingsRepository::class);
+
+                                $homepageId = $settings->get('core', 'homepage_page_id', null);
+                                $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
+
+                                return $homepageId !== null && (int) $record->getKey() === $homepageId;
+                            })
+                            ->schema([
+                                Select::make('meta_json.home.hero_slider_key')
+                                    ->label('Hero Slider')
+                                    ->searchable()
+                                    ->preload()
+                                    ->placeholder('— None —')
+                                    ->nullable()
+                                    ->options(function (): array {
+                                        if (!class_exists(Slider::class)) {
+                                            return [];
+                                        }
+
+                                        try {
+                                            return Slider::query()
+                                                ->where('is_active', true)
+                                                ->orderBy('name')
+                                                ->get()
+                                                ->mapWithKeys(fn($s) => [$s->key => "{$s->name} ({$s->key})"])
+                                                ->all();
+                                        } catch (\Throwable $e) {
+                                            return [];
+                                        }
+                                    }),
+
+                                Select::make('meta_json.home.hero_slider_variant')
+                                    ->label('Variant')
+                                    ->native(false)
+                                    ->options(fn(): array => function_exists('siatex_slider_variants')
+                                        ? siatex_slider_variants()
+                                        : ['siatex-default' => 'Siatex Default'])
+                                    ->default('siatex-default'),
+                            ]),
+
+                        // ✅ Featured Images
+                        MediaPicker::make('featured_media_ids')
+                            ->label('Featured Images')
+                            ->modalHeading('Featured images')
+                            ->multiple()
+                            ->maxItems(20),
+
+                        // ✅ Product Images
+                        MediaPicker::make('product_media_ids')
+                            ->label('Product Images')
+                            ->modalHeading('Product images')
+                            ->multiple()
+                            ->maxItems(50),
+
+                        // ✅ Duotone panel
+                        Section::make('Duotone')
+                            ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
+                            ->collapsible()
+                            ->collapsed()
+                            ->schema([
+                                ColorPicker::make('meta_json.duotone.color')
+                                    ->label('Color')
+                                    ->nullable(),
+
+                                TextInput::make('meta_json.duotone.opacity')
+                                    ->label('Opacity')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->maxValue(100)
+                                    ->default(0)
+                                    ->suffix('%')
+                                    ->helperText('0 = transparent, 100 = fully opaque.')
+                                    ->nullable(),
+                            ]),
 
                         Select::make('meta_json.parent_id')
                             ->label('Parent Page (optional)')
                             ->searchable()
                             ->preload()
                             ->nullable()
-                            ->options(function (): array {
-                                return Post::query()
-                                    ->where('type', 'page')
-                                    ->orderBy('title')
-                                    ->pluck('title', 'id')
-                                    ->all();
-                            }),
+                            ->options(fn(): array => Post::query()
+                                ->where('type', 'page')
+                                ->orderBy('title')
+                                ->pluck('title', 'id')
+                                ->all()),
 
                         TextInput::make('meta_json.menu_order')
                             ->label('Order')
@@ -313,7 +389,6 @@ class PageForm
                             ->numeric()
                             ->default(0),
 
-                        // ✅ Categories (kept as you had it, but validation fixed)
                         Select::make('categories')
                             ->label('Categories')
                             ->relationship('categories', 'name')
@@ -332,7 +407,6 @@ class PageForm
                                         }
                                     }),
 
-                                // ✅ FIX: unique within CATEGORY taxonomy (taxonomy_id), not global
                                 TextInput::make('slug')
                                     ->required()
                                     ->maxLength(255)
@@ -341,9 +415,7 @@ class PageForm
                                     ->helperText('Lowercase letters, numbers, and hyphens only.')
                                     ->rule(function (?Term $record) {
                                         $taxonomyId = Taxonomy::where('key', 'category')->value('id');
-
                                         if (!$taxonomyId) {
-                                            // taxonomy may not exist yet; createOptionUsing will enforce uniqueness
                                             return null;
                                         }
 
@@ -385,7 +457,6 @@ class PageForm
                                 $slug = $base;
                                 $i = 2;
 
-                                // ✅ Ensure unique within taxonomy
                                 while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
                                     $slug = $base . '-' . $i;
                                     $i++;

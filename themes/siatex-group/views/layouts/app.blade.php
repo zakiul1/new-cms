@@ -86,9 +86,12 @@
         </style>
     @endif
 
+    {{-- ✅ Capture @stack('head') output and pass to theme.head --}}
+    @php ob_start(); @endphp
     @stack('head')
+    @php $stackHead = ob_get_clean(); @endphp
 
-    {!! $hooks->applyFilters('theme.head', '') !!}
+    {!! $hooks->applyFilters('theme.head', $stackHead) !!}
 </head>
 
 <body class="min-h-screen bg-white text-slate-900 antialiased">
