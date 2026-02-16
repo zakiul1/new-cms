@@ -43,7 +43,6 @@ class ContentRouterController extends Controller
                     'pageAssetsCss' => $css,
                     'pageAssetsJs' => $js,
 
-                    // ✅ Post edit URL
                     'adminEditUrl' => class_exists(FilamentPostResource::class)
                         ? FilamentPostResource::getUrl('edit', ['record' => $post])
                         : url('/lara-admin'),
@@ -73,17 +72,13 @@ class ContentRouterController extends Controller
             if ($homePage) {
                 [$css, $js] = $this->extractPostAssets($homePage);
 
-                // ✅ IMPORTANT:
-                // If template is empty OR template file missing => use theme home.blade.php (NOT page.blade.php)
                 return view($this->resolveFrontendView($homePage, fallback: 'home'), [
                     'post' => $homePage,
                     'seo' => $this->buildSeo($homePage, $request, $permalinks),
 
-                    // ✅ per-page assets
                     'pageAssetsCss' => $css,
                     'pageAssetsJs' => $js,
 
-                    // ✅ Admin bar edit url (PAGE resource)
                     'adminEditUrl' => class_exists(FilamentPageResource::class)
                         ? FilamentPageResource::getUrl('edit', ['record' => $homePage])
                         : url('/lara-admin'),
@@ -91,7 +86,6 @@ class ContentRouterController extends Controller
             }
         }
 
-        // Fallback homepage view (if no homepage page is selected)
         return view('home', [
             'privateNotice' => $request->query('private') === '1',
             'privateFrom' => (string) $request->query('from', ''),
@@ -101,12 +95,13 @@ class ContentRouterController extends Controller
 
     public function show(Request $request, string $slug, PermalinkManager $permalinks, SettingsRepository $settings)
     {
+        // Slug is route param; normalize for matching (no leading/trailing slash)
         $slug = trim($slug, '/');
-        $path = $slug === '' ? '/' : '/' . $slug;
+        $path = $request->getPathInfo(); // keeps "/slug/" when present
 
-        // Normalize trailing slash (site standard = no trailing slash)
-        if ($path !== '/' && str_ends_with($request->getPathInfo(), '/')) {
-            return redirect()->to(rtrim($request->getPathInfo(), '/'), 301);
+        // ✅ Normalize to "/" if double slash happens
+        if ($path === '//' || $path === '') {
+            $path = '/';
         }
 
         // ✅ Handle category/tag base dynamically (WP-like bases)
@@ -138,10 +133,9 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($page) {
-                // ✅ Homepage page canonical becomes "/" because PermalinkManager::pagePath() handles it
                 $canonicalPath = $permalinks->pagePath($page);
-                if ($path !== $canonicalPath) {
-                    return redirect()->to($canonicalPath, 301);
+                if ($this->pathsDiffer($path, $canonicalPath)) {
+                    return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                 }
 
                 [$css, $js] = $this->extractPostAssets($page);
@@ -172,11 +166,12 @@ class ContentRouterController extends Controller
         }
 
         if ($post) {
-            // Canonical redirect to chosen structure (SEO)
             $canonicalPath = $permalinks->postPath($post);
+
+            // If not plain permalink mode, enforce canonical
             if ($canonicalPath !== '/?p=' . $post->id) {
-                if ($path !== $canonicalPath) {
-                    return redirect()->to($canonicalPath, 301);
+                if ($this->pathsDiffer($path, $canonicalPath)) {
+                    return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                 }
             }
 
@@ -210,9 +205,10 @@ class ContentRouterController extends Controller
                         return redirect()->to('/lara-admin?private=1&from=' . urlencode($path));
                     }
 
+                    // ✅ Attachment canonical should also follow trailing-slash standard
                     $canonicalPath = '/' . $media->slug;
-                    if ($path !== $canonicalPath) {
-                        return redirect()->to($canonicalPath, 301);
+                    if ($this->pathsDiffer($path, $canonicalPath)) {
+                        return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                     }
 
                     $globalIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
@@ -231,11 +227,11 @@ class ContentRouterController extends Controller
                     [$css, $js] = $this->extractMediaAssets($media);
 
                     if (function_exists('do_action')) {
+                        // ✅ apply frontend-only defaults in memory
                         do_action('media.attachment.defaults.persist', $media);
 
-                        if ($request->query('md_preview') !== '1') {
-                            $media->refresh();
-                        }
+                        // ❌ DO NOT refresh here (refresh wipes in-memory defaults)
+                        // $media->refresh();
                     }
 
                     $publicMediaCategories = $this->publicMediaCategories();
@@ -292,12 +288,15 @@ class ContentRouterController extends Controller
                         ? $permalinks->pagePath($current)
                         : $permalinks->postPath($current);
 
+                    // Store with normalized (no trailing slash) for lookup safety
+                    $fromStore = $this->normalizeForLookup($path);
+
                     Redirect::query()->updateOrCreate(
-                        ['from_path' => $path],
+                        ['from_path' => $fromStore],
                         ['to_path' => $to, 'status_code' => 301]
                     );
 
-                    return redirect()->to($to, 301);
+                    return $this->redirectPreserveQuery($request, $to, 301);
                 }
             }
         }
@@ -306,30 +305,63 @@ class ContentRouterController extends Controller
     }
 
     /**
-     * Resolve which frontend view to render:
-     * - If meta_json.template is set AND the view exists => "templates.{key}"
-     * - Otherwise fallback to provided fallback view ("post", "page", "home")
-     *
-     * ✅ This prevents: View [templates.xyz] not found
+     * Compare paths safely (ignores only trailing slash differences).
+     */
+    private function pathsDiffer(string $a, string $b): bool
+    {
+        return $this->normalizeForLookup($a) !== $this->normalizeForLookup($b);
+    }
+
+    /**
+     * Normalize path for comparisons/DB lookup: "/" stays "/", others have no trailing slash.
+     */
+    private function normalizeForLookup(string $path): string
+    {
+        $path = '/' . ltrim($path, '/');
+        if ($path === '//') {
+            $path = '/';
+        }
+        if ($path !== '/') {
+            $path = rtrim($path, '/');
+        }
+        return $path;
+    }
+
+    /**
+     * Redirect while preserving query string.
+     */
+    private function redirectPreserveQuery(Request $request, string $to, int $status = 301)
+    {
+        // Ensure leading slash for internal paths
+        if ($to !== '' && $to[0] !== '/' && !str_starts_with($to, 'http')) {
+            $to = '/' . $to;
+        }
+
+        $qs = $request->getQueryString();
+        if ($qs) {
+            $to .= (str_contains($to, '?') ? '&' : '?') . $qs;
+        }
+
+        return redirect()->to($to, $status);
+    }
+
+    /**
+     * Resolve which frontend view to render.
      */
     private function resolveFrontendView(Post $post, string $fallback): string
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
         $template = trim((string) ($meta['template'] ?? ''));
 
-        // ✅ Not selected => theme fallback
         if ($template === '') {
             return $fallback;
         }
 
-        // Try template view
         $view = 'templates.' . $template;
-
-        // ✅ If the file doesn't exist, do NOT crash; fallback to theme default
         return view()->exists($view) ? $view : $fallback;
     }
 
-    // ------------------- Helpers below (unchanged) -------------------
+    // ------------------- Helpers below (unchanged + SEO shortcode helpers) -------------------
 
     private function hasPrivateMediaCategory(Media $media): bool
     {
@@ -350,27 +382,80 @@ class ContentRouterController extends Controller
             ->exists();
     }
 
+    // ✅ Apply shortcodes safely for SEO fields (plain text)
+    private function seoShortcodeText(string $value, array $ctx): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (function_exists('do_shortcode')) {
+            try {
+                $value = (string) do_shortcode($value, $ctx);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
+        return trim(strip_tags($value));
+    }
+
+    // ✅ Apply shortcodes for URL-like fields (canonical / og_image)
+    private function seoShortcodeUrl(string $value, array $ctx): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (function_exists('do_shortcode')) {
+            try {
+                $value = (string) do_shortcode($value, $ctx);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
+        return trim($value);
+    }
+
     private function buildSeo(Post $post, Request $request, PermalinkManager $permalinks): array
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
         $seo = isset($meta['seo']) && is_array($meta['seo']) ? $meta['seo'] : [];
 
-        $title = trim((string) ($seo['title'] ?? $post->title ?? config('app.name')));
-        $desc = trim((string) ($seo['description'] ?? $post->excerpt ?? ''));
+        $ctx = ['post' => $post];
 
-        $canonical = trim((string) ($seo['canonical'] ?? ''));
+        // ✅ allow shortcodes in SEO title/description
+        $rawTitle = (string) ($seo['title'] ?? $post->title ?? config('app.name'));
+        $rawDesc = (string) ($seo['description'] ?? $post->excerpt ?? '');
+
+        $title = $this->seoShortcodeText($rawTitle, $ctx);
+        $desc = $this->seoShortcodeText($rawDesc, $ctx);
+
+        // Canonical
+        $canonicalRaw = (string) ($seo['canonical'] ?? '');
+        $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
+
         if ($canonical === '') {
             $canonical = $post->type === 'page'
                 ? $permalinks->pageUrl($post)
                 : $permalinks->postUrl($post);
         }
 
-        $robots = trim((string) ($seo['robots'] ?? ''));
+        // Robots
+        $robotsRaw = (string) ($seo['robots'] ?? '');
+        $robots = $this->seoShortcodeText($robotsRaw, $ctx);
         if ($robots === '') {
             $robots = 'index, follow';
         }
 
-        $ogImage = trim((string) ($seo['og_image'] ?? ''));
+        // OG image
+        $ogImageRaw = (string) ($seo['og_image'] ?? '');
+        $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 
         return [
             'title' => $title,
@@ -392,6 +477,8 @@ class ContentRouterController extends Controller
         $meta = is_array($media->meta) ? $media->meta : [];
         $seo = data_get($meta, 'seo', []);
         $seo = is_array($seo) ? $seo : [];
+
+        $ctx = ['media' => $media];
 
         $frontendMetaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
         $frontendMetaDescRaw = data_get($meta, 'frontend.meta_description', '');
@@ -415,20 +502,31 @@ class ContentRouterController extends Controller
 
         $fallbackDesc = trim(strip_tags((string) $fallbackDescSource));
 
-        $title = trim((string) ($seo['title'] ?? $fallbackTitle));
-        $desc = trim((string) ($seo['description'] ?? $fallbackDesc));
+        // ✅ allow shortcodes in SEO title/description
+        $rawTitle = (string) ($seo['title'] ?? $fallbackTitle);
+        $rawDesc = (string) ($seo['description'] ?? $fallbackDesc);
 
-        $canonical = trim((string) ($seo['canonical'] ?? ''));
+        $title = $this->seoShortcodeText($rawTitle, $ctx);
+        $desc = $this->seoShortcodeText($rawDesc, $ctx);
+
+        // Canonical
+        $canonicalRaw = (string) ($seo['canonical'] ?? '');
+        $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
+
         if ($canonical === '') {
             $canonical = url('/' . $media->slug);
         }
 
-        $robots = trim((string) ($seo['robots'] ?? ''));
+        // Robots
+        $robotsRaw = (string) ($seo['robots'] ?? '');
+        $robots = $this->seoShortcodeText($robotsRaw, $ctx);
         if ($robots === '') {
             $robots = $indexable ? 'index, follow' : 'noindex, follow';
         }
 
-        $ogImage = trim((string) ($seo['og_image'] ?? ''));
+        // OG image
+        $ogImageRaw = (string) ($seo['og_image'] ?? '');
+        $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 
         if (
             $ogImage === '' &&

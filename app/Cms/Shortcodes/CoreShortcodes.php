@@ -17,29 +17,38 @@ class CoreShortcodes
         // ✅ Debug
         $shortcodes->register('hello_test', fn() => 'HELLO');
 
-        // ✅ [products]
-        $shortcodes->register('products', function (array $atts = [], ?string $content = null, array $context = []) {
-            $sep = is_string($atts['sep'] ?? null) ? (string) $atts['sep'] : ', ';
-
-            $terms = self::resolveCurrentTerms($context);
-
-            if ($terms->isEmpty()) {
-                return '';
-            }
-
-            $values = $terms
-                ->map(fn(Term $t) => trim((string) ($t->product ?? '')))
-                ->filter(fn(string $v) => $v !== '')
-                ->values();
-
-            if ($values->isEmpty()) {
-                return '';
-            }
-
-            return e($values->implode($sep));
+        /**
+         * ✅ [h1]
+         * Prints current Post/Page/Media title only (no <h1> tag)
+         */
+        $shortcodes->register('h1', function (array $atts = [], ?string $content = null, array $context = []) {
+            $title = self::resolveCurrentTitle($context);
+            return $title !== '' ? e($title) : '';
         });
 
-        // ✅ [posts] / [posts count=12]
+        /**
+         * ✅ [category]
+         * Priority:
+         * 1) Current category term "product" field (if exists & not empty)
+         * 2) Current category term "name"
+         */
+        $shortcodes->register('category', function (array $atts = [], ?string $content = null, array $context = []) {
+            $term = self::resolveCurrentPrimaryTerm($context);
+
+            if (!$term) {
+                return '';
+            }
+
+            $product = trim((string) ($term->product ?? ''));
+            if ($product !== '') {
+                return e($product);
+            }
+
+            $name = trim((string) ($term->name ?? ''));
+            return $name !== '' ? e($name) : '';
+        });
+
+        // ✅ keep your [posts] shortcode unchanged
         $shortcodes->register('posts', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
                 $count = (int) ($atts['count'] ?? 12);
@@ -56,12 +65,10 @@ class CoreShortcodes
                     ->inRandomOrder()
                     ->limit($count);
 
-                // eager load only if relation exists
                 if (method_exists(Post::class, 'featuredMedia')) {
                     $query->with(['featuredMedia']);
                 }
 
-                // show only public (if scope exists)
                 if (method_exists(Post::class, 'scopeFrontendVisible')) {
                     $query->frontendVisible();
                 }
@@ -76,7 +83,6 @@ class CoreShortcodes
                     return view('shortcodes.posts-grid', ['posts' => $posts])->render();
                 }
 
-                // fallback if view missing
                 return self::fallbackPostsHtml($posts);
             } catch (\Throwable $e) {
                 return '<!-- [posts] shortcode error: ' . e($e->getMessage()) . ' -->';
@@ -106,11 +112,46 @@ class CoreShortcodes
         return $html;
     }
 
-    /** @return Collection<int, Term> */
-    private static function resolveCurrentTerms(array $ctx): Collection
+    /**
+     * Resolve current title from context or CurrentContentContext.
+     */
+    private static function resolveCurrentTitle(array $ctx): string
+    {
+        if (($ctx['post'] ?? null) instanceof Post) {
+            return trim((string) ($ctx['post']->title ?? ''));
+        }
+
+        if (($ctx['media'] ?? null) instanceof Media) {
+            return trim((string) ($ctx['media']->title ?? ''));
+        }
+
+        try {
+            /** @var CurrentContentContext $current */
+            $current = app(CurrentContentContext::class);
+
+            if (($current->post ?? null) instanceof Post) {
+                return trim((string) ($current->post->title ?? ''));
+            }
+
+            if (($current->media ?? null) instanceof Media) {
+                return trim((string) ($current->media->title ?? ''));
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        return '';
+    }
+
+    /**
+     * ✅ Get ONE primary term (category) for current post/media.
+     * - Post: first category ordered by name
+     * - Media: first media_category term ordered by name
+     */
+    private static function resolveCurrentPrimaryTerm(array $ctx): ?Term
     {
         if (($ctx['term'] ?? null) instanceof Term) {
-            return collect([$ctx['term']]);
+            return $ctx['term'];
         }
 
         if (($ctx['post'] ?? null) instanceof Post) {
@@ -118,14 +159,14 @@ class CoreShortcodes
             $post = $ctx['post'];
 
             try {
-                return $post->categories()->orderBy('terms.name')->get();
+                return $post->categories()->orderBy('terms.name')->first();
             } catch (\Throwable $e) {
-                return collect();
+                return null;
             }
         }
 
         if (($ctx['media'] ?? null) instanceof Media) {
-            return self::mediaCategoryTerms($ctx['media']);
+            return self::mediaPrimaryCategory($ctx['media']);
         }
 
         try {
@@ -133,35 +174,33 @@ class CoreShortcodes
             $current = app(CurrentContentContext::class);
 
             if (($current->media ?? null) instanceof Media) {
-                return self::mediaCategoryTerms($current->media);
+                return self::mediaPrimaryCategory($current->media);
             }
 
             if (($current->post ?? null) instanceof Post) {
-                return $current->post->categories()->orderBy('terms.name')->get();
+                return $current->post->categories()->orderBy('terms.name')->first();
             }
         } catch (\Throwable $e) {
             // ignore
         }
 
-        return collect();
+        return null;
     }
 
-    /** @return Collection<int, Term> */
-    private static function mediaCategoryTerms(Media $media): Collection
+    private static function mediaPrimaryCategory(Media $media): ?Term
     {
         $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
-
         if (!$taxonomyId) {
-            return collect();
+            return null;
         }
 
         try {
             return $media->terms()
                 ->where('terms.taxonomy_id', $taxonomyId)
                 ->orderBy('terms.name')
-                ->get();
+                ->first();
         } catch (\Throwable $e) {
-            return collect();
+            return null;
         }
     }
 }

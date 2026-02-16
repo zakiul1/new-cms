@@ -146,12 +146,19 @@ if (!function_exists('media_defaults_resolve_for_media')) {
         $globalSubTitle = trim((string) $settings->get('default_sub_title', '', $group));
         $globalSubDescRaw = (string) $settings->get('default_sub_description', '', $group);
 
-        // Optional plugin-level assets (if you saved them)
+        // Optional plugin-level assets
         $globalCss = (string) $settings->get('default_assets_css', '', $group);
         $globalJs = (string) $settings->get('default_assets_js', '', $group);
 
-        // ✅ NEW: Default JSON (array|null), global fallback
+        // ✅ Default JSON (array|null), global fallback
         $globalCustomJson = $settings->get('default_custom_json', null, $group);
+
+        // ✅ Global SEO defaults
+        $globalSeoTitle = trim((string) $settings->get('default_seo_title', '', $group));
+        $globalSeoDesc = trim((string) $settings->get('default_seo_description', '', $group));
+        $globalSeoCanonical = trim((string) $settings->get('default_seo_canonical', '', $group));
+        $globalSeoRobots = trim((string) $settings->get('default_seo_robots', '', $group));
+        $globalSeoOgImage = trim((string) $settings->get('default_seo_og_image', '', $group));
 
         $titleRaw = trim((string) ($cat['default_title'] ?? $globalTitle));
         $descRaw = (string) ($cat['default_description'] ?? $globalDescRaw);
@@ -161,8 +168,17 @@ if (!function_exists('media_defaults_resolve_for_media')) {
         $desc = media_defaults_sanitize_html(media_defaults_normalize_to_html($descRaw));
         $subDesc = media_defaults_sanitize_html(media_defaults_normalize_to_html($subDescRaw));
 
-        // ✅ NEW: category-wise json, fallback to global
+        // ✅ category-wise json, fallback to global
         $defaultCustomJson = $cat['default_custom_json'] ?? $globalCustomJson;
+
+        // ✅ category-wise SEO, fallback to global SEO
+        $defaultSeo = [
+            'title' => trim((string) ($cat['default_seo_title'] ?? $globalSeoTitle)),
+            'description' => trim((string) ($cat['default_seo_description'] ?? $globalSeoDesc)),
+            'canonical' => trim((string) ($cat['default_seo_canonical'] ?? $globalSeoCanonical)),
+            'robots' => trim((string) ($cat['default_seo_robots'] ?? $globalSeoRobots)),
+            'og_image' => trim((string) ($cat['default_seo_og_image'] ?? $globalSeoOgImage)),
+        ];
 
         return [
             'category_id' => $categoryId,
@@ -171,35 +187,68 @@ if (!function_exists('media_defaults_resolve_for_media')) {
             'default_sub_title' => $subTitleRaw,
             'default_sub_description' => $subDesc,
 
-            // optional
             'default_assets_css' => (string) $globalCss,
             'default_assets_js' => (string) $globalJs,
 
-            // ✅ NEW
             'default_custom_json' => $defaultCustomJson, // array|null
+
+            // ✅ NEW
+            'default_seo' => $defaultSeo,
         ];
     }
 }
 
 /**
+ * ✅ Helper: apply SEO defaults into $meta['seo'] only when empty
+ */
+if (!function_exists('media_defaults_apply_seo_defaults')) {
+    function media_defaults_apply_seo_defaults(array &$meta, array $seoDefaults): void
+    {
+        $seoDefaults = is_array($seoDefaults) ? $seoDefaults : [];
+
+        $seo = data_get($meta, 'seo', []);
+        $seo = is_array($seo) ? $seo : [];
+
+        $seoTitle = trim((string) data_get($seo, 'title', ''));
+        if ($seoTitle === '' && filled($seoDefaults['title'] ?? null)) {
+            data_set($seo, 'title', (string) $seoDefaults['title']);
+        }
+
+        $seoDesc = trim((string) data_get($seo, 'description', ''));
+        if ($seoDesc === '' && filled($seoDefaults['description'] ?? null)) {
+            data_set($seo, 'description', (string) $seoDefaults['description']);
+        }
+
+        $seoCanonical = trim((string) data_get($seo, 'canonical', ''));
+        if ($seoCanonical === '' && filled($seoDefaults['canonical'] ?? null)) {
+            data_set($seo, 'canonical', (string) $seoDefaults['canonical']);
+        }
+
+        $seoRobots = trim((string) data_get($seo, 'robots', ''));
+        if ($seoRobots === '' && filled($seoDefaults['robots'] ?? null)) {
+            data_set($seo, 'robots', (string) $seoDefaults['robots']);
+        }
+
+        $seoOg = trim((string) data_get($seo, 'og_image', ''));
+        if ($seoOg === '' && filled($seoDefaults['og_image'] ?? null)) {
+            data_set($seo, 'og_image', (string) $seoDefaults['og_image']);
+        }
+
+        data_set($meta, 'seo', $seo);
+    }
+}
+
+/**
  * ✅ Frontend-only defaults application (NO DB SAVE)
- *
- * Theme calls:
- *   do_action('media.attachment.defaults.persist', $media);
- *
- * This fills ONLY missing values in-memory.
  */
 add_action('media.attachment.defaults.persist', function ($media): void {
     if (!$media) {
         return;
     }
 
-    /**
-     * ✅ If preview mode, prefer session-driven state (realtime Filament preview)
-     * Your Filament page stores it in session('media_defaults_preview_state')
-     */
     $isPreview = request()->query('md_preview') === '1';
 
+    // ✅ PREVIEW MODE (session-driven)
     if ($isPreview) {
         $state = session()->get('media_defaults_preview_state');
 
@@ -238,9 +287,7 @@ add_action('media.attachment.defaults.persist', function ($media): void {
                 data_set($meta, 'frontend.meta_description', $sub);
             }
 
-            /**
-             * ✅ Optional: inject CSS/JS into media meta assets in preview only
-             */
+            // Optional preview CSS/JS
             $css = (string) ($data['default_assets_css'] ?? '');
             $js = (string) ($data['default_assets_js'] ?? '');
 
@@ -251,30 +298,32 @@ add_action('media.attachment.defaults.persist', function ($media): void {
                 data_set($meta, 'assets.js', $js);
             }
 
-            /**
-             * ✅ NEW: Custom JSON (WP-like) fallback
-             * If Edit Media already has custom_json, keep it.
-             * If empty, use default_custom_json from plugin preview state.
-             *
-             * Note: you have both keys used in project:
-             * - meta.custom_json (preferred)
-             * - meta.frontend.custom_json (legacy)
-             */
+            // Custom JSON fallback
             $existingJson = data_get($meta, 'custom_json', null);
             $legacyJson = data_get($meta, 'frontend.custom_json', null);
 
             if (blank($existingJson) && blank($legacyJson) && !blank($data['default_custom_json'] ?? null)) {
-                data_set($meta, 'custom_json', $data['default_custom_json']); // store array|null
+                data_set($meta, 'custom_json', $data['default_custom_json']);
             }
+
+            // ✅ SEO defaults in preview mode
+            $seoDefaultsPreview = [
+                'title' => trim((string) ($data['default_seo_title'] ?? '')),
+                'description' => trim((string) ($data['default_seo_description'] ?? '')),
+                'canonical' => trim((string) ($data['default_seo_canonical'] ?? '')),
+                'robots' => trim((string) ($data['default_seo_robots'] ?? '')),
+                'og_image' => trim((string) ($data['default_seo_og_image'] ?? '')),
+            ];
+            media_defaults_apply_seo_defaults($meta, $seoDefaultsPreview);
 
             $media->meta = $meta;
 
-            return; // ✅ stop here (preview overrides DB settings)
+            return; // ✅ stop here in preview mode
         }
-        // if session missing, fall through to normal resolve
+        // if session missing, fall through
     }
 
-    // ✅ Normal mode: resolve from settings (category+global)
+    // ✅ NORMAL MODE (resolve from settings)
     $defaults = media_defaults_resolve_for_media($media);
 
     if (!filled($media->title ?? null) && filled($defaults['default_title'] ?? null)) {
@@ -300,15 +349,17 @@ add_action('media.attachment.defaults.persist', function ($media): void {
         data_set($meta, 'frontend.meta_description', (string) $defaults['default_sub_description']);
     }
 
-    /**
-     * ✅ NEW: Custom JSON (WP-like) fallback (Normal mode)
-     */
+    // Custom JSON fallback
     $existingJson = data_get($meta, 'custom_json', null);
     $legacyJson = data_get($meta, 'frontend.custom_json', null);
 
     if (blank($existingJson) && blank($legacyJson) && !blank($defaults['default_custom_json'] ?? null)) {
-        data_set($meta, 'custom_json', $defaults['default_custom_json']); // array|null
+        data_set($meta, 'custom_json', $defaults['default_custom_json']);
     }
+
+    // ✅ SEO defaults in normal mode
+    $seoDefaults = $defaults['default_seo'] ?? [];
+    media_defaults_apply_seo_defaults($meta, is_array($seoDefaults) ? $seoDefaults : []);
 
     $media->meta = $meta;
 

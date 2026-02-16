@@ -1,0 +1,44 @@
+{
+  "name": "Contact Form",
+  "slug": "contact-form",
+  "version": "1.0.0",
+  "description": "Contact form template + eDesk API sender + retry job.",
+  "bootstrap": "bootstrap.php",
+
+  "settings": {
+    "group": "plugin:contact-form",
+    "title": "Contact Form Settings",
+    "description": "Configure eDesk API and retry behavior.",
+    "fields": [
+      {
+        "key": "edesk_enabled",
+        "label": "Enable eDesk API",
+        "type": "toggle",
+        "default": true
+      },
+      {
+        "key": "edesk_api_url",
+        "label": "API URL",
+        "type": "text",
+        "default": "",
+        "required": false,
+        "helper": "Example: https://api.example.com/tickets"
+      },
+      {
+        "key": "edesk_api_key",
+        "label": "API Key",
+        "type": "text",
+        "default": "",
+        "required": false
+      },
+      {
+        "key": "retry_minutes",
+        "label": "Retry Delay (minutes)",
+        "type": "number",
+        "default": 30,
+        "required": true,
+        "helper": "If API send fails, retry after this many minutes (e.g., 30 or 60)."
+      }
+    ]
+  }
+}

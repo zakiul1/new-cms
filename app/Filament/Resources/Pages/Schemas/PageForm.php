@@ -279,10 +279,19 @@ class PageForm
                         Select::make('meta_json.template')
                             ->label('Template')
                             ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
-                            ->options([
-                                '' => 'Theme Default (page.blade.php)',
-                                'default' => 'Slider Template',
-                            ])
+                            ->options(function (): array {
+                                $base = [
+                                    '' => 'Theme Default (page.blade.php)',
+                                    'default' => 'Slider Template',
+                                ];
+
+                                // Allow plugins to add templates
+                                if (function_exists('apply_filters')) {
+                                    $base = (array) apply_filters('cms.page_template_options', $base);
+                                }
+
+                                return $base;
+                            })
                             ->default('')
                             ->native(false)
                             ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),

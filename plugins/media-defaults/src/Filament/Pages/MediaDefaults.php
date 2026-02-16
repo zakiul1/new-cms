@@ -58,6 +58,13 @@ class MediaDefaults extends Page implements HasForms
         'default_sub_title' => '',
         'default_sub_description' => '',
 
+        // SEO defaults (Premium)
+        'default_seo_title' => '',
+        'default_seo_description' => '',
+        'default_seo_canonical' => '',
+        'default_seo_robots' => '',
+        'default_seo_og_image' => '',
+
         'default_assets_css' => '',
         'default_assets_js' => '',
 
@@ -152,11 +159,19 @@ class MediaDefaults extends Page implements HasForms
         $settings = app(Settings::class);
         $group = 'plugins.media-defaults';
 
+        // ✅ Global defaults
         $global = [
             'default_title' => (string) $settings->get('default_title', '', $group),
             'default_description' => (string) $settings->get('default_description', '', $group),
             'default_sub_title' => (string) $settings->get('default_sub_title', '', $group),
             'default_sub_description' => (string) $settings->get('default_sub_description', '', $group),
+
+            // global SEO
+            'default_seo_title' => (string) $settings->get('default_seo_title', '', $group),
+            'default_seo_description' => (string) $settings->get('default_seo_description', '', $group),
+            'default_seo_canonical' => (string) $settings->get('default_seo_canonical', '', $group),
+            'default_seo_robots' => (string) $settings->get('default_seo_robots', '', $group),
+            'default_seo_og_image' => (string) $settings->get('default_seo_og_image', '', $group),
 
             'default_assets_css' => (string) $settings->get('default_assets_css', '', $group),
             'default_assets_js' => (string) $settings->get('default_assets_js', '', $group),
@@ -173,14 +188,22 @@ class MediaDefaults extends Page implements HasForms
             $cat = is_array($cat) ? $cat : [];
         }
 
+        // ✅ pick category json if exists, otherwise global json
         $catCustomJson = $cat['default_custom_json'] ?? null;
-        $jsonValue = $catCustomJson ?? $global['default_custom_json'];
+        $jsonValue = !blank($catCustomJson) ? $catCustomJson : $global['default_custom_json'];
 
         $this->data = [
             'default_title' => (string) ($cat['default_title'] ?? $global['default_title']),
             'default_description' => (string) ($cat['default_description'] ?? $global['default_description']),
             'default_sub_title' => (string) ($cat['default_sub_title'] ?? $global['default_sub_title']),
             'default_sub_description' => (string) ($cat['default_sub_description'] ?? $global['default_sub_description']),
+
+            // ✅ category SEO overrides global SEO
+            'default_seo_title' => (string) ($cat['default_seo_title'] ?? $global['default_seo_title']),
+            'default_seo_description' => (string) ($cat['default_seo_description'] ?? $global['default_seo_description']),
+            'default_seo_canonical' => (string) ($cat['default_seo_canonical'] ?? $global['default_seo_canonical']),
+            'default_seo_robots' => (string) ($cat['default_seo_robots'] ?? $global['default_seo_robots']),
+            'default_seo_og_image' => (string) ($cat['default_seo_og_image'] ?? $global['default_seo_og_image']),
 
             'default_assets_css' => (string) ($global['default_assets_css'] ?? ''),
             'default_assets_js' => (string) ($global['default_assets_js'] ?? ''),
@@ -240,6 +263,21 @@ class MediaDefaults extends Page implements HasForms
         $this->previewNonce = Str::random(10);
     }
 
+    protected function seoRobotsOptions(): array
+    {
+        // ✅ Match your controller style: "index, follow"
+        return [
+            '' => '— (no default)',
+            'index, follow' => 'index, follow',
+            'noindex, follow' => 'noindex, follow',
+            'index, nofollow' => 'index, nofollow',
+            'noindex, nofollow' => 'noindex, nofollow',
+            'noarchive' => 'noarchive',
+            'nosnippet' => 'nosnippet',
+            'noimageindex' => 'noimageindex',
+        ];
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -261,7 +299,7 @@ class MediaDefaults extends Page implements HasForms
                                     ->statePath('data')
                                     ->schema([
                                         TextInput::make('default_title')
-                                            ->label('Default Title')
+                                            ->label('Default Title ShortCode=[h1]')
                                             ->maxLength(255)
                                             ->helperText('Used only if Media title is empty.')
                                             ->live(onBlur: true)
@@ -288,6 +326,55 @@ class MediaDefaults extends Page implements HasForms
                                             ->label('Default Sub description')
                                             ->height(260)
                                             ->helperText('Used only if Media Sub description is empty.')
+                                            ->live(onBlur: true)
+                                            ->afterStateUpdated(fn() => $this->bustPreview())
+                                            ->columnSpanFull(),
+                                    ]),
+
+                                Section::make('SEO (Premium)')
+                                    ->description('Defaults for media SEO. Applied only when media meta.seo fields are empty.')
+                                    ->statePath('data')
+                                    ->collapsed()
+                                    ->schema([
+                                        TextInput::make('default_seo_title')
+                                            ->label('Default SEO Title')
+                                            ->maxLength(255)
+                                            ->helperText('Used only if meta.seo.title is empty.')
+                                            ->live(onBlur: true)
+                                            ->afterStateUpdated(fn() => $this->bustPreview())
+                                            ->columnSpanFull(),
+
+                                        Textarea::make('default_seo_description')
+                                            ->label('Default SEO Description')
+                                            ->rows(4)
+                                            ->helperText('Used only if meta.seo.description is empty.')
+                                            ->live(onBlur: true)
+                                            ->afterStateUpdated(fn() => $this->bustPreview())
+                                            ->columnSpanFull(),
+
+                                        TextInput::make('default_seo_canonical')
+                                            ->label('Default Canonical URL')
+                                            ->maxLength(500)
+                                            ->helperText('Optional. Used only if meta.seo.canonical is empty.')
+                                            ->placeholder('https://example.com/media/slug')
+                                            ->live(onBlur: true)
+                                            ->afterStateUpdated(fn() => $this->bustPreview())
+                                            ->columnSpanFull(),
+
+                                        Select::make('default_seo_robots')
+                                            ->label('Default Robots')
+                                            ->options(fn() => $this->seoRobotsOptions())
+                                            ->native(false)
+                                            ->helperText('Optional. Used only if meta.seo.robots is empty.')
+                                            ->live()
+                                            ->afterStateUpdated(fn() => $this->bustPreview())
+                                            ->columnSpanFull(),
+
+                                        TextInput::make('default_seo_og_image')
+                                            ->label('Default OG Image')
+                                            ->maxLength(500)
+                                            ->helperText('Optional. Used only if meta.seo.og_image is empty.')
+                                            ->placeholder('https://example.com/storage/og.jpg')
                                             ->live(onBlur: true)
                                             ->afterStateUpdated(fn() => $this->bustPreview())
                                             ->columnSpanFull(),
@@ -324,7 +411,6 @@ class MediaDefaults extends Page implements HasForms
                                             ->afterStateUpdated(fn() => $this->bustPreview())
                                             ->columnSpanFull(),
 
-                                        // ✅ ALWAYS STRING IN UI
                                         Textarea::make('default_custom_json')
                                             ->label('Default JSON (WP-like)')
                                             ->helperText('Valid JSON only. Used if Edit Media JSON is empty. (Do not include <script> tag)')
@@ -544,7 +630,7 @@ class MediaDefaults extends Page implements HasForms
             return;
         }
 
-        // ✅ validate JSON manually (because Filament rule fails if state becomes array)
+        // ✅ JSON validation (UI string -> array|null)
         $jsonString = trim((string) ($this->data['default_custom_json'] ?? ''));
 
         $jsonArray = null;
@@ -568,24 +654,45 @@ class MediaDefaults extends Page implements HasForms
             $categoryDefaults = [];
         }
 
+        // ✅ Save per-category
         $categoryDefaults[(string) $this->activeCategoryId] = [
             'default_title' => (string) ($this->data['default_title'] ?? ''),
             'default_description' => (string) ($this->data['default_description'] ?? ''),
             'default_sub_title' => (string) ($this->data['default_sub_title'] ?? ''),
             'default_sub_description' => (string) ($this->data['default_sub_description'] ?? ''),
 
-            // ✅ store as array|null
+            // SEO per-category
+            'default_seo_title' => (string) ($this->data['default_seo_title'] ?? ''),
+            'default_seo_description' => (string) ($this->data['default_seo_description'] ?? ''),
+            'default_seo_canonical' => (string) ($this->data['default_seo_canonical'] ?? ''),
+            'default_seo_robots' => (string) ($this->data['default_seo_robots'] ?? ''),
+            'default_seo_og_image' => (string) ($this->data['default_seo_og_image'] ?? ''),
+
+            // ✅ per-category json
             'default_custom_json' => $jsonArray,
         ];
 
         $settings->set('category_defaults', $categoryDefaults, $group);
 
-        // global css/js
+        // ✅ global CSS/JS
         $settings->set('default_assets_css', (string) ($this->data['default_assets_css'] ?? ''), $group);
         $settings->set('default_assets_js', (string) ($this->data['default_assets_js'] ?? ''), $group);
 
-        // ✅ global fallback json also stored as array|null
-        $settings->set('default_custom_json', $jsonArray, $group);
+        // ✅ GLOBAL SEO fallback (stored globally)
+        $settings->set('default_seo_title', (string) ($this->data['default_seo_title'] ?? ''), $group);
+        $settings->set('default_seo_description', (string) ($this->data['default_seo_description'] ?? ''), $group);
+        $settings->set('default_seo_canonical', (string) ($this->data['default_seo_canonical'] ?? ''), $group);
+        $settings->set('default_seo_robots', (string) ($this->data['default_seo_robots'] ?? ''), $group);
+        $settings->set('default_seo_og_image', (string) ($this->data['default_seo_og_image'] ?? ''), $group);
+
+        /**
+         * ✅ IMPORTANT FIX:
+         * Do NOT overwrite global JSON with category JSON.
+         *
+         * If you want a real separate "global JSON" field in UI, create another textarea.
+         * For now: keep existing behavior where JSON is per-category only.
+         */
+        // $settings->set('default_custom_json', $jsonArray, $group);  // ❌ removed
 
         $this->syncPreviewSession();
         $this->bustPreview();

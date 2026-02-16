@@ -1,10 +1,7 @@
 @php
-    /**
-     * Supports:
-     * 1) Posts/Pages: uses $post->meta_json['seo'] (current behavior)
-     * 2) Attachment/Custom pages: controller passes $seo array
-     * 3) JSON-LD: per-record custom JSON (post/page/media) printed in <head>
-     */
+    // ✅ Safe vars (prevents "Undefined variable $media/$post")
+    $postObj = isset($post) && $post ? $post : null;
+    $mediaObj = isset($media) && $media ? $media : null;
 
     // ------------------------------------
     // SEO input (controller $seo wins)
@@ -14,8 +11,8 @@
     if (!is_array($seoInput)) {
         $postMeta = [];
 
-        if (isset($post) && $post && is_array($post->meta_json ?? null)) {
-            $postMeta = $post->meta_json;
+        if ($postObj && is_array($postObj->meta_json ?? null)) {
+            $postMeta = $postObj->meta_json;
         }
 
         $postSeo = is_array($postMeta['seo'] ?? null) ? $postMeta['seo'] ?? [] : [];
@@ -27,10 +24,10 @@
     // ------------------------------------
     $baseTitle = config('app.name');
 
-    if (isset($post) && $post && !empty($post->title)) {
-        $baseTitle = (string) $post->title;
-    } elseif (isset($media) && $media && !empty($media->title)) {
-        $baseTitle = (string) $media->title;
+    if ($postObj && !empty($postObj->title)) {
+        $baseTitle = (string) $postObj->title;
+    } elseif ($mediaObj && !empty($mediaObj->title)) {
+        $baseTitle = (string) $mediaObj->title;
     }
 
     $title = trim((string) ($seoInput['title'] ?? $baseTitle));
@@ -49,42 +46,16 @@
     }
 
     // ------------------------------------
-    // ✅ URL trailing slash helper (Canonical + OG URL)
-    // ------------------------------------
-    $ensureTrailingSlash = function (string $u): string {
-        $u = trim($u);
-
-        if ($u === '') {
-            return $u;
-        }
-
-        // Keep query/hash
-        $hash = '';
-        $query = '';
-
-        if (str_contains($u, '#')) {
-            [$u, $hash] = explode('#', $u, 2);
-            $hash = '#' . $hash;
-        }
-
-        if (str_contains($u, '?')) {
-            [$u, $query] = explode('?', $u, 2);
-            $query = '?' . $query;
-        }
-
-        $u = rtrim($u, '/') . '/';
-
-        return $u . $query . $hash;
-    };
-
-    // ------------------------------------
     // Canonical
     // ------------------------------------
     $canonical = trim((string) ($seoInput['canonical'] ?? ''));
     if ($canonical === '') {
         $canonical = url()->current();
     }
-    $canonical = $ensureTrailingSlash($canonical);
+    $canonical = rtrim($canonical, '/');
+    if ($canonical === '') {
+        $canonical = url('/');
+    }
 
     // ------------------------------------
     // Open Graph
@@ -94,7 +65,10 @@
     $ogTitle = trim((string) ($og['title'] ?? $title));
     $ogDesc = trim((string) ($og['description'] ?? $desc));
     $ogType = trim((string) ($og['type'] ?? 'article'));
-    $ogUrl = $ensureTrailingSlash(trim((string) ($og['url'] ?? $canonical)));
+    $ogUrl = rtrim(trim((string) ($og['url'] ?? $canonical)), '/');
+    if ($ogUrl === '') {
+        $ogUrl = url('/');
+    }
 
     $ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
 
@@ -112,69 +86,81 @@
     }
 
     // ------------------------------------
-    // Extra meta tags
+    // ✅ Apply shortcodes to SEO fields
     // ------------------------------------
-    $extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
+    $applyShortcodes = function (?string $value) use ($postObj, $mediaObj): string {
+        $value = (string) $value;
 
-    // ------------------------------------
-    // ✅ JSON-LD (per record)
-    //
-    // Priority:
-    // - Post/Page: meta_json.custom_json
-    // - Post/Page legacy: meta_json.seo.custom_json
-    // - Media: meta.custom_json
-    // - Media legacy: meta.frontend.custom_json
-    // ------------------------------------
-    $rawJsonLd = '';
+        if (!function_exists('do_shortcode')) {
+            return $value;
+        }
 
-    if (isset($post) && $post) {
-        $m = is_array($post->meta_json ?? null) ? $post->meta_json : [];
-        $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
-    }
+        // pass context so [h1] knows if it's post/media
+    return (string) do_shortcode($value, [
+        'post' => $postObj,
+        'media' => $mediaObj,
+    ]);
+};
 
-    if (($rawJsonLd === '' || $rawJsonLd === null) && isset($media) && $media) {
-        $m2 = is_array($media->meta ?? null) ? $media->meta : [];
-        $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
-    }
+$title = trim($applyShortcodes($title));
+$desc = trim($applyShortcodes($desc));
+$ogTitle = trim($applyShortcodes($ogTitle));
+$ogDesc = trim($applyShortcodes($ogDesc));
+$twTitle = trim($applyShortcodes($twTitle));
+$twDesc = trim($applyShortcodes($twDesc));
 
-    // Normalize into a pure JSON string (avoid literal "<script" and "</script" in source)
-    $jsonLd = '';
+// Extra meta tags
+$extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
 
-    if (is_array($rawJsonLd)) {
-        $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
-    } else {
-        $jsonLd = trim((string) $rawJsonLd);
+// ------------------------------------
+// JSON-LD (unchanged logic)
+// ------------------------------------
+$rawJsonLd = '';
 
-        if ($jsonLd !== '') {
-            $openTag = '<' . 'script';
-            $closeTag = '</' . 'script' . '>';
+if ($postObj) {
+    $m = is_array($postObj->meta_json ?? null) ? $postObj->meta_json : [];
+    $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
+}
 
-            $openPos = stripos($jsonLd, $openTag);
-            if ($openPos !== false) {
-                $gtPos = strpos($jsonLd, '>', $openPos);
-                if ($gtPos !== false) {
-                    $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
-                    if ($endPos !== false) {
-                        $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
-                        $jsonLd = trim((string) $jsonLd);
-                    }
+if (($rawJsonLd === '' || $rawJsonLd === null) && $mediaObj) {
+    $m2 = is_array($mediaObj->meta ?? null) ? $mediaObj->meta : [];
+    $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+}
+
+$jsonLd = '';
+
+if (is_array($rawJsonLd)) {
+    $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
+} else {
+    $jsonLd = trim((string) $rawJsonLd);
+
+    if ($jsonLd !== '') {
+        $openTag = '<' . 'script';
+        $closeTag = '</' . 'script' . '>';
+
+        $openPos = stripos($jsonLd, $openTag);
+        if ($openPos !== false) {
+            $gtPos = strpos($jsonLd, '>', $openPos);
+            if ($gtPos !== false) {
+                $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
+                if ($endPos !== false) {
+                    $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
+                    $jsonLd = trim((string) $jsonLd);
                 }
             }
         }
     }
+}
 
-    // Validate JSON
-    $jsonLdIsValid = false;
+$jsonLdIsValid = false;
 
-    if ($jsonLd !== '') {
-        json_decode($jsonLd, true);
-        $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
+if ($jsonLd !== '') {
+    json_decode($jsonLd, true);
+    $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
 
-        // ✅ prevent breaking out of the <script> tag if JSON contains a closing tag
-        // (avoid literal "</script" in this file because Blade formatter can break)
-        if ($jsonLdIsValid) {
-            $closing = '</' . 'script' . '>';
-            $safeClosing = '<' . '\\/' . 'script' . '>';
+    if ($jsonLdIsValid) {
+        $closing = '</' . 'script' . '>';
+        $safeClosing = '<' . '\\/' . 'script' . '>';
             $jsonLd = str_replace($closing, $safeClosing, $jsonLd);
         }
     }
@@ -182,7 +168,6 @@
 
 <title>{{ $title }}</title>
 <link rel="canonical" href="{{ $canonical }}">
-
 <meta name="robots" content="{{ $robots }}">
 
 @if ($desc !== '')
@@ -212,18 +197,22 @@
     <meta name="twitter:image" content="{{ $ogImage }}">
 @endif
 
-{{-- Extra arbitrary meta tags --}}
 @foreach ($extraMeta as $name => $content)
     @php
         $name = trim((string) $name);
         $content = trim((string) $content);
+
+        // optional: allow shortcodes inside extra meta too
+        if ($content !== '' && function_exists('do_shortcode')) {
+            $content = (string) do_shortcode($content, ['post' => $postObj, 'media' => $mediaObj]);
+        }
     @endphp
+
     @if ($name !== '' && $content !== '')
         <meta name="{{ $name }}" content="{{ $content }}">
     @endif
 @endforeach
 
-{{-- ✅ JSON-LD output (only if valid JSON) --}}
 @if ($jsonLdIsValid)
     <script type="application/ld+json">{!! $jsonLd !!}</script>
 @endif

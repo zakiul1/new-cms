@@ -178,10 +178,17 @@
         // -----------------------------
         // ✅ Frontend meta (from meta.frontend.*)
         // -----------------------------
-        $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
+        $metaTitleRaw = (string) data_get($meta, 'frontend.meta_title', '');
+        $metaTitle = trim(
+            function_exists('do_shortcode')
+                ? strip_tags(do_shortcode($metaTitleRaw, ['media' => $media]))
+                : $metaTitleRaw,
+        );
 
-        $metaDescRaw = data_get($meta, 'frontend.meta_description', '');
-        $metaDescHtml = $sanitizeRichHtml($metaDescRaw);
+        $metaDescRaw = (string) data_get($meta, 'frontend.meta_description', '');
+        $metaDescHtml = $sanitizeRichHtml(
+            function_exists('do_shortcode') ? do_shortcode($metaDescRaw, ['media' => $media]) : $metaDescRaw,
+        );
 
         // -----------------------------
         // Base title + hero text (SEO-correct)

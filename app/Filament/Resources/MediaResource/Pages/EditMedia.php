@@ -156,7 +156,7 @@ class EditMedia extends EditRecord
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
-                                    ->label('H1')
+                                    ->label('H1  [h1] for shortcode')
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
@@ -176,7 +176,7 @@ class EditMedia extends EditRecord
 
                                 // ✅ Product (auto from selected category's product; user can override)
                                 TextInput::make('meta.frontend.product')
-                                    ->label('Product')
+                                    ->label('Product [category] for shortcode')
                                     ->maxLength(255)
                                     ->helperText('Defaults from selected category Product. You can override per media.')
                                     ->formatStateUsing(fn($state) => is_string($state) ? $state : '')

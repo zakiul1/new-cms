@@ -71,6 +71,15 @@
             }
         }
 
+        // ✅ IMPORTANT: run shortcodes for post content
+        if (function_exists('do_shortcode')) {
+            try {
+                $rawHtml = do_shortcode((string) $rawHtml, ['post' => $post]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
         $heroHtml = trim($rawHtml) !== '' ? strip_tags($rawHtml, $allowedHtml) : '';
     @endphp
 
@@ -211,6 +220,16 @@
             $subDescRaw = $subDescRaw['html'] ?? ($subDescRaw['value'] ?? '');
         }
         $subDescRaw = is_string($subDescRaw) ? $subDescRaw : '';
+
+        // ✅ IMPORTANT: run shortcodes for sub description
+        if (function_exists('do_shortcode')) {
+            try {
+                $subDescRaw = do_shortcode((string) $subDescRaw, ['post' => $post]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
         $subDescHtml = trim($subDescRaw) !== '' ? strip_tags($subDescRaw, $allowedHtml) : '';
 
         // -----------------------------

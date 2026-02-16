@@ -111,7 +111,8 @@ class MediaPicker extends Field
                 'original_filename',
                 'mime_type',
                 'size',
-                'path',
+                'directory',
+                'filename',
                 'disk',
             ])
             ->whereIn('id', $ids)

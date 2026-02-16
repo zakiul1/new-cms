@@ -1,6 +1,4 @@
 (() => {
-    console.log("✅ Siatex slider JS loaded");
-
     function clamp(min, val, max) {
         return Math.max(min, Math.min(val, max));
     }
@@ -309,6 +307,4 @@
     } else {
         boot();
     }
-
-    console.log("✅ Siatex Slider initialized");
 })();
