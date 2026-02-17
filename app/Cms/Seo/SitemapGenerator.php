@@ -18,6 +18,23 @@ class SitemapGenerator
     }
 
     /**
+     * Canonical base URL for sitemap output.
+     * Uses CMS setting (core.site_url) first, falls back to APP_URL.
+     */
+    private function baseUrl(): string
+    {
+        $base = (string) $this->settings->get('core', 'site_url', (string) config('app.url'));
+        $base = trim($base);
+
+        if ($base === '') {
+            $base = (string) config('app.url');
+        }
+
+        // Ensure no trailing slash
+        return rtrim($base, '/');
+    }
+
+    /**
      * Generate all enabled sitemaps and sitemap index.
      * Deletes old generated files first, then generates fresh.
      *
@@ -123,7 +140,7 @@ class SitemapGenerator
      */
     private function buildPagesUrls(string $priority, string $changefreq): array
     {
-        $base = rtrim((string) config('app.url'), '/');
+        $base = $this->baseUrl();
         $nowAtom = now()->toAtomString();
 
         // ✅ Homepage id (single system)
@@ -251,7 +268,7 @@ class SitemapGenerator
      */
     private function buildMediaUrls(string $priority, string $changefreq): array
     {
-        $base = rtrim((string) config('app.url'), '/');
+        $base = $this->baseUrl();
 
         $q = Media::query();
 
@@ -344,7 +361,7 @@ class SitemapGenerator
     private function buildSitemapIndexXml(array $paths): string
     {
         $disk = Storage::disk('public');
-        $base = rtrim((string) config('app.url'), '/');
+        $base = $this->baseUrl();
 
         $dir = trim((string) $this->storage->directory(), '/');
         $prefix = $dir === '' ? '' : ($dir . '/');

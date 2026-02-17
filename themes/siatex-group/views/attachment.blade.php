@@ -216,6 +216,18 @@
             $heroHtml = $metaDescHtml;
         }
 
+        // ✅ Cart/Add-to-cart payload (for ContactForm cart.js)
+        $productUrl = filled($media->slug) ? url('/' . ltrim((string) $media->slug, '/')) : url()->current();
+        $productImage = '';
+
+        try {
+            if (method_exists($media, 'url')) {
+                $productImage = (string) $media->url('medium');
+            }
+        } catch (\Throwable $e) {
+            $productImage = '';
+        }
+
         // -----------------------------
         // Breadcrumb taxonomy
         // -----------------------------
@@ -428,8 +440,11 @@
                         </div>
                     @endif
 
+                    {{-- ✅ UPDATED ONLY: Get Price -> Cart button (no other code changed) --}}
                     <a href="#"
-                        class="mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]">
+                        class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ e($title) }}"
+                        data-item-url="{{ e($productUrl) }}" data-item-image="{{ e($productImage) }}">
                         Get Price
                     </a>
                 </div>
@@ -475,29 +490,50 @@
                                 $rUrl = filled($r->slug) ? url('/' . ltrim((string) $r->slug, '/')) : $r->url();
                             @endphp
 
-                            <a href="{{ $rUrl }}" class="group block text-center">
-                                <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
-                                    {!! cms_picture(
-                                        $r,
-                                        [
-                                            'alt' => e($rTitle),
-                                            'class' => 'h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]',
-                                            'sizes' => '(max-width: 768px) 50vw, 220px',
-                                            'loading' => 'lazy',
-                                            'decoding' => 'async',
-                                            'fetchpriority' => 'high',
-                                        ],
-                                        'medium',
-                                        ['thumb', 'medium', 'medium_large'],
-                                    ) !!}
-                                </div>
+                            <div class="group text-center">
+                                <a href="{{ $rUrl }}" class="block">
+                                    <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
+                                        {!! cms_picture(
+                                            $r,
+                                            [
+                                                'alt' => e($rTitle),
+                                                'class' => 'h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]',
+                                                'sizes' => '(max-width: 768px) 50vw, 220px',
+                                                'loading' => 'lazy',
+                                                'decoding' => 'async',
+                                            ],
+                                            'medium',
+                                            ['thumb', 'medium', 'medium_large'],
+                                        ) !!}
+                                    </div>
 
-                                <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                    <h3 class="text-sm font-semibold leading-snug line-clamp-2">
-                                        {{ $rTitle }}
-                                    </h3>
-                                </div>
-                            </a>
+                                    <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
+                                        <h3 class="text-sm font-semibold leading-snug line-clamp-2">
+                                            {{ $rTitle }}
+                                        </h3>
+                                    </div>
+                                </a>
+
+                                {{-- ✅ ADD THIS BUTTON --}}
+                                @php
+                                    $rImage = '';
+                                    try {
+                                        if (method_exists($r, 'url')) {
+                                            $rImage = (string) $r->url('medium');
+                                        }
+                                    } catch (\Throwable $e) {
+                                        $rImage = '';
+                                    }
+                                @endphp
+
+                                <button type="button"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                                    data-item-id="{{ (int) $r->id }}" data-item-type="media"
+                                    data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
+                                    data-item-image="{{ e($rImage) }}">
+                                    Get Price
+                                </button>
+                            </div>
                         @endforeach
                     </div>
                 @endif

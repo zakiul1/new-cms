@@ -206,7 +206,7 @@ class ContentRouterController extends Controller
                     }
 
                     // ✅ Attachment canonical should also follow trailing-slash standard
-                    $canonicalPath = '/' . $media->slug;
+                    $canonicalPath = '/' . trim((string) $media->slug, '/');
                     if ($this->pathsDiffer($path, $canonicalPath)) {
                         return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                     }
@@ -249,7 +249,7 @@ class ContentRouterController extends Controller
                     return view('attachment', [
                         'media' => $media,
                         'usedIn' => $usedIn,
-                        'seo' => $this->buildAttachmentSeo($media, $indexable),
+                        'seo' => $this->buildAttachmentSeo($media, $indexable), // ✅ now uses core.site_url internally
 
                         'mediaCategories' => $publicMediaCategories,
                         'activeMediaCategory' => $activeMediaCategory,
@@ -513,8 +513,15 @@ class ContentRouterController extends Controller
         $canonicalRaw = (string) ($seo['canonical'] ?? '');
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
+        // ✅ IMPORTANT CHANGE: default canonical uses core.site_url (not APP_URL/url())
         if ($canonical === '') {
-            $canonical = url('/' . $media->slug);
+            /** @var SettingsRepository $settings */
+            $settings = app(SettingsRepository::class);
+
+            $base = (string) $settings->get('core', 'site_url', (string) config('app.url'));
+            $base = rtrim(trim($base), '/');
+
+            $canonical = $base . '/' . trim((string) $media->slug, '/');
         }
 
         // Robots

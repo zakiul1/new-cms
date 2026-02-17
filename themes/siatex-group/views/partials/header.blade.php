@@ -32,7 +32,7 @@
                 @endif
             </a>
 
-            <div class="flex items-center gap-6 text-sm text-slate-700">
+            <div class="flex items-center gap-6 text-sm text-slate-700 data-cms-header-actions">
                 @if ($phone !== '')
                     <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}"
                         class="flex items-center gap-2 hover:text-slate-900">

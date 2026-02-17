@@ -26,6 +26,7 @@ class ContactConfig extends Page implements HasForms
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-envelope';
     protected static ?int $navigationSort = 60;
 
+    /** @var array<string, mixed> */
     public array $data = [];
 
     protected function getForms(): array
@@ -50,6 +51,17 @@ class ContactConfig extends Page implements HasForms
             'edesk_api_url' => (string) $settings->get('edesk_api_url', '', 'plugin:contact-form'),
             'edesk_api_key' => (string) $settings->get('edesk_api_key', '', 'plugin:contact-form'),
             'retry_minutes' => (int) $settings->get('retry_minutes', 30, 'plugin:contact-form'),
+
+            // ✅ Add to Cart / Get Price system
+            'cart_enabled' => (bool) $settings->get('cart_enabled', true, 'plugin:contact-form'),
+            'cart_floating_enabled' => (bool) $settings->get('cart_floating_enabled', true, 'plugin:contact-form'),
+
+            // ✅ UX: redirect after save
+            'redirect_to_submissions_after_save' => (bool) $settings->get(
+                'redirect_to_submissions_after_save',
+                true,
+                'plugin:contact-form'
+            ),
 
             // Cron + Retry control
             'cron_token' => $cronToken,
@@ -90,13 +102,36 @@ class ContactConfig extends Page implements HasForms
                             ->helperText('If API send fails, it will retry after this many minutes (ex: 30 or 60).'),
                     ]),
 
+                Section::make('Get Price / Add to Cart')
+                    ->description('Controls the "Get Price" add-to-cart popup and cart UI on frontend.')
+                    ->schema([
+                        Toggle::make('cart_enabled')
+                            ->label('Enable Add to Cart system')
+                            ->default(true)
+                            ->helperText('If OFF, Get Price button will not open cart UI.'),
+
+                        Toggle::make('cart_floating_enabled')
+                            ->label('Enable floating cart button')
+                            ->default(true)
+                            ->helperText('If ON, a floating cart button appears when user has 1+ item in cart.'),
+                    ]),
+
+                Section::make('Admin UX')
+                    ->description('Optional admin convenience behavior.')
+                    ->schema([
+                        Toggle::make('redirect_to_submissions_after_save')
+                            ->label('After saving settings, open Contact Submissions page')
+                            ->default(true)
+                            ->helperText('If ON, clicking Save will redirect to Contact Submissions list.'),
+                    ]),
+
                 Section::make('Cron & Retry (Shared Hosting)')
                     ->schema([
                         TextInput::make('cron_token')
                             ->label('Cron Token')
                             ->helperText('Cron URL will require it: /_contact/cron?token=YOUR_TOKEN')
                             ->minLength(12)
-                            ->disabled() // prevent accidental changes; use Regenerate button
+                            ->disabled()
                             ->dehydrated(true),
 
                         TextInput::make('cron_batch')
@@ -138,7 +173,6 @@ class ContactConfig extends Page implements HasForms
         $newToken = Str::random(40);
         $settings->set('cron_token', $newToken, 'plugin:contact-form');
 
-        // Update local state + refill form
         $this->data['cron_token'] = $newToken;
         $this->form->fill($this->data);
 
@@ -173,17 +207,53 @@ class ContactConfig extends Page implements HasForms
             $cronToken = Str::random(40);
         }
 
+        // ✅ Cart settings
+        $cartEnabled = (bool) ($this->data['cart_enabled'] ?? true);
+        $cartFloatingEnabled = (bool) ($this->data['cart_floating_enabled'] ?? true);
+
+        // ✅ redirect after save
+        $redirectAfterSave = (bool) ($this->data['redirect_to_submissions_after_save'] ?? true);
+
         // Save eDesk settings
         $settings->set('edesk_enabled', (bool) ($this->data['edesk_enabled'] ?? true), 'plugin:contact-form');
         $settings->set('edesk_api_url', trim((string) ($this->data['edesk_api_url'] ?? '')), 'plugin:contact-form');
         $settings->set('edesk_api_key', trim((string) ($this->data['edesk_api_key'] ?? '')), 'plugin:contact-form');
         $settings->set('retry_minutes', $retry, 'plugin:contact-form');
 
+        // ✅ Save cart settings
+        $settings->set('cart_enabled', $cartEnabled, 'plugin:contact-form');
+        $settings->set('cart_floating_enabled', $cartFloatingEnabled, 'plugin:contact-form');
+
+        // ✅ Save UX setting
+        $settings->set('redirect_to_submissions_after_save', $redirectAfterSave, 'plugin:contact-form');
+
         // Save cron settings
         $settings->set('cron_token', $cronToken, 'plugin:contact-form');
         $settings->set('cron_batch', $cronBatch, 'plugin:contact-form');
         $settings->set('max_attempts', $maxAttempts, 'plugin:contact-form');
 
-        Notification::make()->title('Saved')->success()->send();
+        Notification::make()
+            ->title('Saved')
+            ->success()
+            ->send();
+
+        // ✅ Redirect to Contact Submissions page (if enabled)
+        if ($redirectAfterSave) {
+            $url = null;
+
+            // Preferred: if Filament page route exists
+            try {
+                if (class_exists(\Plugins\ContactForm\Filament\Pages\ContactSubmissions::class)) {
+                    $url = \Plugins\ContactForm\Filament\Pages\ContactSubmissions::getUrl();
+                }
+            } catch (\Throwable $e) {
+                $url = null;
+            }
+
+            // Fallback: go to admin home or keep on same page
+            if (is_string($url) && trim($url) !== '') {
+                $this->redirect($url);
+            }
+        }
     }
 }

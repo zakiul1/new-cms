@@ -6,6 +6,11 @@
 
     <div><strong>Name:</strong> {{ $s->name }}</div>
     <div><strong>Email:</strong> {{ $s->email }}</div>
+
+    {{-- ✅ new --}}
+    <div><strong>Country:</strong> {{ $s->country_name ?? 'Unknown' }}</div>
+    <div><strong>WhatsApp:</strong> {{ $s->whatsapp ?? 'Not given' }}</div>
+
     <div><strong>Subject:</strong> {{ $s->subject }}</div>
 
     <div><strong>IP:</strong> {{ $s->ip }}</div>

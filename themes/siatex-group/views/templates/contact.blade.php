@@ -59,6 +59,18 @@
                         @endif
                     </div>
 
+                    {{-- ✅ WhatsApp (optional) --}}
+                    <div class="mb-3">
+                        <label class="block mb-1">WhatsApp Number</label>
+                        <input name="whatsapp" value="{{ old('whatsapp') }}" class="w-full border rounded p-2"
+                            placeholder="+44 7301 532365">
+                        @if ($hasPlugin)
+                            @error('whatsapp')
+                                <div class="text-red-600 text-sm mt-1">{{ $message }}</div>
+                            @enderror
+                        @endif
+                    </div>
+
                     <div class="mb-3">
                         <label class="block mb-1">Subject (required)</label>
                         <input name="subject" value="{{ old('subject') }}" class="w-full border rounded p-2" required>
@@ -103,14 +115,8 @@
 
                             form.addEventListener('submit', function(e) {
                                 e.preventDefault();
-
-                                // show success message in-page
                                 successBox.classList.remove('hidden');
-
-                                // reset fields
                                 form.reset();
-
-                                // scroll to message (optional nice UX)
                                 successBox.scrollIntoView({
                                     behavior: 'smooth',
                                     block: 'start'

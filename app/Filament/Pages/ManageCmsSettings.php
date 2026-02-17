@@ -33,6 +33,62 @@ class ManageCmsSettings extends Page
     /** @var array<string, mixed> | null */
     public ?array $data = [];
 
+    /**
+     * WP-like normalization:
+     * - If scheme missing -> prepend https://
+     * - If www missing -> add www. (skips localhost + IP + dev TLDs)
+     * - Trim trailing slash
+     * - Keep port if given
+     */
+    private function normalizeSiteUrl(string $input): string
+    {
+        $input = trim($input);
+
+        if ($input === '') {
+            return rtrim((string) config('app.url'), '/');
+        }
+
+        // If user typed only domain, prepend https://
+        if (!preg_match('#^https?://#i', $input)) {
+            $input = 'https://' . $input;
+        }
+
+        $parts = parse_url($input);
+
+        $scheme = $parts['scheme'] ?? 'https';
+        $host = $parts['host'] ?? '';
+
+        if ($host === '') {
+            return rtrim((string) config('app.url'), '/');
+        }
+
+        $lowerHost = strtolower($host);
+
+        // Skip forcing www for IP/localhost/dev domains
+        $isIp = filter_var($host, FILTER_VALIDATE_IP) !== false;
+        $isLocalhost = in_array($lowerHost, ['localhost', '127.0.0.1'], true);
+
+        // Common dev TLDs / local domains
+        $isDevTld =
+            str_ends_with($lowerHost, '.test') ||
+            str_ends_with($lowerHost, '.local') ||
+            str_ends_with($lowerHost, '.localhost');
+
+        // Add www only for real public domains
+        if (
+            !$isIp &&
+            !$isLocalhost &&
+            !$isDevTld &&
+            !str_starts_with($lowerHost, 'www.')
+        ) {
+            $host = 'www.' . $host;
+        }
+
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim($scheme . '://' . $host . $port, '/');
+    }
+
     public function mount(SettingsRepository $settings, ThemeManager $themes): void
     {
         // ✅ Source of truth is ThemeManager (it reads from settings + ensures valid)
@@ -44,10 +100,13 @@ class ManageCmsSettings extends Page
             $homepageId = null;
         }
 
+        $savedSiteUrl = (string) $settings->get('core', 'site_url', rtrim((string) config('app.url'), '/'));
+        $siteUrl = $this->normalizeSiteUrl($savedSiteUrl);
+
         $this->form->fill([
             // Core
             'site_name' => $settings->get('core', 'site_name', 'My CMS'),
-            'site_url' => $settings->get('core', 'site_url', url('/')),
+            'site_url' => $siteUrl,
             'timezone' => $settings->get('core', 'timezone', config('app.timezone')),
             'active_theme' => $activeTheme,
 
@@ -126,7 +185,13 @@ class ManageCmsSettings extends Page
             ->components([
                 Form::make([
                     TextInput::make('site_name')->required()->maxLength(120),
-                    TextInput::make('site_url')->required()->url()->maxLength(255),
+
+                    // ✅ Allow domain-only input; normalize on save (WP-like)
+                    TextInput::make('site_url')
+                        ->required()
+                        ->maxLength(255)
+                        ->helperText('Example: cms.test OR siatexglobal.com OR https://www.siatexglobal.com'),
+
                     TextInput::make('timezone')->required()->maxLength(64),
 
                     TextInput::make('contact_phone')
@@ -249,9 +314,17 @@ class ManageCmsSettings extends Page
         $currentAttachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
         $currentAttachmentsIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
 
+        // ✅ Snapshot current site_url for cache bump decision
+        $currentSiteUrl = $this->normalizeSiteUrl(
+            (string) $settings->get('core', 'site_url', rtrim((string) config('app.url'), '/'))
+        );
+
+        // ✅ Normalize site url (WP-like, dev-safe)
+        $siteUrl = $this->normalizeSiteUrl((string) ($data['site_url'] ?? ''));
+
         // Core
         $settings->set('core', 'site_name', (string) ($data['site_name'] ?? ''));
-        $settings->set('core', 'site_url', (string) ($data['site_url'] ?? ''));
+        $settings->set('core', 'site_url', $siteUrl);
         $settings->set('core', 'timezone', (string) ($data['timezone'] ?? ''));
 
         // Contact
@@ -298,6 +371,11 @@ class ManageCmsSettings extends Page
 
         $renderChanged = false;
         $errors = [];
+
+        // ✅ If site_url changed, bump render cache (sitemap/canonicals/menus may include full URLs)
+        if (rtrim($siteUrl, '/') !== rtrim($currentSiteUrl, '/')) {
+            $renderChanged = true;
+        }
 
         // If permalink settings changed, bump render cache (menus/SEO/canonicals)
         if (
@@ -352,6 +430,7 @@ class ManageCmsSettings extends Page
         // Refresh form state (keep UI consistent)
         $this->form->fill([
             ...$data,
+            'site_url' => $siteUrl, // ✅ show normalized value back to admin
             'active_theme' => $themes->activeSlug(),
             'permalink_custom_structure' => $customStructure,
             'category_base' => $categoryBase,

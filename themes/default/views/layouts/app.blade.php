@@ -1,31 +1,33 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     @php
         // $seo is passed from ContentRouterController (post/page)
         // fallback values if $seo isn't present (home/other pages)
-        $seoTitle = $seo['title'] ?? trim((string) view()->yieldContent('title', 'CMS'));
-        $seoDesc = $seo['description'] ?? null;
-        $seoCanonical = $seo['canonical'] ?? null;
-        $seoRobots = $seo['robots'] ?? null;
+$seoTitle = $seo['title'] ?? trim((string) view()->yieldContent('title', 'CMS'));
+$seoDesc = $seo['description'] ?? null;
+$seoCanonical = $seo['canonical'] ?? null;
+$seoRobots = $seo['robots'] ?? null;
 
-        $og = $seo['og'] ?? [];
-        $ogTitle = $og['title'] ?? $seoTitle;
-        $ogDesc = $og['description'] ?? $seoDesc;
-        $ogType = $og['type'] ?? 'website';
-        $ogUrl = $og['url'] ?? $seoCanonical;
-        $ogImage = $og['image'] ?? null;
+$og = $seo['og'] ?? [];
+$ogTitle = $og['title'] ?? $seoTitle;
+$ogDesc = $og['description'] ?? $seoDesc;
+$ogType = $og['type'] ?? 'website';
+$ogUrl = $og['url'] ?? $seoCanonical;
+$ogImage = $og['image'] ?? null;
 
-        $tw = $seo['twitter'] ?? [];
-        $twCard = $tw['card'] ?? 'summary_large_image';
-        $twTitle = $tw['title'] ?? $ogTitle;
-        $twDesc = $tw['description'] ?? $ogDesc;
-        $twImage = $tw['image'] ?? $ogImage;
+$tw = $seo['twitter'] ?? [];
+$twCard = $tw['card'] ?? 'summary_large_image';
+$twTitle = $tw['title'] ?? $ogTitle;
+$twDesc = $tw['description'] ?? $ogDesc;
+$twImage = $tw['image'] ?? $ogImage;
 
-        $jsonld = $seo['jsonld'] ?? null;
+$jsonld = $seo['jsonld'] ?? null;
     @endphp
 
     <title>{{ $seoTitle }}</title>
@@ -77,34 +79,98 @@
 
     {{-- Header + menu CSS (theme-wide) --}}
     <style>
-        .cms-container{ max-width: var(--cms-container, 1100px); margin:0 auto; padding:0 16px; }
+        .cms-container {
+            max-width: var(--cms-container, 1100px);
+            margin: 0 auto;
+            padding: 0 16px;
+        }
 
-        .cms-header{
+        .cms-header {
             background: var(--cms-header-bg, #ffffff);
             color: var(--cms-header-text, #111827);
-            border-bottom: 1px solid rgba(0,0,0,.06);
+            border-bottom: 1px solid rgba(0, 0, 0, .06);
             z-index: 50;
         }
-        .cms-header a{ color: inherit; text-decoration:none; }
 
-        .cms-header-inner{ display:flex; align-items:center; gap:16px; padding:14px 0; }
-        .cms-header-left,.cms-header-center,.cms-header-right{ display:flex; align-items:center; gap:14px; }
+        .cms-header a {
+            color: inherit;
+            text-decoration: none;
+        }
 
-        .cms-header-nav{ display:flex; align-items:center; gap:14px; font-size:14px; opacity:.95; }
+        .cms-header-inner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 0;
+        }
+
+        .cms-header-left,
+        .cms-header-center,
+        .cms-header-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .cms-header-nav {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 14px;
+            opacity: .95;
+        }
 
         /* MenuRenderer outputs ul/li; keep it inline */
-        .cms-header-nav .cms-menu{ list-style:none; display:flex; gap:14px; margin:0; padding:0; }
-        .cms-header-nav .cms-menu__link{ font-size:14px; opacity:.95; }
+        .cms-header-nav .cms-menu {
+            list-style: none;
+            display: flex;
+            gap: 14px;
+            margin: 0;
+            padding: 0;
+        }
 
-        .cms-logo img{ width: var(--cms-logo-width, 140px); height:auto; display:block; }
-        .cms-site-title{ font-weight:800; letter-spacing:-0.02em; font-size:18px; }
+        .cms-header-nav .cms-menu__link {
+            font-size: 14px;
+            opacity: .95;
+        }
+
+        .cms-logo img {
+            width: var(--cms-logo-width, 140px);
+            height: auto;
+            display: block;
+        }
+
+        .cms-site-title {
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            font-size: 18px;
+        }
 
         /* Layout modes */
-        .cms-layout-left .cms-header-inner{ justify-content:space-between; }
-        .cms-layout-center .cms-header-inner{ justify-content:center; flex-direction:column; gap:10px; padding:16px 0; }
-        .cms-layout-split .cms-header-inner{ justify-content:space-between; }
-        .cms-layout-split .cms-header-center{ justify-content:center; flex:1; }
-        .cms-layout-split .cms-header-left,.cms-layout-split .cms-header-right{ min-width:140px; }
+        .cms-layout-left .cms-header-inner {
+            justify-content: space-between;
+        }
+
+        .cms-layout-center .cms-header-inner {
+            justify-content: center;
+            flex-direction: column;
+            gap: 10px;
+            padding: 16px 0;
+        }
+
+        .cms-layout-split .cms-header-inner {
+            justify-content: space-between;
+        }
+
+        .cms-layout-split .cms-header-center {
+            justify-content: center;
+            flex: 1;
+        }
+
+        .cms-layout-split .cms-header-left,
+        .cms-layout-split .cms-header-right {
+            min-width: 140px;
+        }
     </style>
 </head>
 
@@ -126,4 +192,5 @@
 
     {!! cms_assets()->renderScripts('frontend') !!}
 </body>
+
 </html>

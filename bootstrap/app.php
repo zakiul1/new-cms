@@ -3,6 +3,7 @@
 use App\Http\Middleware\AnonymousResponseCache;
 use App\Http\Middleware\ApplyRedirects;
 use App\Http\Middleware\CmsEnqueueAssetsMiddleware;
+use App\Http\Middleware\ForceCanonicalSiteUrl;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,14 +15,17 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // ✅ Redirects should run BEFORE controllers
+        // ✅ Must run early
         $middleware->web(prepend: [
+            ForceCanonicalSiteUrl::class,
             ApplyRedirects::class,
+
+                // ✅ IMPORTANT: enqueue theme/plugin assets BEFORE controllers/views render
+            CmsEnqueueAssetsMiddleware::class,
         ]);
 
-        // ✅ Assets should run AFTER controllers (needs Response)
+        // ✅ Cache should run after response is generated (and after assets are already enqueued)
         $middleware->web(append: [
-            CmsEnqueueAssetsMiddleware::class,
             AnonymousResponseCache::class,
         ]);
     })

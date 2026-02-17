@@ -15,6 +15,22 @@ class PermalinkManager
     }
 
     /**
+     * Canonical base URL for generating absolute URLs.
+     * Uses CMS setting (core.site_url) first, falls back to APP_URL.
+     */
+    private function baseUrl(): string
+    {
+        $base = (string) $this->settings->get('core', 'site_url', (string) config('app.url'));
+        $base = trim($base);
+
+        if ($base === '') {
+            $base = (string) config('app.url');
+        }
+
+        return rtrim($base, '/');
+    }
+
+    /**
      * Returns:
      *  - 'plain' (special case -> /?p=ID)
      *  - or a structure like '/%year%/%monthnum%/%postname%'
@@ -106,19 +122,22 @@ class PermalinkManager
         return $this->normalizePath('/' . $base . '/' . trim((string) $term->slug, '/'));
     }
 
+    /**
+     * Absolute URL builders (now driven by core.site_url, WP-style).
+     */
     public function postUrl(Post $post): string
     {
-        return url($this->postPath($post));
+        return $this->baseUrl() . $this->postPath($post);
     }
 
     public function pageUrl(Post $page): string
     {
-        return url($this->pagePath($page));
+        return $this->baseUrl() . $this->pagePath($page);
     }
 
     public function termUrl(Term $term): string
     {
-        return url($this->termPath($term));
+        return $this->baseUrl() . $this->termPath($term);
     }
 
     /**

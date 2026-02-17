@@ -80,6 +80,9 @@
 
     {!! theme_customizer_css() !!}
 
+    {{-- ✅ IMPORTANT: Render CMS enqueued frontend styles (plugins use this) --}}
+    {!! function_exists('cms_assets') ? cms_assets()->renderStyles('frontend') : '' !!}
+
     @if (!empty($pageAssetsCss))
         <style id="page-custom-css">
             {!! $pageAssetsCss !!}
@@ -137,6 +140,9 @@
     </main>
 
     @include('partials.footer')
+
+    {{-- ✅ IMPORTANT: Render CMS enqueued frontend scripts (plugins use this) --}}
+    {!! function_exists('cms_assets') ? cms_assets()->renderScripts('frontend') : '' !!}
 
     @stack('scripts')
 
