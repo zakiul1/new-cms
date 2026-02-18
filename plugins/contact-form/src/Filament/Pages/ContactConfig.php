@@ -45,6 +45,10 @@ class ContactConfig extends Page implements HasForms
             $settings->set('cron_token', $cronToken, 'plugin:contact-form');
         }
 
+        $cronUrl = $this->buildCronUrl($cronToken);
+        $curlCmd = $this->buildCurlCronCommand($cronUrl);
+        $wgetCmd = $this->buildWgetCronCommand($cronUrl);
+
         $this->data = [
             // eDesk
             'edesk_enabled' => (bool) $settings->get('edesk_enabled', true, 'plugin:contact-form'),
@@ -67,6 +71,11 @@ class ContactConfig extends Page implements HasForms
             'cron_token' => $cronToken,
             'cron_batch' => (int) $settings->get('cron_batch', 10, 'plugin:contact-form'),
             'max_attempts' => (int) $settings->get('max_attempts', 10, 'plugin:contact-form'),
+
+            // ✅ Helpful: copy/paste for cPanel
+            'cron_url' => $cronUrl,
+            'cron_curl_command' => $curlCmd,
+            'cron_wget_command' => $wgetCmd,
         ];
 
         $this->form->fill($this->data);
@@ -126,13 +135,29 @@ class ContactConfig extends Page implements HasForms
                     ]),
 
                 Section::make('Cron & Retry (Shared Hosting)')
+                    ->description('For cPanel: add a Cron Job that runs every 5–10 minutes. This will retry pending submissions and auto-delete old records.')
                     ->schema([
                         TextInput::make('cron_token')
                             ->label('Cron Token')
-                            ->helperText('Cron URL will require it: /_contact/cron?token=YOUR_TOKEN')
+                            ->helperText('Cron URL requires it: /_contact/cron?token=YOUR_TOKEN')
                             ->minLength(12)
                             ->disabled()
                             ->dehydrated(true),
+
+                        TextInput::make('cron_url')
+                            ->label('Cron URL (copy)')
+                            ->disabled()
+                            ->dehydrated(false),
+
+                        TextInput::make('cron_curl_command')
+                            ->label('cPanel Cron Command (curl) — copy this')
+                            ->disabled()
+                            ->dehydrated(false),
+
+                        TextInput::make('cron_wget_command')
+                            ->label('cPanel Cron Command (wget) — if curl is not available')
+                            ->disabled()
+                            ->dehydrated(false),
 
                         TextInput::make('cron_batch')
                             ->label('Cron Batch Size')
@@ -174,6 +199,13 @@ class ContactConfig extends Page implements HasForms
         $settings->set('cron_token', $newToken, 'plugin:contact-form');
 
         $this->data['cron_token'] = $newToken;
+
+        // refresh helper fields
+        $cronUrl = $this->buildCronUrl($newToken);
+        $this->data['cron_url'] = $cronUrl;
+        $this->data['cron_curl_command'] = $this->buildCurlCronCommand($cronUrl);
+        $this->data['cron_wget_command'] = $this->buildWgetCronCommand($cronUrl);
+
         $this->form->fill($this->data);
 
         Notification::make()
@@ -190,16 +222,19 @@ class ContactConfig extends Page implements HasForms
         $this->data = is_array($state) ? $state : [];
 
         $retry = (int) ($this->data['retry_minutes'] ?? 30);
-        if ($retry <= 0)
+        if ($retry <= 0) {
             $retry = 30;
+        }
 
         $cronBatch = (int) ($this->data['cron_batch'] ?? 10);
-        if ($cronBatch <= 0)
+        if ($cronBatch <= 0) {
             $cronBatch = 10;
+        }
 
         $maxAttempts = (int) ($this->data['max_attempts'] ?? 10);
-        if ($maxAttempts <= 0)
+        if ($maxAttempts <= 0) {
             $maxAttempts = 10;
+        }
 
         // Cron token: always ensure exists
         $cronToken = trim((string) ($this->data['cron_token'] ?? ''));
@@ -232,6 +267,13 @@ class ContactConfig extends Page implements HasForms
         $settings->set('cron_batch', $cronBatch, 'plugin:contact-form');
         $settings->set('max_attempts', $maxAttempts, 'plugin:contact-form');
 
+        // refresh helper fields (not saved)
+        $cronUrl = $this->buildCronUrl($cronToken);
+        $this->data['cron_url'] = $cronUrl;
+        $this->data['cron_curl_command'] = $this->buildCurlCronCommand($cronUrl);
+        $this->data['cron_wget_command'] = $this->buildWgetCronCommand($cronUrl);
+        $this->form->fill($this->data);
+
         Notification::make()
             ->title('Saved')
             ->success()
@@ -241,7 +283,6 @@ class ContactConfig extends Page implements HasForms
         if ($redirectAfterSave) {
             $url = null;
 
-            // Preferred: if Filament page route exists
             try {
                 if (class_exists(\Plugins\ContactForm\Filament\Pages\ContactSubmissions::class)) {
                     $url = \Plugins\ContactForm\Filament\Pages\ContactSubmissions::getUrl();
@@ -250,10 +291,41 @@ class ContactConfig extends Page implements HasForms
                 $url = null;
             }
 
-            // Fallback: go to admin home or keep on same page
             if (is_string($url) && trim($url) !== '') {
                 $this->redirect($url);
             }
         }
+    }
+
+    private function buildCronUrl(string $token): string
+    {
+        $token = trim($token);
+        $base = rtrim((string) config('app.url'), '/');
+
+        // If config is empty or wrong, fallback to current host if possible
+        if ($base === '') {
+            try {
+                $base = rtrim((string) url('/'), '/');
+            } catch (\Throwable $e) {
+                $base = '';
+            }
+        }
+
+        if ($base === '') {
+            // last fallback: show relative
+            return '/_contact/cron?token=' . urlencode($token);
+        }
+
+        return $base . '/_contact/cron?token=' . urlencode($token);
+    }
+
+    private function buildCurlCronCommand(string $cronUrl): string
+    {
+        return '*/10 * * * * curl -fsS "' . $cronUrl . '" >/dev/null 2>&1';
+    }
+
+    private function buildWgetCronCommand(string $cronUrl): string
+    {
+        return '*/10 * * * * wget -qO- "' . $cronUrl . '" >/dev/null 2>&1';
     }
 }

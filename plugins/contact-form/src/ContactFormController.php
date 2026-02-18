@@ -18,10 +18,12 @@ class ContactFormController extends Controller
         // ✅ Detect cart submit if cart_items exists (string OR array) and not empty.
         $cartRawInput = $request->input('cart_items', $request->input('cart_items_json', null));
         $isCartSubmit = false;
-        if (is_string($cartRawInput) && trim($cartRawInput) !== '')
+        if (is_string($cartRawInput) && trim($cartRawInput) !== '') {
             $isCartSubmit = true;
-        if (is_array($cartRawInput) && !empty($cartRawInput))
+        }
+        if (is_array($cartRawInput) && !empty($cartRawInput)) {
             $isCartSubmit = true;
+        }
 
         // ✅ Validation rules differ by flow
         $rules = [
@@ -70,8 +72,9 @@ class ContactFormController extends Controller
         $ip = $this->resolveClientIp($request);
 
         $whatsapp = trim((string) ($data['whatsapp'] ?? ''));
-        if ($whatsapp === '')
+        if ($whatsapp === '') {
             $whatsapp = null;
+        }
 
         $message = trim((string) ($data['message'] ?? ''));
 
@@ -88,13 +91,41 @@ class ContactFormController extends Controller
         if ($subject === '') {
             $subject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
         }
-        // dd($cartItems);
-        // ✅ Store submission first
+
+        /**
+         * ✅ New behavior for your goal:
+         * - Permanent data stored in contact_leads (name/email/country/whatsapp)
+         * - Subject/message/cart stored ONLY in encrypted payload for retries
+         * - subject/message columns are NOT used for permanent storage
+         */
+        $lead = null;
+
+        // ✅ Upsert permanent lead (by email)
+        try {
+            $lead = ContactLead::query()->updateOrCreate(
+                ['email' => (string) $data['email']],
+                [
+                    'name' => (string) $data['name'],
+                    'whatsapp' => $whatsapp,
+                    // country will be updated after GeoIP
+                ]
+            );
+        } catch (\Throwable $e) {
+            // If something fails, we still keep submission behavior (do not block)
+            $lead = null;
+        }
+
+        // ✅ Store submission first (temporary queue)
         $submission = ContactSubmission::query()->create([
+            'lead_id' => $lead?->id,
+
+            // keep these for admin listing/export
             'name' => (string) $data['name'],
             'email' => (string) $data['email'],
-            'subject' => $subject,
-            'message' => $message,
+
+            // do not store these permanently
+            'subject' => null,
+            'message' => null,
 
             'whatsapp' => $whatsapp,
 
@@ -110,6 +141,16 @@ class ContactFormController extends Controller
             'user_agent' => substr((string) $request->userAgent(), 0, 512),
             'status' => 'pending',
             'attempts' => 0,
+
+            // ✅ temporary encrypted payload (needed for send + retry)
+            'payload' => [
+                'subject' => $subject,
+                'message' => $message,
+                'is_cart' => $isCartSubmit,
+                'cart_items' => $cartItems,
+                'website_url' => $siteUrl,
+                'reference_url' => $referenceUrl,
+            ],
         ]);
 
         // ✅ GeoIP + send (never blocks saving)
@@ -123,6 +164,12 @@ class ContactFormController extends Controller
                 $submission->country_name = $countryName !== '' ? $countryName : null;
                 $submission->country_code = $countryCode !== '' ? strtoupper($countryCode) : null;
                 $submission->save();
+
+                // ✅ update permanent lead country_name (store permanently)
+                if ($lead && $countryName !== '') {
+                    $lead->country_name = $countryName;
+                    $lead->save();
+                }
             }
 
             app(SubmissionSender::class)->attemptSend($submission);
@@ -150,21 +197,24 @@ class ContactFormController extends Controller
 
         // Cloudflare
         $cf = trim((string) $request->headers->get('cf-connecting-ip', ''));
-        if ($cf !== '')
+        if ($cf !== '') {
             $candidates[] = $cf;
+        }
 
         // Some CDNs / proxies
         $tci = trim((string) $request->headers->get('true-client-ip', ''));
-        if ($tci !== '')
+        if ($tci !== '') {
             $candidates[] = $tci;
+        }
 
         // Standard proxy header (first = client)
         $xff = trim((string) $request->headers->get('x-forwarded-for', ''));
         if ($xff !== '') {
             foreach (explode(',', $xff) as $part) {
                 $part = trim($part);
-                if ($part !== '')
+                if ($part !== '') {
                     $candidates[] = $part;
+                }
             }
         }
 
@@ -172,8 +222,9 @@ class ContactFormController extends Controller
         $candidates[] = (string) $request->ip();
 
         foreach ($candidates as $ip) {
-            if ($this->isPublicIp($ip))
+            if ($this->isPublicIp($ip)) {
                 return $ip;
+            }
         }
 
         return (string) $request->ip();
@@ -182,12 +233,14 @@ class ContactFormController extends Controller
     private function isPublicIp(string $ip): bool
     {
         $ip = trim($ip);
-        if ($ip === '')
+        if ($ip === '') {
             return false;
+        }
 
         // Validate IP
-        if (filter_var($ip, FILTER_VALIDATE_IP) === false)
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
             return false;
+        }
 
         // Exclude private/reserved
         return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
@@ -212,14 +265,16 @@ class ContactFormController extends Controller
             $decoded = $this->jsonToArrayOrNull($cartItemsJsonValue);
         }
 
-        if (!is_array($decoded))
+        if (!is_array($decoded)) {
             return null;
+        }
 
         $normalized = [];
 
         foreach ($decoded as $item) {
-            if (!is_array($item))
+            if (!is_array($item)) {
                 continue;
+            }
 
             $title = trim((string) ($item['title'] ?? ''));
             $url = trim((string) ($item['url'] ?? ''));
@@ -231,12 +286,14 @@ class ContactFormController extends Controller
 
             // ✅ Do NOT drop item just because url is missing.
             // If url missing, use referenceUrl as fallback.
-            if ($url === '')
+            if ($url === '') {
                 $url = $referenceUrl;
+            }
 
             // If title missing, try to fallback something (but still allow)
-            if ($title === '')
+            if ($title === '') {
                 $title = 'Item';
+            }
 
             // ✅ Make url absolute
             $url = $this->absoluteUrl($url, $siteUrl);
@@ -270,16 +327,19 @@ class ContactFormController extends Controller
     private function absoluteUrl(string $maybeUrl, string $siteUrl): string
     {
         $u = trim($maybeUrl);
-        if ($u === '')
+        if ($u === '') {
             return '';
+        }
 
         // Already absolute
-        if (preg_match('~^https?://~i', $u))
+        if (preg_match('~^https?://~i', $u)) {
             return $u;
+        }
 
         // Protocol-relative //example.com/...
-        if (str_starts_with($u, '//'))
+        if (str_starts_with($u, '//')) {
             return 'https:' . $u;
+        }
 
         // If it is a path /something
         if (str_starts_with($u, '/')) {

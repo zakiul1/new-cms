@@ -30,17 +30,40 @@ class CronController extends Controller
                 return response('OK', 200);
             }
 
-            // If API disabled, do nothing (silent)
+            // ✅ 1) Always PRUNE old records first (so DB stays small on shared hosting)
+            // Sent => delete after 24 hours
+            $sentCutoff = now()->subHours(24);
+            ContactSubmission::query()
+                ->where('status', 'sent')
+                ->where(function ($q) use ($sentCutoff) {
+                    $q->whereNotNull('sent_at')->where('sent_at', '<=', $sentCutoff)
+                        ->orWhere(function ($q2) use ($sentCutoff) {
+                            $q2->whereNull('sent_at')->where('updated_at', '<=', $sentCutoff);
+                        });
+                })
+                ->delete();
+
+            // Pending => keep retry up to 3 days, then delete
+            $pendingCutoff = now()->subDays(3);
+            ContactSubmission::query()
+                ->where('status', 'pending')
+                ->where('created_at', '<=', $pendingCutoff)
+                ->delete();
+
+            // ✅ 2) If API disabled, stop after pruning
             $enabled = (bool) $settings->get('edesk_enabled', true, 'plugin:contact-form');
             if (!$enabled) {
                 return response('OK', 200);
             }
 
+            // ✅ 3) Retry pending submissions (same as before)
             $limit = (int) $settings->get('cron_batch', 10, 'plugin:contact-form');
-            if ($limit <= 0)
+            if ($limit <= 0) {
                 $limit = 10;
-            if ($limit > 50)
+            }
+            if ($limit > 50) {
                 $limit = 50; // safety cap
+            }
 
             $items = ContactSubmission::query()
                 ->where('status', 'pending')

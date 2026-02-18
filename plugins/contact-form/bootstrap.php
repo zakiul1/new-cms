@@ -1,12 +1,15 @@
 <?php
 
+use App\Cms\Core\Settings;
 use App\Cms\Hooks\HookPoints;
 use Filament\Panel;
 use Illuminate\Support\Facades\Route;
 
 require_once __DIR__ . '/ContactFormServiceProvider.php';
 
+// ✅ models / installer
 require_once __DIR__ . '/src/ContactSubmission.php';
+require_once __DIR__ . '/src/ContactLead.php';
 require_once __DIR__ . '/src/Support/Installer.php';
 
 // ✅ services
@@ -62,16 +65,26 @@ add_action(HookPoints::CMS_ROUTES, function () {
 });
 
 /**
- * ✅ Frontend asset enqueue (correct hook)
- *
- * This runs during frontend render, so asset manager / head/footer hooks work.
- * Also prevents loading cart UI on admin panel.
+ * ✅ Frontend asset enqueue
+ * - prevents loading on admin panel
+ * - respects cart_enabled setting
  */
 add_action(HookPoints::CMS_ENQUEUE_ASSETS, function () {
     // Prevent admin/filament side
     $path = (string) request()->path();
     if (str_starts_with($path, 'lara-admin') || str_contains($path, 'filament')) {
         return;
+    }
+
+    // ✅ Respect setting (optional but recommended)
+    try {
+        $settings = app(Settings::class);
+        $cartEnabled = (bool) $settings->get('cart_enabled', true, 'plugin:contact-form');
+        if (!$cartEnabled) {
+            return;
+        }
+    } catch (\Throwable $e) {
+        // If settings not available, continue safely
     }
 
     if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {

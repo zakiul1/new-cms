@@ -31,10 +31,19 @@ class ContactSubmission extends Model
         'attempts',
         'last_error',
         'next_retry_at',
+
+        // ✅ new fields
+        'lead_id',
+        'payload',
+        'sent_at',
     ];
 
     protected $casts = [
+        'created_at' => 'datetime',     // ✅ optional but useful
+        'updated_at' => 'datetime',     // ✅ optional but useful
         'next_retry_at' => 'datetime',
-        'cart_items' => 'array', // ✅ auto json encode/decode
+        'sent_at' => 'datetime',
+        'cart_items' => 'array',
+        'payload' => 'encrypted:array', // ✅ Laravel will encrypt/decrypt automatically
     ];
 }

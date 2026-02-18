@@ -22,14 +22,18 @@ class SubmissionSender
             $retryMin = (int) $settings->get('retry_minutes', 30, 'plugin:contact-form');
             $maxTries = (int) $settings->get('max_attempts', 10, 'plugin:contact-form');
 
-            if ($retryMin <= 0)
+            if ($retryMin <= 0) {
                 $retryMin = 30;
-            if ($retryMin < 5)
+            }
+            if ($retryMin < 5) {
                 $retryMin = 5;
-            if ($maxTries <= 0)
+            }
+            if ($maxTries <= 0) {
                 $maxTries = 10;
+            }
 
             if ((int) $s->attempts >= $maxTries) {
+                // Keep pending, but stop scheduling retries
                 $s->status = 'pending';
                 $s->next_retry_at = null;
                 $s->save();
@@ -41,6 +45,12 @@ class SubmissionSender
                 return;
             }
 
+            // ✅ Pull subject/message/cart from encrypted payload (temporary)
+            $payloadData = is_array($s->payload ?? null) ? $s->payload : [];
+
+            $rawSubject = trim((string) ($payloadData['subject'] ?? $s->subject ?? ''));
+            $rawMessage = trim((string) ($payloadData['message'] ?? $s->message ?? ''));
+
             // ✅ Country: prefer name, fallback to code
             $countryName = trim((string) ($s->country_name ?? ''));
             $countryCode = trim((string) ($s->country_code ?? ''));
@@ -50,16 +60,19 @@ class SubmissionSender
             $date = $s->created_at ? $s->created_at->format('F j, Y') : now()->format('F j, Y');
 
             $website = trim((string) ($s->website_url ?? ''));
-            if ($website === '')
+            if ($website === '') {
                 $website = 'Unknown';
+            }
 
             $reference = trim((string) ($s->reference_url ?? ''));
-            if ($reference === '')
+            if ($reference === '') {
                 $reference = 'Unknown';
+            }
 
             $whatsapp = trim((string) ($s->whatsapp ?? ''));
-            if ($whatsapp === '')
+            if ($whatsapp === '') {
                 $whatsapp = 'Not given';
+            }
 
             // ✅ Real IP + UA for API safety
             $realIp = trim((string) ($s->ip ?? ''));
@@ -70,8 +83,9 @@ class SubmissionSender
                     $realIp = '';
                 }
             }
-            if ($realIp === '')
+            if ($realIp === '') {
                 $realIp = '0.0.0.0';
+            }
 
             $realUa = trim((string) ($s->user_agent ?? ''));
             if ($realUa === '') {
@@ -82,36 +96,41 @@ class SubmissionSender
                 }
             }
 
-            // ✅ Cart items (array cast)
-            $cartItems = $s->cart_items;
-            if (!is_array($cartItems))
+            // ✅ Cart items: prefer payload cart_items (temporary), fallback to legacy column
+            $cartItems = $payloadData['cart_items'] ?? $s->cart_items;
+            if (!is_array($cartItems)) {
                 $cartItems = [];
+            }
 
             // ✅ Normalize / limit cart items
-            // IMPORTANT: We no longer build "Items (Text)" or <pre> output (this caused your unwanted email format).
             $normalizedItems = [];
             foreach ($cartItems as $item) {
-                if (!is_array($item))
+                if (!is_array($item)) {
                     continue;
+                }
 
                 $title = trim((string) ($item['title'] ?? ''));
                 $url = trim((string) ($item['url'] ?? ''));
                 $image = trim((string) ($item['image'] ?? ''));
 
-                if ($title === '')
+                if ($title === '') {
                     $title = 'Item';
+                }
 
                 // If url missing, fallback so item isn't dropped
                 if ($url === '') {
                     $url = $reference !== 'Unknown' ? $reference : ($website !== 'Unknown' ? $website : '');
                 }
 
-                if (mb_strlen($title) > 200)
+                if (mb_strlen($title) > 200) {
                     $title = mb_substr($title, 0, 200);
-                if (mb_strlen($url) > 1000)
+                }
+                if (mb_strlen($url) > 1000) {
                     $url = mb_substr($url, 0, 1000);
-                if (mb_strlen($image) > 1000)
+                }
+                if (mb_strlen($image) > 1000) {
                     $image = mb_substr($image, 0, 1000);
+                }
 
                 $normalizedItems[] = [
                     'title' => $title,
@@ -119,12 +138,18 @@ class SubmissionSender
                     'image' => $image !== '' ? $image : null,
                 ];
 
-                if (count($normalizedItems) >= 25)
+                if (count($normalizedItems) >= 25) {
                     break;
+                }
             }
 
             // ✅ Detect cart submit
             $isCartSubmit = count($normalizedItems) > 0;
+
+            // ✅ Ensure we always have a subject
+            if ($rawSubject === '') {
+                $rawSubject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
+            }
 
             // ✅ Build items table HTML (image left, title right, title is clickable link)
             $itemsTableHtml = '';
@@ -167,20 +192,20 @@ class SubmissionSender
 
             // ✅ Build message + payload
             if ($isCartSubmit) {
-                // ✅ CART format exactly like your screenshot #2 requirement:
+                // CART format:
                 // Name/Email/Country/Whatsapp + 2 breaks + message + 2 breaks + items table
                 $formattedMessage =
                     'Name: ' . e((string) $s->name) . '<br>' .
                     'Email: ' . e((string) $s->email) . '<br>' .
                     'Country: ' . e($country) . '<br>' .
                     'WhatsApp: ' . e($whatsapp) . '<br><br>' .
-                    nl2br(e(trim((string) $s->message))) . '<br><br>' .
+                    nl2br(e($rawMessage)) . '<br><br>' .
                     $itemsTableHtml;
 
                 $payload = [
                     'name' => (string) $s->name,
                     'email' => (string) $s->email,
-                    'subject' => (string) $s->subject,
+                    'subject' => $rawSubject,
                     'message' => $formattedMessage,
                     'whatsapp' => $whatsapp,
                     'country' => $country,
@@ -201,7 +226,7 @@ class SubmissionSender
                     'visitor_ip' => $realIp,
                 ];
             } else {
-                // CONTACT FORM (keep previous output)
+                // CONTACT FORM format
                 $formattedMessage =
                     'Name: ' . e((string) $s->name) . '<br>' .
                     'Email: ' . e((string) $s->email) . '<br>' .
@@ -210,12 +235,12 @@ class SubmissionSender
                     'Date: ' . e($date) . '<br><br>' .
                     'Website: ' . e($website) . '<br>' .
                     'Referance Page: ' . e($reference) . '<br><br>' .
-                    nl2br(e(trim((string) $s->message)));
+                    nl2br(e($rawMessage));
 
                 $payload = [
                     'name' => (string) $s->name,
                     'email' => (string) $s->email,
-                    'subject' => (string) $s->subject,
+                    'subject' => $rawSubject,
                     'message' => $formattedMessage,
                     'whatsapp' => $whatsapp,
                     'country' => $country,
@@ -234,6 +259,7 @@ class SubmissionSender
             app(EDeskClient::class)->send($apiUrl, $apiKey, $payload);
 
             $s->status = 'sent';
+            $s->sent_at = now();     // ✅ used by prune rule (delete sent after 24h)
             $s->last_error = null;
             $s->next_retry_at = null;
             $s->save();
@@ -241,10 +267,12 @@ class SubmissionSender
             $settings = app(Settings::class);
             $baseRetryMin = (int) $settings->get('retry_minutes', 30, 'plugin:contact-form');
 
-            if ($baseRetryMin <= 0)
+            if ($baseRetryMin <= 0) {
                 $baseRetryMin = 30;
-            if ($baseRetryMin < 5)
+            }
+            if ($baseRetryMin < 5) {
                 $baseRetryMin = 5;
+            }
 
             $attempts = (int) ($s->attempts ?? 0);
             $mult = 1 << min($attempts, 4);
