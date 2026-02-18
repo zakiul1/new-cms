@@ -41,12 +41,12 @@ class SubmissionSender
                 return;
             }
 
-            // ✅ Country should be IP-based country NAME (already resolved earlier)
+            // ✅ Country: prefer name, fallback to code
             $countryName = trim((string) ($s->country_name ?? ''));
             $countryCode = trim((string) ($s->country_code ?? ''));
             $country = $countryName !== '' ? $countryName : ($countryCode !== '' ? $countryCode : 'Unknown');
 
-            // ✅ Date/Website/Reference ONLY for normal contact form (not cart)
+            // Normal form extra fields
             $date = $s->created_at ? $s->created_at->format('F j, Y') : now()->format('F j, Y');
 
             $website = trim((string) ($s->website_url ?? ''));
@@ -61,7 +61,7 @@ class SubmissionSender
             if ($whatsapp === '')
                 $whatsapp = 'Not given';
 
-            // ✅ Real IP and UA for API (required)
+            // ✅ Real IP + UA for API safety
             $realIp = trim((string) ($s->ip ?? ''));
             if ($realIp === '') {
                 try {
@@ -82,13 +82,13 @@ class SubmissionSender
                 }
             }
 
-            // ✅ Cart items (array cast from model)
+            // ✅ Cart items (array cast)
             $cartItems = $s->cart_items;
-            if (!is_array($cartItems)) {
+            if (!is_array($cartItems))
                 $cartItems = [];
-            }
 
-            // ✅ Normalize / limit cart items (safety)
+            // ✅ Normalize / limit cart items
+            // IMPORTANT: We no longer build "Items (Text)" or <pre> output (this caused your unwanted email format).
             $normalizedItems = [];
             foreach ($cartItems as $item) {
                 if (!is_array($item))
@@ -98,8 +98,13 @@ class SubmissionSender
                 $url = trim((string) ($item['url'] ?? ''));
                 $image = trim((string) ($item['image'] ?? ''));
 
-                if ($title === '' || $url === '')
-                    continue;
+                if ($title === '')
+                    $title = 'Item';
+
+                // If url missing, fallback so item isn't dropped
+                if ($url === '') {
+                    $url = $reference !== 'Unknown' ? $reference : ($website !== 'Unknown' ? $website : '');
+                }
 
                 if (mb_strlen($title) > 200)
                     $title = mb_substr($title, 0, 200);
@@ -121,11 +126,10 @@ class SubmissionSender
             // ✅ Detect cart submit
             $isCartSubmit = count($normalizedItems) > 0;
 
-            // ✅ Build items table HTML (only for cart submits)
+            // ✅ Build items table HTML (image left, title right, title is clickable link)
             $itemsTableHtml = '';
             if ($isCartSubmit) {
-                $itemsTableHtml .= '<b>Items</b><br>';
-                $itemsTableHtml .= '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;">';
+                $itemsTableHtml .= '<table border="1" cellpadding="10" cellspacing="0" style="border-collapse:collapse;width:100%;">';
                 $itemsTableHtml .= '<tbody>';
 
                 foreach ($normalizedItems as $item) {
@@ -133,37 +137,43 @@ class SubmissionSender
                     $url = (string) ($item['url'] ?? '');
                     $image = (string) ($item['image'] ?? '');
 
-                    if ($title === '' || $url === '')
-                        continue;
-
                     $itemsTableHtml .= '<tr>';
 
-                    $itemsTableHtml .= '<td style="width:70px;vertical-align:top;">';
+                    // left image
+                    $itemsTableHtml .= '<td style="width:120px;vertical-align:middle;">';
                     if ($image !== '') {
-                        $itemsTableHtml .= '<img src="' . e($image) . '" alt="" style="width:60px;height:auto;display:block;">';
+                        $itemsTableHtml .= '<img src="' . e($image) . '" alt="" style="width:110px;height:auto;display:block;">';
                     } else {
                         $itemsTableHtml .= '&nbsp;';
                     }
                     $itemsTableHtml .= '</td>';
 
-                    $itemsTableHtml .= '<td style="vertical-align:top;">';
-                    $itemsTableHtml .= '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer">' . e($title) . '</a>';
+                    // right title link
+                    $itemsTableHtml .= '<td style="vertical-align:middle;">';
+                    if ($url !== '') {
+                        $itemsTableHtml .= '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#000;">'
+                            . e($title) .
+                            '</a>';
+                    } else {
+                        $itemsTableHtml .= e($title);
+                    }
                     $itemsTableHtml .= '</td>';
 
                     $itemsTableHtml .= '</tr>';
                 }
 
-                $itemsTableHtml .= '</tbody></table><br><br>';
+                $itemsTableHtml .= '</tbody></table>';
             }
 
-            // ✅ Build message + payload differently for Cart vs Contact form
+            // ✅ Build message + payload
             if ($isCartSubmit) {
-                // CART: send only requested fields in message (no date/website/reference)
+                // ✅ CART format exactly like your screenshot #2 requirement:
+                // Name/Email/Country/Whatsapp + 2 breaks + message + 2 breaks + items table
                 $formattedMessage =
                     'Name: ' . e((string) $s->name) . '<br>' .
                     'Email: ' . e((string) $s->email) . '<br>' .
-                    'WhatsApp: ' . e($whatsapp) . '<br>' .
-                    'Country: ' . e($country) . '<br><br>' .
+                    'Country: ' . e($country) . '<br>' .
+                    'WhatsApp: ' . e($whatsapp) . '<br><br>' .
                     nl2br(e(trim((string) $s->message))) . '<br><br>' .
                     $itemsTableHtml;
 
@@ -176,22 +186,22 @@ class SubmissionSender
                     'country' => $country,
                     'cart_items' => $normalizedItems,
 
-                    // ✅ REQUIRED: ip cannot be null on eDesk DB
+                    // required by eDesk
                     'ip' => $realIp,
                     'user_agent' => $realUa,
 
-                    // ✅ keep these keys for API compatibility (empty is OK)
+                    // keep keys for API compatibility
                     'date' => '',
                     'website' => '',
                     'reference_page' => '',
 
-                    // ✅ aliases (optional)
+                    // aliases
                     'ip_address' => $realIp,
                     'client_ip' => $realIp,
                     'visitor_ip' => $realIp,
                 ];
             } else {
-                // CONTACT FORM: include date/website/reference
+                // CONTACT FORM (keep previous output)
                 $formattedMessage =
                     'Name: ' . e((string) $s->name) . '<br>' .
                     'Email: ' . e((string) $s->email) . '<br>' .
@@ -213,7 +223,6 @@ class SubmissionSender
                     'website' => $website,
                     'reference_page' => $reference,
 
-                    // ✅ also send ip/ua for API safety
                     'ip' => $realIp,
                     'user_agent' => $realUa,
                     'ip_address' => $realIp,

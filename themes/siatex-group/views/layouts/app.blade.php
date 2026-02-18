@@ -77,7 +77,7 @@
     @endif
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-
+    <link rel="stylesheet" href="{{ asset('themes/siatex-group/dist/theme.css') }}">
     {!! theme_customizer_css() !!}
 
     {{-- ✅ IMPORTANT: Render CMS enqueued frontend styles (plugins use this) --}}

@@ -15,10 +15,13 @@ class ContactFormController extends Controller
     {
         Installer::ensureInstalled();
 
-        // ✅ Cart submit detection:
-        // If cart_items (or cart_items_json) exists and is not empty => cart flow (no captcha needed).
+        // ✅ Detect cart submit if cart_items exists (string OR array) and not empty.
         $cartRawInput = $request->input('cart_items', $request->input('cart_items_json', null));
-        $isCartSubmit = is_string($cartRawInput) && trim($cartRawInput) !== '';
+        $isCartSubmit = false;
+        if (is_string($cartRawInput) && trim($cartRawInput) !== '')
+            $isCartSubmit = true;
+        if (is_array($cartRawInput) && !empty($cartRawInput))
+            $isCartSubmit = true;
 
         // ✅ Validation rules differ by flow
         $rules = [
@@ -27,17 +30,15 @@ class ContactFormController extends Controller
             'whatsapp' => ['nullable', 'string', 'max:60'],
             'message' => ['required', 'string', 'max:5000'],
 
-            // accept both keys (frontend may send either)
-            'cart_items' => ['nullable', 'string'],
-            'cart_items_json' => ['nullable', 'string'],
+            // accept string or array for cart_items; accept both keys
+            'cart_items' => ['nullable'],
+            'cart_items_json' => ['nullable'],
         ];
 
         if ($isCartSubmit) {
-            // ✅ Cart flow: subject + captcha NOT required
             $rules['subject'] = ['nullable', 'string', 'max:256'];
             $rules['captcha'] = ['nullable', 'string', 'max:20'];
         } else {
-            // ✅ Normal contact form: subject + captcha required
             $rules['subject'] = ['required', 'string', 'max:256'];
             $rules['captcha'] = ['required', 'string', 'max:20'];
         }
@@ -52,75 +53,43 @@ class ContactFormController extends Controller
                     ->withErrors(['captcha' => 'Security answer is incorrect.'])
                     ->withInput();
             }
-
             $request->session()->forget('contact_form.captcha_answer');
         }
-
-        // ✅ Always store submission first
-        $ip = (string) $request->ip();
-
-        $whatsapp = trim((string) ($data['whatsapp'] ?? ''));
-        if ($whatsapp === '') {
-            $whatsapp = null;
-        }
-
-        // ✅ clean message
-        $message = trim((string) ($data['message'] ?? ''));
 
         // ✅ Website URL from CMS Settings (core.site_url)
         $siteUrl = (string) app(SettingsRepository::class)->get('core', 'site_url', (string) config('app.url'));
         $siteUrl = rtrim(trim($siteUrl), '/');
 
-        // ✅ Reference page = page where user submitted from (best is HTTP Referer)
+        // ✅ Reference page = where user submitted from (HTTP Referer best)
         $referenceUrl = trim((string) $request->headers->get('referer', ''));
         if ($referenceUrl === '') {
             $referenceUrl = $request->fullUrl();
         }
 
-        // ✅ cart items (JSON) - store as array (model cast will handle)
-        $cartItemsRaw = (string) ($data['cart_items'] ?? ($data['cart_items_json'] ?? ''));
-        $cartItems = null;
+        // ✅ Get real client IP (works behind Cloudflare / proxies)
+        $ip = $this->resolveClientIp($request);
 
-        if (trim($cartItemsRaw) !== '') {
-            try {
-                $decoded = json_decode($cartItemsRaw, true, 512, JSON_THROW_ON_ERROR);
+        $whatsapp = trim((string) ($data['whatsapp'] ?? ''));
+        if ($whatsapp === '')
+            $whatsapp = null;
 
-                if (is_array($decoded)) {
-                    $normalized = [];
+        $message = trim((string) ($data['message'] ?? ''));
 
-                    foreach ($decoded as $item) {
-                        if (!is_array($item)) {
-                            continue;
-                        }
+        // ✅ Normalize cart items
+        $cartItems = $this->normalizeCartItems(
+            $data['cart_items'] ?? null,
+            $data['cart_items_json'] ?? null,
+            $siteUrl,
+            $referenceUrl
+        );
 
-                        $title = trim((string) ($item['title'] ?? ''));
-                        $url = trim((string) ($item['url'] ?? ''));
-                        $image = trim((string) ($item['image'] ?? ''));
-
-                        if ($title === '' || $url === '') {
-                            continue;
-                        }
-
-                        $normalized[] = [
-                            'title' => $title,
-                            'url' => $url,
-                            'image' => $image !== '' ? $image : null,
-                        ];
-                    }
-
-                    $cartItems = $normalized;
-                }
-            } catch (\Throwable $e) {
-                $cartItems = null;
-            }
-        }
-
-        // ✅ Subject handling:
+        // ✅ Subject handling
         $subject = trim((string) ($data['subject'] ?? ''));
         if ($subject === '') {
             $subject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
         }
-
+        // dd($cartItems);
+        // ✅ Store submission first
         $submission = ContactSubmission::query()->create([
             'name' => (string) $data['name'],
             'email' => (string) $data['email'],
@@ -143,7 +112,7 @@ class ContactFormController extends Controller
             'attempts' => 0,
         ]);
 
-        // ✅ Try GeoIP + send (never blocks saving)
+        // ✅ GeoIP + send (never blocks saving)
         try {
             $country = app(IpCountryResolver::class)->resolve($ip);
 
@@ -161,7 +130,7 @@ class ContactFormController extends Controller
             // silent
         }
 
-        // ✅ IMPORTANT: cart modal fetch() should get JSON always
+        // ✅ Cart modal fetch() should get JSON always
         if ($request->ajax() || $request->wantsJson() || $request->expectsJson()) {
             return response()->json([
                 'ok' => true,
@@ -170,5 +139,154 @@ class ContactFormController extends Controller
         }
 
         return back()->with('contact_success', true);
+    }
+
+    /**
+     * Resolve real client IP behind proxies (Cloudflare/nginx).
+     */
+    private function resolveClientIp(Request $request): string
+    {
+        $candidates = [];
+
+        // Cloudflare
+        $cf = trim((string) $request->headers->get('cf-connecting-ip', ''));
+        if ($cf !== '')
+            $candidates[] = $cf;
+
+        // Some CDNs / proxies
+        $tci = trim((string) $request->headers->get('true-client-ip', ''));
+        if ($tci !== '')
+            $candidates[] = $tci;
+
+        // Standard proxy header (first = client)
+        $xff = trim((string) $request->headers->get('x-forwarded-for', ''));
+        if ($xff !== '') {
+            foreach (explode(',', $xff) as $part) {
+                $part = trim($part);
+                if ($part !== '')
+                    $candidates[] = $part;
+            }
+        }
+
+        // Fallback
+        $candidates[] = (string) $request->ip();
+
+        foreach ($candidates as $ip) {
+            if ($this->isPublicIp($ip))
+                return $ip;
+        }
+
+        return (string) $request->ip();
+    }
+
+    private function isPublicIp(string $ip): bool
+    {
+        $ip = trim($ip);
+        if ($ip === '')
+            return false;
+
+        // Validate IP
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false)
+            return false;
+
+        // Exclude private/reserved
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+
+    /**
+     * Normalize cart items.
+     * Fixes: link/image missing in API because items were being skipped (url empty) or url/image not absolute.
+     */
+    private function normalizeCartItems($cartItemsValue, $cartItemsJsonValue, string $siteUrl, string $referenceUrl): ?array
+    {
+        $decoded = null;
+
+        // If frontend sent array directly
+        if (is_array($cartItemsValue)) {
+            $decoded = $cartItemsValue;
+        } elseif (is_string($cartItemsValue) && trim($cartItemsValue) !== '') {
+            $decoded = $this->jsonToArrayOrNull($cartItemsValue);
+        } elseif (is_array($cartItemsJsonValue)) {
+            $decoded = $cartItemsJsonValue;
+        } elseif (is_string($cartItemsJsonValue) && trim($cartItemsJsonValue) !== '') {
+            $decoded = $this->jsonToArrayOrNull($cartItemsJsonValue);
+        }
+
+        if (!is_array($decoded))
+            return null;
+
+        $normalized = [];
+
+        foreach ($decoded as $item) {
+            if (!is_array($item))
+                continue;
+
+            $title = trim((string) ($item['title'] ?? ''));
+            $url = trim((string) ($item['url'] ?? ''));
+            $image = trim((string) ($item['image'] ?? ''));
+
+            // Optional extra keys (helpful for debugging / future)
+            $id = trim((string) ($item['id'] ?? ''));
+            $type = trim((string) ($item['type'] ?? ''));
+
+            // ✅ Do NOT drop item just because url is missing.
+            // If url missing, use referenceUrl as fallback.
+            if ($url === '')
+                $url = $referenceUrl;
+
+            // If title missing, try to fallback something (but still allow)
+            if ($title === '')
+                $title = 'Item';
+
+            // ✅ Make url absolute
+            $url = $this->absoluteUrl($url, $siteUrl);
+
+            // ✅ Make image absolute (if provided)
+            $image = $image !== '' ? $this->absoluteUrl($image, $siteUrl) : '';
+
+            $normalized[] = [
+                'title' => $title,
+                'url' => $url,
+                'image' => $image !== '' ? $image : null,
+                // keep optional fields (won't break anything)
+                'id' => $id !== '' ? $id : null,
+                'type' => $type !== '' ? $type : null,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function jsonToArrayOrNull(string $json): ?array
+    {
+        try {
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($decoded) ? $decoded : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function absoluteUrl(string $maybeUrl, string $siteUrl): string
+    {
+        $u = trim($maybeUrl);
+        if ($u === '')
+            return '';
+
+        // Already absolute
+        if (preg_match('~^https?://~i', $u))
+            return $u;
+
+        // Protocol-relative //example.com/...
+        if (str_starts_with($u, '//'))
+            return 'https:' . $u;
+
+        // If it is a path /something
+        if (str_starts_with($u, '/')) {
+            return rtrim($siteUrl, '/') . $u;
+        }
+
+        // Otherwise treat as relative
+        return rtrim($siteUrl, '/') . '/' . ltrim($u, '/');
     }
 }

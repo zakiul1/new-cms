@@ -88,6 +88,120 @@ class CoreShortcodes
                 return '<!-- [posts] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
         });
+
+        /**
+         * ✅ [products]
+         *
+         * Behavior:
+         * - [products] → random products across ALL PUBLIC media categories (NOT one category), default 12
+         * - [products catid="9"] → only that category if valid, otherwise fallback to default (no error)
+         * - [products load="20"] → 20 items
+         * - pricebtn default false; support [products pricebtn] or pricebtn=true/pricebtn="true"
+         * - column="4" default 4 (tablet+desktop)
+         * - mcolumn="2" default 2 (mobile)
+         *
+         * NOTE:
+         * - For Option A (dynamic columns), Blade uses inline grid-template-columns (supports 5/6/7/...)
+         * - So we allow higher limits here (desktop up to 12, mobile up to 6)
+         */
+        $shortcodes->register('products', function (array $atts = [], ?string $content = null, array $context = []) {
+            try {
+                $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+                if (!$taxonomyId) {
+                    return '';
+                }
+
+                // load=
+                $limit = (int) ($atts['load'] ?? 12);
+                $limit = max(1, min(50, $limit));
+
+                // catid=
+                $catId = (int) ($atts['catid'] ?? 0);
+
+                // ✅ pricebtn supports:
+                // - [products pricebtn]
+                // - [products pricebtn=true]
+                // - [products pricebtn="true"]
+                // Default false
+                $showPriceBtn = array_key_exists('pricebtn', $atts)
+                    ? self::toBool(($atts['pricebtn'] ?? '') === '' ? true : $atts['pricebtn'])
+                    : false;
+
+                // ✅ columns (md+): default 4, allow up to 12 (Option A supports any number)
+                $columns = (int) ($atts['column'] ?? 4);
+                $columns = max(1, min(12, $columns));
+
+                // ✅ mobile columns: default 2, allow up to 6
+                $mobileColumns = (int) ($atts['mcolumn'] ?? 2);
+                $mobileColumns = max(1, min(6, $mobileColumns));
+
+                // exclude uncategorized by name/slug
+                $excludeUncategorized = function ($q) {
+                    $q->whereRaw("LOWER(terms.slug) != 'uncategorized'")
+                        ->whereRaw("LOWER(terms.name) != 'uncategorized'");
+                };
+
+                // ---------------------------------------------------
+                // Base query: products are Media that have at least 1 PUBLIC media_category term (not uncategorized)
+                // ---------------------------------------------------
+                $query = Media::query();
+
+                if (method_exists(Media::class, 'scopeFrontendVisible')) {
+                    $query->frontendVisible();
+                }
+
+                // Must be categorized in public media_category and not uncategorized
+                $query->whereHas('terms', function ($q) use ($taxonomyId, $excludeUncategorized) {
+                    $q->where('terms.taxonomy_id', $taxonomyId)
+                        ->where('terms.visibility', 'public');
+
+                    $excludeUncategorized($q);
+                });
+
+                // ---------------------------------------------------
+                // If catid is valid, restrict to it; if invalid, ignore it (fallback without error)
+                // ---------------------------------------------------
+                if ($catId > 0) {
+                    $catOk = Term::query()
+                        ->whereKey($catId)
+                        ->where('taxonomy_id', $taxonomyId)
+                        ->where('visibility', 'public')
+                        ->where(function ($q) use ($excludeUncategorized) {
+                            $excludeUncategorized($q);
+                        })
+                        ->exists();
+
+                    if ($catOk) {
+                        $query->whereHas('terms', function ($q) use ($catId) {
+                            $q->where('terms.id', $catId);
+                        });
+                    }
+                }
+
+                $items = $query
+                    ->with(['variantRecords'])
+                    ->inRandomOrder()
+                    ->limit($limit)
+                    ->get();
+
+                if ($items->isEmpty()) {
+                    return '';
+                }
+
+                if (view()->exists('shortcodes.products-grid')) {
+                    return view('shortcodes.products-grid', [
+                        'items' => $items,
+                        'showPriceBtn' => $showPriceBtn,
+                        'columns' => $columns,
+                        'mobileColumns' => $mobileColumns,
+                    ])->render();
+                }
+
+                return '<!-- products: missing view shortcodes.products-grid -->';
+            } catch (\Throwable $e) {
+                return '<!-- [products] shortcode error: ' . e($e->getMessage()) . ' -->';
+            }
+        });
     }
 
     private static function fallbackPostsHtml(Collection $posts): string
@@ -202,5 +316,19 @@ class CoreShortcodes
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Convert shortcode boolean values safely.
+     * Accepts: true/false, 1/0, yes/no, on/off
+     */
+    private static function toBool($v): bool
+    {
+        if (is_bool($v)) {
+            return $v;
+        }
+
+        $s = strtolower(trim((string) $v));
+        return in_array($s, ['1', 'true', 'yes', 'y', 'on'], true);
     }
 }

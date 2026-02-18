@@ -52,7 +52,22 @@
         // -----------------------------
         // ✅ HERO CONTENT (under title)
         // -----------------------------
-        $allowedHtml = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>';
+        // ✅ Allow tags needed by shortcodes like [products] (div/picture/img/button etc.)
+      $allowedHtml =
+    '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
+    '<div><span><section><article><header><footer>' .
+    '<picture><source><img>' .
+    '<button>' .
+    '<script>';
+
+        // ✅ IMPORTANT FIX:
+        // strip_tags() removes the <script> tag but keeps its CONTENT.
+        // So we must REMOVE script/style BLOCKS completely before strip_tags().
+        $removeScriptStyleBlocks = function (string $html): string {
+            $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
+            $html = preg_replace('~<\s*style\b[^>]*>.*?<\s*/\s*style\s*>~is', '', $html) ?? $html;
+            return $html;
+        };
 
         $rawHtml = '';
 
@@ -79,6 +94,9 @@
                 // ignore
             }
         }
+
+        // ✅ FIX: remove <script>/<style> blocks from shortcode output completely
+        $rawHtml = $removeScriptStyleBlocks((string) $rawHtml);
 
         $heroHtml = trim($rawHtml) !== '' ? strip_tags($rawHtml, $allowedHtml) : '';
 
@@ -247,6 +265,9 @@
                 // ignore
             }
         }
+
+        // ✅ FIX: remove <script>/<style> blocks from shortcode output completely
+        $subDescRaw = $removeScriptStyleBlocks((string) $subDescRaw);
 
         $subDescHtml = trim($subDescRaw) !== '' ? strip_tags($subDescRaw, $allowedHtml) : '';
 

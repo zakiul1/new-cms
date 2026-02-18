@@ -72,7 +72,7 @@ class ContentRouterController extends Controller
             if ($homePage) {
                 [$css, $js] = $this->extractPostAssets($homePage);
 
-                return view($this->resolveFrontendView($homePage, fallback: 'home'), [
+                return view($this->resolveFrontendView($homePage, fallback: 'page'), [
                     'post' => $homePage,
                     'seo' => $this->buildSeo($homePage, $request, $permalinks),
 

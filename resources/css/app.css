@@ -9,3 +9,13 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+.products-grid {
+  grid-template-columns: repeat(var(--cols-mobile, 2), minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .products-grid {
+    grid-template-columns: repeat(var(--cols-md, 4), minmax(0, 1fr));
+  }
+}

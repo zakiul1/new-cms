@@ -81,8 +81,6 @@
 
                 <div class="cms-hero__content">
                     <h1 class="cms-hero__title">{{ $sliderTitle }}</h1>
-
-
                 </div>
 
                 {{--
@@ -232,6 +230,61 @@
         @media (prefers-reduced-motion: reduce) {
             .cms-hero__track {
                 transition: none !important;
+            }
+        }
+
+        /* ============================
+                       ✅ Mobile-only optimizations
+                       (No design/logic changes)
+                       ============================ */
+        @media (max-width: 768px) {
+            .cms-hero.cms-container {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+
+            .cms-hero__wrap {
+                height: clamp(240px, 52vh, 420px);
+            }
+
+            .cms-hero__content {
+                padding: 16px;
+            }
+
+            .cms-hero__title {
+                font-size: clamp(28px, 9vw, 48px);
+                line-height: 1.05;
+                letter-spacing: -0.015em;
+            }
+
+            .cms-hero__bars {
+                bottom: 12px;
+                gap: 8px;
+            }
+
+            .cms-hero__bar {
+                width: 26px;
+                height: 4px;
+            }
+
+            /* Slightly reduce content spacing on mobile */
+            .cms-container.mx-auto.px-4.py-10 {
+                padding-top: 24px;
+                padding-bottom: 24px;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .cms-hero__wrap {
+                height: clamp(220px, 48vh, 360px);
+            }
+
+            .cms-hero__title {
+                font-size: clamp(24px, 10vw, 40px);
+            }
+
+            .cms-hero__bar {
+                width: 22px;
             }
         }
     </style>

@@ -16,7 +16,23 @@
         // -----------------------------
         // Helpers
         // -----------------------------
-        $allowedHtml = '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a>';
+        // ✅ UPDATED: allow tags needed by shortcodes like [products] (div/picture/img/button etc.)
+        // ⚠️ Do NOT allow <script>/<style> here, we will remove those blocks before strip_tags()
+        $allowedHtml =
+            '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
+            '<div><span><section><article><header><footer>' .
+            '<picture><source><img>' .
+            '<button>' .
+            '<script>';
+
+        // ✅ IMPORTANT FIX:
+        // strip_tags() removes <script> tag but keeps its CONTENT, so JS appears as text.
+        // Remove script/style blocks completely BEFORE strip_tags().
+        $removeScriptStyleBlocks = function (string $html): string {
+            $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
+            $html = preg_replace('~<\s*style\b[^>]*>.*?<\s*/\s*style\s*>~is', '', $html) ?? $html;
+            return $html;
+        };
 
         // ✅ Always work with meta as array (sometimes it may come as JSON string)
         $meta = $media->meta ?? [];
@@ -58,11 +74,22 @@
             return '';
         };
 
-        $sanitizeRichHtml = function ($value) use ($allowedHtml, $htmlValue): string {
+        // ✅ UPDATED: run do_shortcode + remove script/style blocks + then strip_tags
+        $sanitizeRichHtml = function ($value) use ($allowedHtml, $htmlValue, $removeScriptStyleBlocks): string {
             $html = trim($htmlValue($value));
             if ($html === '') {
                 return '';
             }
+
+            if (function_exists('do_shortcode')) {
+                try {
+                    $html = do_shortcode($html, ['media' => $GLOBALS['media'] ?? null]);
+                } catch (\Throwable $e) {
+                    // ignore
+                }
+            }
+
+            $html = $removeScriptStyleBlocks((string) $html);
 
             return strip_tags($html, $allowedHtml);
         };
@@ -179,16 +206,26 @@
         // ✅ Frontend meta (from meta.frontend.*)
         // -----------------------------
         $metaTitleRaw = (string) data_get($meta, 'frontend.meta_title', '');
-        $metaTitle = trim(
-            function_exists('do_shortcode')
-                ? strip_tags(do_shortcode($metaTitleRaw, ['media' => $media]))
-                : $metaTitleRaw,
-        );
+        if (function_exists('do_shortcode')) {
+            try {
+                $metaTitleRaw = do_shortcode($metaTitleRaw, ['media' => $media]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+        $metaTitleRaw = $removeScriptStyleBlocks((string) $metaTitleRaw);
+        $metaTitle = trim(strip_tags($metaTitleRaw));
 
         $metaDescRaw = (string) data_get($meta, 'frontend.meta_description', '');
-        $metaDescHtml = $sanitizeRichHtml(
-            function_exists('do_shortcode') ? do_shortcode($metaDescRaw, ['media' => $media]) : $metaDescRaw,
-        );
+        if (function_exists('do_shortcode')) {
+            try {
+                $metaDescRaw = do_shortcode($metaDescRaw, ['media' => $media]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+        $metaDescRaw = $removeScriptStyleBlocks((string) $metaDescRaw);
+        $metaDescHtml = strip_tags($metaDescRaw, $allowedHtml);
 
         // -----------------------------
         // Base title + hero text (SEO-correct)
@@ -198,11 +235,16 @@
         $title = trim($title) !== '' ? trim($title) : 'Attachment';
 
         // Description (Product) is HTML, Caption is plain text
-        $heroDescHtml = $sanitizeRichHtml(
-            function_exists('do_shortcode')
-                ? do_shortcode((string) ($media->description ?? ''), ['media' => $media])
-                : (string) ($media->description ?? ''),
-        );
+        $heroDescRaw = (string) ($media->description ?? '');
+        if (function_exists('do_shortcode')) {
+            try {
+                $heroDescRaw = do_shortcode($heroDescRaw, ['media' => $media]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+        $heroDescRaw = $removeScriptStyleBlocks((string) $heroDescRaw);
+        $heroDescHtml = strip_tags($heroDescRaw, $allowedHtml);
 
         $heroCaption = trim($textValue($media->caption ?? ''));
 
