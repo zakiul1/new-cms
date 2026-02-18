@@ -90,4 +90,5 @@ add_action(HookPoints::CMS_ENQUEUE_ASSETS, function () {
     if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
         \Plugins\ContactForm\Cart\CartAssets::enqueue();
     }
+
 });
