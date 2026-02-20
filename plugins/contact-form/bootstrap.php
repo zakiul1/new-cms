@@ -12,6 +12,9 @@ require_once __DIR__ . '/src/ContactSubmission.php';
 require_once __DIR__ . '/src/ContactLead.php';
 require_once __DIR__ . '/src/Support/Installer.php';
 
+// ✅ add this
+require_once __DIR__ . '/src/Console/PruneContactSubmissionsCommand.php';
+
 // ✅ services
 require_once __DIR__ . '/src/Services/EDeskClient.php';
 require_once __DIR__ . '/src/Services/SubmissionSender.php';

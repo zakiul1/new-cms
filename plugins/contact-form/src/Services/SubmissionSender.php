@@ -151,39 +151,56 @@ class SubmissionSender
                 $rawSubject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
             }
 
-            // ✅ Build items table HTML (image left, title right, title is clickable link)
+            // ✅ Build items table HTML
             $itemsTableHtml = '';
             if ($isCartSubmit) {
-                $itemsTableHtml .= '<table border="1" cellpadding="10" cellspacing="0" style="border-collapse:collapse;width:100%;">';
+                // table-layout fixed helps ellipsis work reliably in many viewers
+                $itemsTableHtml .= '<table border="1" cellpadding="10" cellspacing="0" style="border-collapse:collapse;width:100%;table-layout:fixed;">';
                 $itemsTableHtml .= '<tbody>';
 
                 foreach ($normalizedItems as $item) {
-                    $title = (string) ($item['title'] ?? '');
-                    $url = (string) ($item['url'] ?? '');
-                    $image = (string) ($item['image'] ?? '');
+                    $title = trim((string) ($item['title'] ?? ''));
+                    $url = trim((string) ($item['url'] ?? ''));
+                    $image = trim((string) ($item['image'] ?? ''));
+
+                    if ($title === '') {
+                        $title = 'Item';
+                    }
 
                     $itemsTableHtml .= '<tr>';
 
-                    // left image
+                    // left image (clickable)
                     $itemsTableHtml .= '<td style="width:120px;vertical-align:middle;">';
                     if ($image !== '') {
-                        $itemsTableHtml .= '<img src="' . e($image) . '" alt="" style="width:110px;height:auto;display:block;">';
+                        if ($url !== '') {
+                            $itemsTableHtml .= '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer" style="display:inline-block;">'
+                                . '<img src="' . e($image) . '" alt="" style="width:110px;height:auto;display:block;">'
+                                . '</a>';
+                        } else {
+                            $itemsTableHtml .= '<img src="' . e($image) . '" alt="" style="width:110px;height:auto;display:block;">';
+                        }
                     } else {
                         $itemsTableHtml .= '&nbsp;';
                     }
                     $itemsTableHtml .= '</td>';
 
-                    // right title link
+                    // right title link (ellipsis)
                     $itemsTableHtml .= '<td style="vertical-align:middle;">';
+
+                    $titleHtml =
+                        '<span style="display:inline-block;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;">'
+                        . e($title) .
+                        '</span>';
+
                     if ($url !== '') {
-                        $itemsTableHtml .= '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#000;">'
-                            . e($title) .
+                        $itemsTableHtml .= '<a href="' . e($url) . '" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#000;display:inline-block;max-width:420px;">'
+                            . $titleHtml .
                             '</a>';
                     } else {
-                        $itemsTableHtml .= e($title);
+                        $itemsTableHtml .= $titleHtml;
                     }
-                    $itemsTableHtml .= '</td>';
 
+                    $itemsTableHtml .= '</td>';
                     $itemsTableHtml .= '</tr>';
                 }
 
@@ -259,7 +276,7 @@ class SubmissionSender
             app(EDeskClient::class)->send($apiUrl, $apiKey, $payload);
 
             $s->status = 'sent';
-            $s->sent_at = now();     // ✅ used by prune rule (delete sent after 24h)
+            $s->sent_at = now(); // ✅ used by prune rule (delete sent after 24h)
             $s->last_error = null;
             $s->next_retry_at = null;
             $s->save();

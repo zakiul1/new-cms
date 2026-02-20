@@ -3,24 +3,28 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\MediaCategoryResource\Pages;
+use App\Models\Media;
 use App\Models\Taxonomy;
 use App\Models\Term;
+use BackedEnum;
+use Filament\Actions\BulkAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\DeleteAction;
 use UnitEnum;
-use BackedEnum;
 
 class MediaCategoryResource extends Resource
 {
@@ -55,7 +59,11 @@ class MediaCategoryResource extends Resource
         $taxonomyId = static::mediaCategoryTaxonomyId();
 
         return parent::getEloquentQuery()
-            ->where('taxonomy_id', $taxonomyId);
+            ->where('taxonomy_id', $taxonomyId)
+            // ✅ NEW: preload media count for "Name (25)"
+            ->withCount([
+                'media as items_count',
+            ]);
     }
 
     public static function form(Schema $schema): Schema
@@ -88,7 +96,6 @@ class MediaCategoryResource extends Resource
                             ->maxLength(255)
                             ->helperText('Defaults to Name. You can change it.'),
 
-
                         TextInput::make('slug')
                             ->label('Slug (optional)')
                             ->maxLength(255)
@@ -104,7 +111,6 @@ class MediaCategoryResource extends Resource
                             ])
                             ->default('public')
                             ->required(),
-
 
                         Select::make('parent_id')
                             ->label('Parent (optional)')
@@ -130,10 +136,21 @@ class MediaCategoryResource extends Resource
         return $table
             ->defaultSort('name')
             ->columns([
+                // ✅ NEW: ID column
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('name')
                     ->label('Name')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    // ✅ NEW: "T-shirt (25)"
+                    ->formatStateUsing(function (string $state, Term $record): string {
+                        $count = (int) ($record->items_count ?? 0);
+                        return "{$state} ({$count})";
+                    }),
 
                 TextColumn::make('slug')
                     ->label('Slug')
@@ -143,17 +160,129 @@ class MediaCategoryResource extends Resource
                 TextColumn::make('parent.name')
                     ->label('Parent')
                     ->toggleable(),
+
                 TextColumn::make('visibility')
                     ->label('Visibility')
                     ->badge()
                     ->sortable(),
-
             ])
             ->actions([
                 EditAction::make(),
                 DeleteAction::make(),
             ])
             ->bulkActions([
+                // ✅ NEW: Copy media items from selected categories → target category
+                BulkAction::make('copyItemsToCategory')
+                    ->label('Copy items to…')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->form([
+                        Select::make('target_term_id')
+                            ->label('Target media category')
+                            ->required()
+                            ->searchable()
+                            ->options(function (): array {
+                                $taxonomyId = static::mediaCategoryTaxonomyId();
+
+                                return Term::query()
+                                    ->where('taxonomy_id', $taxonomyId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            }),
+                    ])
+                    ->action(function (Collection $records, array $data): void {
+                        $targetId = (int) $data['target_term_id'];
+
+                        if ($records->isEmpty()) {
+                            return;
+                        }
+
+                        $sourceIds = $records->pluck('id')->map(fn($v) => (int) $v)->values()->all();
+
+                        // All media IDs in ANY selected categories
+                        $mediaIds = DB::table('termables')
+                            ->whereIn('term_id', $sourceIds)
+                            ->where('termable_type', Media::class)
+                            ->pluck('termable_id')
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        if (empty($mediaIds)) {
+                            return;
+                        }
+
+                        // Attach to target without detaching from source categories
+                        $rows = array_map(fn($mediaId) => [
+                            'term_id' => $targetId,
+                            'termable_type' => Media::class,
+                            'termable_id' => (int) $mediaId,
+                        ], $mediaIds);
+
+                        DB::table('termables')->insertOrIgnore($rows);
+                    }),
+
+                // ✅ NEW: Move media items from selected categories → target category
+                BulkAction::make('moveItemsToCategory')
+                    ->label('Move items to…')
+                    ->icon('heroicon-o-arrow-right-circle')
+                    ->color('warning')
+                    ->form([
+                        Select::make('target_term_id')
+                            ->label('Target media category')
+                            ->required()
+                            ->searchable()
+                            ->options(function (): array {
+                                $taxonomyId = static::mediaCategoryTaxonomyId();
+
+                                return Term::query()
+                                    ->where('taxonomy_id', $taxonomyId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            }),
+                    ])
+                    ->action(function (Collection $records, array $data): void {
+                        $targetId = (int) $data['target_term_id'];
+
+                        if ($records->isEmpty()) {
+                            return;
+                        }
+
+                        $sourceIds = $records->pluck('id')->map(fn($v) => (int) $v)->values()->all();
+
+                        // All media IDs in ANY selected categories
+                        $mediaIds = DB::table('termables')
+                            ->whereIn('term_id', $sourceIds)
+                            ->where('termable_type', Media::class)
+                            ->pluck('termable_id')
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        if (empty($mediaIds)) {
+                            return;
+                        }
+
+                        DB::transaction(function () use ($sourceIds, $targetId, $mediaIds) {
+                            // 1) Detach ONLY the selected categories from these media items
+                            DB::table('termables')
+                                ->whereIn('term_id', $sourceIds)
+                                ->where('termable_type', Media::class)
+                                ->whereIn('termable_id', $mediaIds)
+                                ->delete();
+
+                            // 2) Attach to target category
+                            $rows = array_map(fn($mediaId) => [
+                                'term_id' => $targetId,
+                                'termable_type' => Media::class,
+                                'termable_id' => (int) $mediaId,
+                            ], $mediaIds);
+
+                            DB::table('termables')->insertOrIgnore($rows);
+                        });
+                    }),
+
                 DeleteBulkAction::make(),
             ]);
     }

@@ -1,0 +1,6 @@
+{
+  "name": "Media Name Changer",
+  "slug": "media-name-changer",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php"
+}

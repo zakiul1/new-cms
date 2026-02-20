@@ -7,25 +7,24 @@ use App\Models\Media;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\Layout\View as LayoutView;
+use Filament\Tables\Columns\TagsColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\HtmlString;
-use Filament\Tables\Columns\TagsColumn;
-use Filament\Actions\BulkAction;
-use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Collection;
-
-
+use Illuminate\Support\HtmlString;
 
 class ListMedia extends ListRecords
 {
@@ -84,20 +83,6 @@ class ListMedia extends ListRecords
         $this->resetTablePage();
     }
 
-    protected function folderOptions(): array
-    {
-        $taxonomyId = Taxonomy::query()->where('key', 'media_folder')->value('id');
-        if (!$taxonomyId) {
-            return [];
-        }
-
-        return Term::query()
-            ->where('taxonomy_id', $taxonomyId)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
-    }
-
     protected function categoryOptions(): array
     {
         $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
@@ -115,11 +100,6 @@ class ListMedia extends ListRecords
     protected function mediaCategoryTaxonomyId(): ?int
     {
         return Taxonomy::query()->where('key', 'media_category')->value('id');
-    }
-
-    protected function mediaFolderTaxonomyId(): ?int
-    {
-        return Taxonomy::query()->where('key', 'media_folder')->value('id');
     }
 
     protected function buildBulkActions(): array
@@ -190,7 +170,7 @@ class ListMedia extends ListRecords
                         return;
                     }
 
-                    // Only detach media_category terms (do NOT touch media_folder)
+                    // Detach ONLY media_category terms (don’t touch other taxonomies)
                     $allMediaCategoryTermIds = Term::query()
                         ->where('taxonomy_id', $taxonomyId)
                         ->pluck('id')
@@ -211,7 +191,6 @@ class ListMedia extends ListRecords
         ];
     }
 
-
     protected function frontendUrl(Media $record): string
     {
         return filled($record->slug)
@@ -219,37 +198,6 @@ class ListMedia extends ListRecords
             : $record->url();
     }
 
-    /**
-     * ✅ WP-like Trash link handler (works without Actions column)
-     */
-    public function trashMedia(int $id): void
-    {
-        $record = Media::query()->find($id);
-
-        if (!$record) {
-            Notification::make()->title('Media not found')->danger()->send();
-            return;
-        }
-
-        try {
-            $record->delete();
-
-            Notification::make()
-                ->title('Moved to Trash')
-                ->success()
-                ->send();
-
-            $this->resetTable();
-        } catch (\Throwable $e) {
-            Notification::make()
-                ->title('Delete failed')
-                ->body($e->getMessage())
-                ->danger()
-                ->send();
-        }
-    }
-
-    // --- Header Actions (WP-like) ---
     protected function getHeaderActions(): array
     {
         return [
@@ -283,7 +231,6 @@ class ListMedia extends ListRecords
     {
         $bulkActions = $this->buildBulkActions();
         $catTaxId = $this->mediaCategoryTaxonomyId();
-        $folderTaxId = $this->mediaFolderTaxonomyId();
 
         $table = $table
             ->modifyQueryUsing(fn(Builder $query) => $query->with(['variantRecords', 'terms']))
@@ -293,6 +240,14 @@ class ListMedia extends ListRecords
             ->persistFiltersInSession()
             ->paginationPageOptions([24, 36, 48, 72])
             ->defaultPaginationPageOption(36)
+
+            // ✅ Filters always visible
+            ->filtersLayout(FiltersLayout::AboveContent)
+            ->deferFilters(false)
+
+            // ✅ Ensure selection UI is enabled (so bulk actions show as selection actions)
+            ->selectable()
+
             ->filters([
                 SelectFilter::make('type')
                     ->label('Type')
@@ -343,32 +298,6 @@ class ListMedia extends ListRecords
 
                         return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', (int) $value));
                     }),
-
-                SelectFilter::make('folder')
-                    ->label('Folder')
-                    ->searchable()
-                    ->preload()
-                    ->options(fn(): array => ['__none__' => 'No folder'] + $this->folderOptions())
-                    ->query(function (Builder $query, array $data) use ($folderTaxId) {
-                        $value = $data['value'] ?? null;
-
-                        if (!filled($value)) {
-                            return $query;
-                        }
-
-                        if ($value === '__none__') {
-                            if (!$folderTaxId) {
-                                return $query;
-                            }
-
-                            return $query->whereDoesntHave(
-                                'terms',
-                                fn(Builder $q) => $q->where('terms.taxonomy_id', $folderTaxId)
-                            );
-                        }
-
-                        return $query->whereHas('terms', fn(Builder $q) => $q->where('terms.id', (int) $value));
-                    }),
             ]);
 
         // ✅ GRID MODE
@@ -389,14 +318,12 @@ class ListMedia extends ListRecords
                 ])
                 ->recordUrl(fn(Media $record) => MediaResource::getUrl('edit', ['record' => $record]))
                 ->recordAction(null)
-                ->actions([
-
-                ])
-                // ✅ no extra column
-                ->bulkActions($this->selectMode ? $bulkActions : []);
+                ->actions([])
+                // ✅ IMPORTANT: keep bulk actions available (Filament will render them in selection bar)
+                ->bulkActions($bulkActions);
         }
 
-        // ✅ LIST MODE (NO actions column, WP-like actions under title)
+        // ✅ LIST MODE
         return $table
             ->recordClasses(fn() => 'group')
             ->columns([
@@ -425,7 +352,6 @@ class ListMedia extends ListRecords
                         return new HtmlString($actions);
                     }),
 
-
                 TagsColumn::make('categories')
                     ->label('Categories')
                     ->state(function (Media $record) use ($catTaxId): array {
@@ -441,7 +367,7 @@ class ListMedia extends ListRecords
                             ->values()
                             ->all();
                     })
-                    ->separator(',') // optional (UI only)
+                    ->separator(',')
                     ->placeholder('—')
                     ->toggleable(),
 
@@ -467,7 +393,7 @@ class ListMedia extends ListRecords
                     ->icon('heroicon-o-trash')
                     ->requiresConfirmation()
                     ->successNotificationTitle('Moved to trash'),
-            ])          // ✅ removes the last action column
+            ])
             ->bulkActions($bulkActions);
     }
 }

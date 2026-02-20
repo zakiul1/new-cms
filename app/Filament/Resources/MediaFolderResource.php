@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 class MediaFolderResource extends Resource
 {
     protected static ?string $model = Term::class;
+    protected static bool $shouldRegisterNavigation = false;
 
     // ✅ Filament v5 expects: BackedEnum|string|null
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-folder';

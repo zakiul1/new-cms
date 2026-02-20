@@ -26,7 +26,11 @@ class CategoryResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->whereHas('taxonomy', fn(Builder $q) => $q->where('key', 'category'));
+            ->whereHas('taxonomy', fn(Builder $q) => $q->where('key', 'category'))
+            ->withCount([
+                // This creates: items_count on each Term record
+                'posts as items_count' => fn(Builder $q) => $q->where('type', 'post'),
+            ]);
     }
 
     public static function form(Schema $schema): Schema
