@@ -75,6 +75,13 @@ $jsonld = $seo['jsonld'] ?? null;
     @endif
 
     {!! cms_assets()->renderStyles('frontend') !!}
+    <style>
+        /* Hide ContactForm header cart icon (keep floating cart pill/modal) */
+        #cf-cart-icon-wrap,
+        .cf-cart-icon-wrap {
+            display: none !important;
+        }
+    </style>
     {!! theme_customizer_css() !!}
 
     {{-- Header + menu CSS (theme-wide) --}}

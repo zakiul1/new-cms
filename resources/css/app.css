@@ -10,6 +10,16 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+
+/* Hide header cart icon (keep floating cart) */
+#cf-cart-icon-wrap,
+.cf-cart-icon-wrap,
+#cf-cart-icon,
+.cf-cart-icon {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 .products-grid {
   grid-template-columns: repeat(var(--cols-mobile, 2), minmax(0, 1fr));
 }

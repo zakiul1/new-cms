@@ -111,6 +111,7 @@ class ManageCmsSettings extends Page
             'active_theme' => $activeTheme,
 
             // Global Contact (Siatex header)
+            'status' => $settings->get('core', 'status', ''),
             'contact_phone' => $settings->get('core', 'contact_phone', ''),
             'contact_email' => $settings->get('core', 'contact_email', ''),
 
@@ -193,6 +194,10 @@ class ManageCmsSettings extends Page
                         ->helperText('Example: cms.test OR siatexglobal.com OR https://www.siatexglobal.com'),
 
                     TextInput::make('timezone')->required()->maxLength(64),
+
+                    TextInput::make('status')
+                        ->label('Status')
+                        ->maxLength(120),
 
                     TextInput::make('contact_phone')
                         ->label('Contact Phone')
@@ -319,6 +324,9 @@ class ManageCmsSettings extends Page
             (string) $settings->get('core', 'site_url', rtrim((string) config('app.url'), '/'))
         );
 
+        // ✅ Snapshot current status (header/topbar uses it)
+        $currentStatus = (string) $settings->get('core', 'status', '');
+
         // ✅ Normalize site url (WP-like, dev-safe)
         $siteUrl = $this->normalizeSiteUrl((string) ($data['site_url'] ?? ''));
 
@@ -328,6 +336,8 @@ class ManageCmsSettings extends Page
         $settings->set('core', 'timezone', (string) ($data['timezone'] ?? ''));
 
         // Contact
+        $status = (string) ($data['status'] ?? '');
+        $settings->set('core', 'status', $status);
         $settings->set('core', 'contact_phone', (string) ($data['contact_phone'] ?? ''));
         $settings->set('core', 'contact_email', (string) ($data['contact_email'] ?? ''));
 
@@ -374,6 +384,11 @@ class ManageCmsSettings extends Page
 
         // ✅ If site_url changed, bump render cache (sitemap/canonicals/menus may include full URLs)
         if (rtrim($siteUrl, '/') !== rtrim($currentSiteUrl, '/')) {
+            $renderChanged = true;
+        }
+
+        // ✅ If status changed, bump render cache (header/topbar/footer may include it)
+        if ($status !== $currentStatus) {
             $renderChanged = true;
         }
 

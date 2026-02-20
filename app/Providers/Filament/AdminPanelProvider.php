@@ -21,13 +21,15 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        $frontendHomeUrl = url('/');
+
         $panel = $panel
             ->default()
             ->id('admin')
@@ -92,16 +94,58 @@ class AdminPanelProvider extends PanelProvider
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->brandName('Siatex CMS')
+            ->homeUrl($frontendHomeUrl);
 
         /**
-         * ✅ No-refresh toggle (Livewire component) before global search
+         * ✅ Custom brand link (LEFT) - always opens in new tab
+         */
+        $panel->renderHook(PanelsRenderHook::TOPBAR_START, function () use ($frontendHomeUrl): string {
+            $u = e($frontendHomeUrl);
+
+            return <<<HTML
+<div class="flex items-center">
+    <a href="{$u}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="text-xl font-bold tracking-tight"
+       style="line-height: 1;">
+        Siatex CMS
+    </a>
+</div>
+HTML;
+        });
+
+        /**
+         * ✅ Hide Filament default topbar brand/logo (RIGHT) + disable click
+         */
+        $panel->renderHook(PanelsRenderHook::HEAD_END, function (): string {
+            return <<<HTML
+<style>
+/* Hide Filament default brand/logo ONLY in the TOPBAR (right-side one) */
+.fi-topbar .fi-logo,
+.fi-topbar .fi-brand {
+    display: none !important;
+}
+
+/* Safety: if any remaining anchor exists, make it non-clickable */
+.fi-topbar .fi-logo a,
+.fi-topbar .fi-brand a,
+.fi-topbar a.fi-logo {
+    pointer-events: none !important;
+}
+</style>
+HTML;
+        });
+
+        /**
+         * ✅ Your existing no-refresh toggle
          */
         $panel->renderHook(PanelsRenderHook::GLOBAL_SEARCH_BEFORE, function (): string {
             return Blade::render('@livewire("filament.toggle-frontend-admin-bar")');
         });
 
-        // ✅ Allow plugins to register Filament pages/resources/widgets at panel build time
         app(Hooks::class)->doAction(HookPoints::FILAMENT_ADMIN_PANEL, $panel);
 
         return $panel;

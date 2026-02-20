@@ -1,6 +1,6 @@
 @php
     $settings = app(\App\Cms\Core\Settings::class);
-
+    $status = (string) $settings->get('status', '', 'core');
     $phone = (string) $settings->get('contact_phone', '', 'core');
     $email = (string) $settings->get('contact_email', '', 'core');
 
@@ -33,6 +33,13 @@
             </a>
 
             <div class="flex items-center gap-6 text-sm text-slate-700 data-cms-header-actions">
+
+                @if ($status !== '')
+                    <div class="text- text-slate-600">
+                        {{ $status }}
+                    </div>
+                @endif
+
                 @if ($phone !== '')
                     <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}"
                         class="flex items-center gap-2 hover:text-slate-900">
