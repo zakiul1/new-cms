@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Menus\MenuItemFactory;
 use App\Models\Menu;
 use App\Models\MenuAssignment;
@@ -17,13 +18,24 @@ class MenuBuilder extends Component
 {
     public ?int $activeMenuId = null;
 
+    /**
+     * Tabs for WP-like UI (you will use it in blade):
+     * - edit       : Edit Menus (structure + add items)
+     * - locations  : Manage Locations
+     * - create     : Create New Menu
+     */
+    public string $activeTab = 'edit';
+
     // Menu actions UI
     public string $newMenuName = '';
     public bool $isRenaming = false;
     public string $renameValue = '';
 
-    // ✅ Location assignment
+    // ✅ Location assignment (current persisted assignment)
     public ?string $activeLocationKey = null;
+
+    // ✅ Location draft (only saved when user clicks Save)
+    public ?string $draftLocationKey = null;
 
     // Left panel search
     public string $searchPosts = '';
@@ -39,34 +51,39 @@ class MenuBuilder extends Component
     public string $customLabel = '';
     public string $customUrl = '';
 
-    // Right side state
-    public array $tree = [];       // nested structure
-    public array $items = [];      // editable state by id
+    // Right side state (DRAFT state now)
+    public array $tree = [];       // nested structure (draft)
+    public array $items = [];      // editable state by id (draft)
     public array $collapsed = [];  // collapse/expand per item id
 
-    // Autosave status
-    public array $savedAt = [];    // timestamps by id
+    // Unsaved changes flags
+    public bool $hasUnsavedChanges = false;
+    public bool $structureDirty = false;
+    public bool $itemsDirty = false;
+    public bool $locationDirty = false;
 
-   public function mount(): void
-{
-    $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
+    // Optional UI helpers
+    public ?int $lastSavedAt = null;     // timestamp of last Save Menu
+    public ?int $lastSavedAtLocation = null;
 
-    $this->activeLocationKey = $this->activeMenuId
-        ? MenuAssignment::query()->where('menu_id', $this->activeMenuId)->value('location_key')
-        : null;
+    public function mount(): void
+    {
+        $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
 
-    $this->reload();
-}
+        $this->activeLocationKey = $this->activeMenuId
+            ? MenuAssignment::query()->where('menu_id', $this->activeMenuId)->value('location_key')
+            : null;
 
+        $this->draftLocationKey = $this->activeLocationKey;
+
+        $this->reload();
+    }
 
     public function render()
     {
         return view('livewire.menu-builder', [
             'menus' => Menu::query()->orderBy('name')->get(),
-
-            // ✅ REQUIRED for location dropdown
             'locations' => MenuLocation::query()->orderBy('label')->get(),
-
             'posts' => $this->queryPosts('post'),
             'pages' => $this->queryPosts('page'),
             'taxonomies' => Taxonomy::query()->orderBy('label')->get(),
@@ -75,9 +92,61 @@ class MenuBuilder extends Component
     }
 
     // -------------------------
+    // Toast helper
+    // -------------------------
+    private function toast(string $type, string $title, string $message, int $timeout = 2500): void
+    {
+        $this->dispatch('toast', [
+            'type' => $type,   // success|error|warning|info
+            'title' => $title,
+            'message' => $message,
+            'timeout' => $timeout,
+        ]);
+    }
+
+    // -------------------------
+    // ✅ Cache invalidation helpers (MENU)
+    // -------------------------
+    private function bumpMenuLocationCache(?string $locationKey): void
+    {
+        $locationKey = $locationKey !== null ? trim($locationKey) : null;
+        if ($locationKey === null || $locationKey === '') {
+            return;
+        }
+
+        /** @var CmsCacheVersions $versions */
+        $versions = app(CmsCacheVersions::class);
+        $versions->bump('menu_location', (string) $locationKey);
+    }
+
+    private function bumpAllLocationsForMenu(int $menuId): void
+    {
+        /** @var CmsCacheVersions $versions */
+        $versions = app(CmsCacheVersions::class);
+
+        $keys = MenuAssignment::query()
+            ->where('menu_id', $menuId)
+            ->pluck('location_key')
+            ->unique()
+            ->filter(fn($k) => is_string($k) && trim($k) !== '');
+
+        foreach ($keys as $k) {
+            $versions->bump('menu_location', (string) $k);
+        }
+    }
+
+    // -------------------------
+    // Tabs
+    // -------------------------
+    public function setTab(string $tab): void
+    {
+        $allowed = ['edit', 'locations', 'create'];
+        $this->activeTab = in_array($tab, $allowed, true) ? $tab : 'edit';
+    }
+
+    // -------------------------
     // Menu header actions
     // -------------------------
-
     public function selectMenu(int $menuId): void
     {
         $this->activeMenuId = $menuId;
@@ -87,14 +156,23 @@ class MenuBuilder extends Component
             ->where('menu_id', $this->activeMenuId)
             ->value('location_key');
 
+        $this->draftLocationKey = $this->activeLocationKey;
+
         $this->reload();
+        $this->toast('info', 'Menu selected', 'You are now editing a different menu.');
     }
 
     public function createMenu(): void
     {
+        $this->saveCreateMenu();
+    }
+
+    public function saveCreateMenu(): void
+    {
         $name = trim($this->newMenuName);
         if ($name === '') {
             $this->addError('newMenuName', 'Menu name is required.');
+            $this->toast('error', 'Validation error', 'Menu name is required.', 4000);
             return;
         }
 
@@ -103,10 +181,13 @@ class MenuBuilder extends Component
         $this->newMenuName = '';
         $this->activeMenuId = (int) $menu->id;
 
-        // ✅ reset location selection for new menu
         $this->activeLocationKey = null;
+        $this->draftLocationKey = null;
 
         $this->reload();
+        $this->setTab('edit');
+
+        $this->toast('success', 'Menu created', 'New menu created successfully.');
     }
 
     public function startRename(): void
@@ -135,12 +216,15 @@ class MenuBuilder extends Component
         $name = trim($this->renameValue);
         if ($name === '') {
             $this->addError('renameValue', 'Menu name is required.');
+            $this->toast('error', 'Validation error', 'Menu name is required.', 4000);
             return;
         }
 
         Menu::query()->whereKey($this->activeMenuId)->update(['name' => $name]);
         $this->isRenaming = false;
         $this->reload();
+
+        $this->toast('success', 'Menu renamed', 'Menu name updated successfully.');
     }
 
     public function duplicateActiveMenu(): void
@@ -191,11 +275,12 @@ class MenuBuilder extends Component
 
             $this->activeMenuId = (int) $new->id;
 
-            // ✅ copied menu starts unassigned (optional)
             $this->activeLocationKey = null;
+            $this->draftLocationKey = null;
         });
 
         $this->reload();
+        $this->toast('success', 'Menu duplicated', 'A copy of the menu has been created.');
     }
 
     public function deleteActiveMenu(): void
@@ -204,13 +289,23 @@ class MenuBuilder extends Component
             return;
         }
 
-        DB::transaction(function () {
-            // remove assignments too (cleanup)
-            MenuAssignment::query()->where('menu_id', $this->activeMenuId)->delete();
+        $menuId = (int) $this->activeMenuId;
+        $oldLocationKeys = MenuAssignment::query()
+            ->where('menu_id', $menuId)
+            ->pluck('location_key')
+            ->unique()
+            ->all();
 
-            MenuItem::query()->where('menu_id', $this->activeMenuId)->delete();
-            Menu::query()->whereKey($this->activeMenuId)->delete();
+        DB::transaction(function () use ($menuId) {
+            MenuAssignment::query()->where('menu_id', $menuId)->delete();
+            MenuItem::query()->where('menu_id', $menuId)->delete();
+            Menu::query()->whereKey($menuId)->delete();
         });
+
+        // Bust cache for any locations that were pointing to this menu
+        foreach ($oldLocationKeys as $k) {
+            $this->bumpMenuLocationCache(is_string($k) ? $k : null);
+        }
 
         $this->activeMenuId = Menu::query()->orderBy('name')->value('id');
 
@@ -218,50 +313,88 @@ class MenuBuilder extends Component
             ? MenuAssignment::query()->where('menu_id', $this->activeMenuId)->value('location_key')
             : null;
 
+        $this->draftLocationKey = $this->activeLocationKey;
+
         $this->reload();
+        $this->toast('success', 'Menu deleted', 'Menu has been deleted.');
     }
 
     // -------------------------
-    // ✅ Location assignment
+    // ✅ Location assignment (DRAFT + SAVE)
     // -------------------------
+    public function setDraftLocation(?string $locationKey): void
+    {
+        $locationKey = $locationKey !== null ? trim($locationKey) : null;
+        $locationKey = ($locationKey === '') ? null : $locationKey;
 
-  public function assignLocation(string $locationKey): void
-{
-    if (!$this->activeMenuId) {
-        return;
+        $this->draftLocationKey = $locationKey;
+
+        $this->locationDirty = ($this->draftLocationKey !== $this->activeLocationKey);
+        $this->syncUnsavedFlag();
     }
 
-    $locationKey = trim($locationKey);
+    public function saveLocationAssignment(): void
+    {
+        if (!$this->activeMenuId) {
+            return;
+        }
 
-    // ✅ Unassign: remove any assignment for this menu
-    if ($locationKey === '') {
-        MenuAssignment::query()
-            ->where('menu_id', $this->activeMenuId)
-            ->delete();
+        if (!$this->locationDirty) {
+            $this->toast('info', 'No changes', 'Nothing to save for menu location.');
+            return;
+        }
 
-        $this->activeLocationKey = null;
-        return;
+        $oldLocationKey = $this->activeLocationKey;
+        $locationKey = $this->draftLocationKey;
+
+        if ($locationKey === null) {
+            MenuAssignment::query()
+                ->where('menu_id', $this->activeMenuId)
+                ->delete();
+
+            $this->activeLocationKey = null;
+            $this->draftLocationKey = null;
+
+            $this->locationDirty = false;
+            $this->lastSavedAtLocation = time();
+            $this->syncUnsavedFlag();
+
+            // Bust cache for old location (it was unassigned)
+            $this->bumpMenuLocationCache($oldLocationKey);
+
+            $this->toast('success', 'Location saved', 'Menu location has been unassigned.');
+            return;
+        }
+
+        DB::transaction(function () use ($locationKey) {
+            MenuAssignment::query()
+                ->where('menu_id', $this->activeMenuId)
+                ->where('location_key', '!=', $locationKey)
+                ->delete();
+
+            MenuAssignment::query()->updateOrCreate(
+                ['location_key' => $locationKey],
+                ['menu_id' => $this->activeMenuId],
+            );
+        });
+
+        $this->activeLocationKey = $locationKey;
+        $this->draftLocationKey = $locationKey;
+
+        $this->locationDirty = false;
+        $this->lastSavedAtLocation = time();
+        $this->syncUnsavedFlag();
+
+        // Bust cache for both old + new location keys (covers re-assign)
+        $this->bumpMenuLocationCache($oldLocationKey);
+        $this->bumpMenuLocationCache($locationKey);
+
+        $this->toast('success', 'Location saved', 'Menu location assignment saved.');
     }
-
-    // ✅ If this menu was assigned to another location, remove it first (1 menu = 1 location)
-    MenuAssignment::query()
-        ->where('menu_id', $this->activeMenuId)
-        ->where('location_key', '!=', $locationKey)
-        ->delete();
-
-    // ✅ Assign location (1 location = 1 menu)
-    MenuAssignment::query()->updateOrCreate(
-        ['location_key' => $locationKey],
-        ['menu_id' => $this->activeMenuId],
-    );
-
-    $this->activeLocationKey = $locationKey;
-}
 
     // -------------------------
     // Left panel add actions
     // -------------------------
-
     public function addSelectedPosts(): void
     {
         $this->addPostsByIds($this->selectedPostIds);
@@ -280,8 +413,9 @@ class MenuBuilder extends Component
             return;
         }
 
-        $ids = array_values(array_filter(array_map('intval', $this->selectedTermIds), fn ($v) => $v > 0));
+        $ids = array_values(array_filter(array_map('intval', $this->selectedTermIds), fn($v) => $v > 0));
         if ($ids === []) {
+            $this->toast('warning', 'No selection', 'Please select at least one term to add.');
             return;
         }
 
@@ -304,8 +438,13 @@ class MenuBuilder extends Component
             }
         });
 
+        // Bust cache for locations that use this menu
+        $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
+
         $this->selectedTermIds = [];
         $this->reload();
+
+        $this->toast('success', 'Items added', 'Selected terms were added to the menu.');
     }
 
     public function addCustomLink(): void
@@ -319,6 +458,7 @@ class MenuBuilder extends Component
 
         if ($label === '' || $url === '') {
             $this->addError('customLabel', 'Label and URL are required.');
+            $this->toast('error', 'Validation error', 'Label and URL are required.', 4000);
             return;
         }
 
@@ -337,18 +477,24 @@ class MenuBuilder extends Component
             MenuItem::query()->create($data);
         });
 
+        // Bust cache for locations that use this menu
+        $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
+
         $this->customLabel = '';
         $this->customUrl = '';
         $this->reload();
+
+        $this->toast('success', 'Item added', 'Custom link has been added to the menu.');
     }
 
     // -------------------------
     // Right side actions
     // -------------------------
-
     public function toggleCollapse(int $id): void
     {
-        $this->collapsed[$id] = !($this->collapsed[$id] ?? false);
+        // default should be collapsed = true
+        $current = (bool) ($this->collapsed[$id] ?? true);
+        $this->collapsed[$id] = !$current;
     }
 
     public function removeItem(int $id): void
@@ -361,87 +507,124 @@ class MenuBuilder extends Component
             $this->deleteItemRecursive($id);
         });
 
+        // Bust cache for locations that use this menu
+        $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
+
+        // Keep UI consistent
+        $this->structureDirty = true;
+        $this->itemsDirty = true;
+        $this->syncUnsavedFlag();
+
         $this->reload();
+
+        $this->toast('success', 'Item removed', 'Menu item has been removed.');
     }
 
-    /**
-     * Livewire auto-save
-     * key example: "123.label" or "123.visibility.roles_csv"
-     */
-    public function updatedItems($value, string $key): void
+    public function markItemsDirty(): void
     {
-        $parts = explode('.', $key);
-        $id = (int) ($parts[0] ?? 0);
-        if ($id <= 0) {
-            return;
-        }
-
-        $this->saveItemSilent($id);
+        $this->itemsDirty = true;
+        $this->syncUnsavedFlag();
     }
 
-    public function saveItemSilent(int $id): void
-    {
-        if (!$this->activeMenuId) {
-            return;
-        }
-
-        $row = $this->items[$id] ?? null;
-        if (!is_array($row)) {
-            return;
-        }
-
-        // Persist
-        MenuItem::query()
-            ->where('menu_id', $this->activeMenuId)
-            ->whereKey($id)
-            ->update([
-                'label' => $row['label'] ?? null,
-                'url' => $row['url'] ?? null,
-                'is_enabled' => (bool) ($row['is_enabled'] ?? true),
-
-                'target' => $row['target'] ?? null,
-                'rel' => $row['rel'] ?? null,
-                'css_class' => $row['css_class'] ?? null,
-                'css_id' => $row['css_id'] ?? null,
-                'icon' => $row['icon'] ?? null,
-                'description' => $row['description'] ?? null,
-
-                // keep your existing structure:
-                'visibility' => $row['visibility'] ?? null,
-                'data' => $row['data'] ?? null,
-            ]);
-
-        $this->savedAt[$id] = time();
-    }
-
-    /** Called by JS after drag/drop */
     public function reorder(array $tree): void
     {
         if (!$this->activeMenuId) {
             return;
         }
 
-        DB::transaction(function () use ($tree) {
-            $this->persistTree($tree, null);
-        });
+        $this->tree = $tree;
+        $this->structureDirty = true;
+        $this->syncUnsavedFlag();
+
+        $this->toast('info', 'Structure updated', 'New order applied. Click “Save Menu” to save.');
+    }
+
+    public function saveMenu(): void
+    {
+        if (!$this->activeMenuId) {
+            return;
+        }
+
+        if (!$this->hasUnsavedChanges) {
+            $this->toast('info', 'No changes', 'There is nothing new to save.');
+            return;
+        }
+
+        try {
+            DB::transaction(function () {
+                foreach ($this->items as $id => $row) {
+                    $id = (int) $id;
+                    if ($id <= 0 || !is_array($row)) {
+                        continue;
+                    }
+
+                    MenuItem::query()
+                        ->where('menu_id', $this->activeMenuId)
+                        ->whereKey($id)
+                        ->update([
+                            'label' => $row['label'] ?? null,
+                            'url' => $row['url'] ?? null,
+                            'is_enabled' => (bool) ($row['is_enabled'] ?? true),
+
+                            'target' => $row['target'] ?? null,
+                            'rel' => $row['rel'] ?? null,
+                            'css_class' => $row['css_class'] ?? null,
+                            'css_id' => $row['css_id'] ?? null,
+                            'icon' => $row['icon'] ?? null,
+                            'description' => $row['description'] ?? null,
+
+                            'visibility' => $row['visibility'] ?? null,
+                            'data' => $row['data'] ?? null,
+                        ]);
+                }
+
+                if ($this->structureDirty) {
+                    $this->persistTree($this->tree, null);
+                }
+            });
+        } catch (\Throwable $e) {
+            $this->toast('error', 'Save failed', 'Could not save menu. Please try again.', 4500);
+            throw $e;
+        }
+
+        // ✅ Bust cache for all locations that use this menu
+        $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
+
+        $this->lastSavedAt = time();
+        $this->structureDirty = false;
+        $this->itemsDirty = false;
+        $this->syncUnsavedFlag();
 
         $this->reload();
+
+        $this->toast('success', 'Menu saved', 'Your menu changes have been saved.');
     }
 
     // -------------------------
     // Internals
     // -------------------------
-
     private function reload(): void
     {
         $this->tree = $this->buildTree();
         $this->items = $this->buildItemsState();
 
+        // ✅ Default should be COLLAPSED (true)
         foreach (array_keys($this->items) as $id) {
-            $this->collapsed[$id] = $this->collapsed[$id] ?? false;
+            $this->collapsed[$id] = $this->collapsed[$id] ?? true;
         }
 
+        // reset dirty flags after reload
+        $this->hasUnsavedChanges = false;
+        $this->structureDirty = false;
+        $this->itemsDirty = false;
+        $this->locationDirty = ($this->draftLocationKey !== $this->activeLocationKey);
+
         $this->dispatch('menu-builder-init');
+    }
+
+    private function syncUnsavedFlag(): void
+    {
+        $this->hasUnsavedChanges = ($this->structureDirty || $this->itemsDirty || $this->locationDirty);
     }
 
     private function buildItemsState(): array
@@ -489,7 +672,7 @@ class MenuBuilder extends Component
             ->orderBy('parent_id')
             ->orderBy('sort_order')
             ->get()
-            ->groupBy(fn (MenuItem $i) => $i->parent_id ?: 0);
+            ->groupBy(fn(MenuItem $i) => $i->parent_id ?: 0);
 
         $build = function (int $parentId) use (&$build, $items): array {
             $children = $items->get($parentId, collect());
@@ -570,8 +753,9 @@ class MenuBuilder extends Component
             return;
         }
 
-        $ids = array_values(array_filter(array_map('intval', $ids), fn ($v) => $v > 0));
+        $ids = array_values(array_filter(array_map('intval', $ids), fn($v) => $v > 0));
         if ($ids === []) {
+            $this->toast('warning', 'No selection', 'Please select at least one item to add.');
             return;
         }
 
@@ -594,7 +778,11 @@ class MenuBuilder extends Component
             }
         });
 
+        // Bust cache for locations that use this menu
+        $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
+
         $this->reload();
+        $this->toast('success', 'Items added', 'Selected items were added to the menu.');
     }
 
     private function queryPosts(string $want)

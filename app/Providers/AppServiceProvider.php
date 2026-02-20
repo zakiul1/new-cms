@@ -14,6 +14,10 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 use App\Livewire\Filament\ToggleFrontendAdminBar;
+use App\Models\MenuItem;
+use App\Models\MenuAssignment;
+use App\Observers\MenuItemCacheObserver;
+use App\Observers\MenuAssignmentCacheObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -42,6 +46,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+
+        MenuItem::observe(MenuItemCacheObserver::class);
+        MenuAssignment::observe(MenuAssignmentCacheObserver::class);
         // ✅ SUPER ADMIN BYPASS
         Gate::before(function ($user, $ability) {
             return method_exists($user, 'hasRole') && $user->hasRole('super-admin')

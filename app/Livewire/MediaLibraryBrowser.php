@@ -213,6 +213,13 @@ class MediaLibraryBrowser extends Component
         return $out;
     }
 
+    /**
+     * ✅ UPDATED:
+     * Category options now show hierarchy with "—" indentation:
+     * Parent
+     * — Child
+     * —— Grandchild
+     */
     public function categoryOptions(): array
     {
         $taxId = Taxonomy::query()->where('key', 'media_category')->value('id');
@@ -220,14 +227,68 @@ class MediaLibraryBrowser extends Component
             return ['' => 'All categories'];
         }
 
+        // Need parent_id to build hierarchy
         $terms = Term::query()
             ->where('taxonomy_id', $taxId)
-            ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'parent_id']);
 
         $out = ['' => 'All categories'];
-        foreach ($terms as $t) {
-            $out[(string) $t->id] = (string) $t->name;
+
+        foreach ($this->buildIndentedTerms($terms) as $row) {
+            $out[(string) $row['id']] = (string) $row['label'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Build a flattened, indented list from hierarchical terms.
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Term>  $terms
+     * @return \Illuminate\Support\Collection<int, array{id:int,label:string}>
+     */
+    protected function buildIndentedTerms(Collection $terms): Collection
+    {
+        // Group by parent_id (null => 0)
+        $byParent = $terms->groupBy(fn(Term $t) => (int) ($t->parent_id ?? 0));
+
+        $out = collect();
+
+        $walk = function (int $parentId, int $depth) use (&$walk, $byParent, &$out) {
+            /** @var \Illuminate\Support\Collection<int, Term> $children */
+            $children = $byParent->get($parentId, collect());
+
+            // Sort naturally by name (case-insensitive)
+            $children = $children->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+
+            foreach ($children as $term) {
+                $prefix = $depth > 0 ? str_repeat('—', $depth) . ' ' : '';
+                $out->push([
+                    'id' => (int) $term->id,
+                    'label' => $prefix . $term->name,
+                ]);
+
+                $walk((int) $term->id, $depth + 1);
+            }
+        };
+
+        // Root nodes
+        $walk(0, 0);
+
+        /**
+         * Safety: if there are terms whose parent_id points to a missing parent,
+         * they won't appear in the root walk. Append them at the end (depth 0).
+         */
+        $seen = $out->pluck('id')->map(fn($v) => (int) $v)->all();
+        $missing = $terms->filter(fn(Term $t) => !in_array((int) $t->id, $seen, true))
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        foreach ($missing as $term) {
+            $out->push([
+                'id' => (int) $term->id,
+                'label' => (string) $term->name,
+            ]);
         }
 
         return $out;

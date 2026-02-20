@@ -1,6 +1,4 @@
-<div class="w-full h-full" x-data="{
-    copy(text) { try { navigator.clipboard.writeText(text || ''); } catch (e) {} },
-}">
+<div class="w-full h-full" x-data="{ copy(text) { try { navigator.clipboard.writeText(text || ''); } catch (e) {} } }">
 
     {{-- WP-like top tabs --}}
     <div class="border-b border-gray-200 bg-white">
@@ -41,6 +39,7 @@
             {{-- UPLOAD TAB --}}
             @if ($tab === 'upload')
                 <div class="p-4 h-full overflow-auto">
+                    {{-- ✅ ONLY uploader (it already contains overlay + progress + drag/drop + copy fixes) --}}
                     <livewire:cms.media.wp-media-uploader :wire:key="'wp-uploader-'.$statePath" />
 
                     <div class="mt-4 text-xs text-gray-500">
@@ -91,42 +90,6 @@
                                 @endif
                             </div>
                         </div>
-
-                        {{-- Selected strip (WP: square + hover minus) --}}
-                        {{--    @if ($multiple && count($selected))
-                            <div class="mt-3 flex flex-wrap gap-2">
-                                @foreach ($selected as $sid)
-                                    @php
-                                        $m =
-                                            $selectedMedia?->get((int) $sid) ?:
-                                            \App\Models\Media::query()->find((int) $sid);
-                                        if (!$m) {
-                                            continue;
-                                        }
-                                        $thumb = $m->thumbUrl('jpeg') ?: $m->url();
-                                    @endphp
-
-                                    <button type="button" wire:click="toggle({{ (int) $m->id }})"
-                                        class="group relative w-12 h-12 border overflow-hidden bg-white hover:ring-2 hover:ring-primary-600">
-                                        <img src="{{ $thumb }}" class="w-full h-full object-cover"
-                                            alt="">
-
-                                        <span
-                                            class="absolute top-1 right-1 w-5 h-5 bg-primary-600 text-white text-xs flex items-center justify-center group-hover:hidden">
-                                            ✓
-                                        </span>
-
-                                        <span
-                                            class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/35">
-                                            <span
-                                                class="w-6 h-6 bg-white text-black text-lg leading-none flex items-center justify-center">
-                                                −
-                                            </span>
-                                        </span>
-                                    </button>
-                                @endforeach
-                            </div>
-                        @endif --}}
                     </div>
 
                     {{-- Grid scroll area --}}
@@ -146,19 +109,16 @@
                                            {{ $isActive ? 'ring-2 ring-primary-600' : '' }}
                                            {{ $isSelected ? 'border-primary-600' : 'border-gray-200' }}">
                                     <div class="relative">
-                                        <img src="{{ $thumb }}" class="w-full aspect-square object-cover"
-                                            alt="">
+                                        <img src="{{ $thumb }}" class="w-full aspect-square object-cover" alt="">
 
                                         @if ($processing)
-                                            <div
-                                                class="absolute top-2 left-2 bg-gray-900/70 text-white text-[10px] px-2 py-0.5">
+                                            <div class="absolute top-2 left-2 bg-gray-900/70 text-white text-[10px] px-2 py-0.5">
                                                 Processing…
                                             </div>
                                         @endif
 
                                         {{-- WP style check / hover minus --}}
-                                        <div
-                                            class="absolute top-2 right-2 w-6 h-6 border flex items-center justify-center text-sm
+                                        <div class="absolute top-2 right-2 w-6 h-6 border flex items-center justify-center text-sm
                                             {{ $isSelected ? 'bg-primary-600 text-white border-primary-600' : 'bg-white opacity-0 group-hover:opacity-100' }}">
                                             @if ($isSelected)
                                                 <span class="group-hover:hidden">✓</span>
@@ -199,9 +159,7 @@
                         @foreach ($selected as $sid)
                             @php
                                 $m = $selectedMedia?->get((int) $sid);
-                                if (!$m) {
-                                    continue;
-                                }
+                                if (!$m) continue;
                                 $thumb = $m->thumbUrl('jpeg') ?: $m->url();
                             @endphp
 
@@ -232,8 +190,7 @@
 
                         <div class="mt-3 border bg-white p-2">
                             @php $thumb = $m->thumbUrl('jpeg') ?: $m->url(); @endphp
-                            <img src="{{ $thumb }}" class="w-full aspect-square object-contain bg-gray-100"
-                                alt="">
+                            <img src="{{ $thumb }}" class="w-full aspect-square object-contain bg-gray-100" alt="">
                         </div>
 
                         <div class="mt-3 text-xs text-gray-700 space-y-1">
@@ -293,143 +250,5 @@
             </x-filament::button>
         </div>
     </div>
-
-    {{-- ✅ IMPORTANT: define uploader JS ONCE here so Upload tab always has it --}}
-    @once
-        <script>
-            (function() {
-                if (typeof window.wpMediaUploader === 'function') return;
-
-                window.wpMediaUploader = function() {
-                    return {
-                        isDropping: false,
-                        uploading: false,
-                        progress: 0,
-
-                        queue: [],
-                        workerRunning: false,
-                        _listenersBound: false,
-
-                        boot() {
-                            if (this._listenersBound) return;
-                            this._listenersBound = true;
-
-                            const opts = {
-                                capture: true,
-                                passive: false
-                            };
-                            const prevent = (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                            };
-
-                            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((name) => {
-                                window.addEventListener(name, prevent, opts);
-                                document.addEventListener(name, prevent, opts);
-                            });
-
-                            window.addEventListener('dragenter', (e) => {
-                                prevent(e);
-                                this.isDropping = true;
-                            }, opts);
-                            window.addEventListener('dragover', (e) => {
-                                prevent(e);
-                                this.isDropping = true;
-                            }, opts);
-
-                            window.addEventListener('dragleave', (e) => {
-                                prevent(e);
-                                if (
-                                    e.clientX <= 0 || e.clientY <= 0 ||
-                                    e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
-                                ) this.isDropping = false;
-                            }, opts);
-
-                            window.addEventListener('drop', (e) => {
-                                prevent(e);
-                                this.isDropping = false;
-
-                                const files = e.dataTransfer?.files ?? null;
-                                if (files && files.length) this.startUpload(files);
-                            }, opts);
-                        },
-
-                        onDrop(e) {
-                            this.isDropping = false;
-                            const files = e.dataTransfer?.files ?? null;
-                            if (files && files.length) this.startUpload(files);
-                        },
-
-                        startUpload(fileList) {
-                            const incoming = Array.from(fileList || []);
-                            if (!incoming.length) return;
-
-                            this.queue = (this.queue || []).concat(incoming);
-                            if (this.workerRunning) return;
-
-                            this.workerRunning = true;
-                            this.runQueue();
-                        },
-
-                        async runQueue() {
-                            try {
-                                while ((this.queue || []).length) {
-                                    const batch = this.queue.splice(0, 5);
-
-                                    this.uploading = true;
-                                    this.progress = 0;
-
-                                    await new Promise((resolve, reject) => {
-                                        const wire = this.$wire; // must be Alpine’s $wire
-
-                                        if (!wire || typeof wire.uploadMultiple !== 'function') {
-                                            console.error('[WP-UPLOADER] $wire.uploadMultiple not ready',
-                                                wire);
-                                            this.uploading = false;
-                                            this.progress = 0;
-                                            return reject(new Error('$wire.uploadMultiple not ready'));
-                                        }
-
-                                        wire.uploadMultiple(
-                                            'files',
-                                            batch,
-                                            () => {
-                                                this.uploading = false;
-                                                this.progress = 100;
-
-                                                wire.call('filesUploaded');
-
-                                                setTimeout(() => {
-                                                    this.progress = 0;
-                                                }, 300);
-                                                resolve();
-                                            },
-                                            (err) => {
-                                                console.error('[WP-UPLOADER] upload error', err);
-                                                this.uploading = false;
-                                                this.progress = 0;
-                                                reject(err);
-                                            },
-                                            (event) => {
-                                                const p = event?.detail?.progress ?? 0;
-                                                this.progress = Math.max(0, Math.min(100, p));
-                                            }
-                                        );
-                                    });
-
-                                    await new Promise(r => setTimeout(r, 150));
-                                }
-                            } finally {
-                                this.workerRunning = false;
-                                this.uploading = false;
-                                this.progress = 0;
-                            }
-                        },
-                    };
-                };
-            })
-            ();
-        </script>
-    @endonce
 
 </div>
