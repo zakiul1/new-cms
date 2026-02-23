@@ -7,7 +7,6 @@ use App\Models\Media;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Actions\Action;
-use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\Select;
@@ -83,29 +82,87 @@ class ListMedia extends ListRecords
         $this->resetTablePage();
     }
 
-    protected function categoryOptions(): array
-    {
-        $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
-        if (!$taxonomyId) {
-            return [];
-        }
-
-        return Term::query()
-            ->where('taxonomy_id', $taxonomyId)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
-    }
-
     protected function mediaCategoryTaxonomyId(): ?int
     {
         return Taxonomy::query()->where('key', 'media_category')->value('id');
     }
 
+    /**
+     * Build hierarchical category options like:
+     * Parent (12)
+     * __Child (5)
+     * ____Grandchild (2)
+     *
+     * Counts include children counts (parent shows total under it).
+     */
+    protected function categoryOptions(): array
+    {
+        $taxonomyId = $this->mediaCategoryTaxonomyId();
+        if (!$taxonomyId) {
+            return [];
+        }
+
+        $terms = Term::query()
+            ->where('taxonomy_id', $taxonomyId)
+            ->withCount('media')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        if ($terms->isEmpty()) {
+            return [];
+        }
+
+        // Build adjacency list keyed by parent_id
+        $byParent = [];
+        foreach ($terms as $t) {
+            $pid = (int) ($t->parent_id ?? 0);
+            $byParent[$pid] ??= [];
+            $byParent[$pid][] = $t;
+        }
+
+        // Recursive: compute total counts (self + descendants) and build option labels
+        $options = [];
+
+        $walk = function (int $parentId, int $depth) use (&$walk, &$options, $byParent): int {
+            $children = $byParent[$parentId] ?? [];
+            $totalForThisLevel = 0;
+
+            foreach ($children as $term) {
+                /** @var \App\Models\Term $term */
+                $selfCount = (int) ($term->media_count ?? 0);
+
+                // descendants total
+                $descCount = $walk((int) $term->id, $depth + 1);
+
+                $total = $selfCount + $descCount;
+
+                $prefix = $depth > 0 ? str_repeat('__', $depth) . ' ' : '';
+                $label = $prefix . (string) $term->name . ' (' . $total . ')';
+
+                $options[(int) $term->id] = $label;
+
+                $totalForThisLevel += $total;
+            }
+
+            return $totalForThisLevel;
+        };
+
+        // Root parent_id can be null or 0 depending on your data
+        $walk(0, 0);
+
+        // Some datasets use NULL parent_id but not 0
+        if (isset($byParent[0]) === false && isset($byParent[(int) null])) {
+            $walk((int) null, 0);
+        }
+
+        return $options;
+    }
+
     protected function buildBulkActions(): array
     {
         return [
-            BulkAction::make('copy_to_media_category')
+            \Filament\Actions\BulkAction::make('copy_to_media_category')
                 ->label('Copy to Category')
                 ->icon('heroicon-o-document-duplicate')
                 ->form([
@@ -140,7 +197,7 @@ class ListMedia extends ListRecords
                 })
                 ->deselectRecordsAfterCompletion(),
 
-            BulkAction::make('move_to_media_category')
+            \Filament\Actions\BulkAction::make('move_to_media_category')
                 ->label('Move to Category')
                 ->icon('heroicon-o-arrow-right')
                 ->color('warning')
@@ -241,38 +298,26 @@ class ListMedia extends ListRecords
             ->paginationPageOptions([24, 36, 48, 72])
             ->defaultPaginationPageOption(36)
 
-            // ✅ Filters always visible
-            ->filtersLayout(FiltersLayout::AboveContent)
-            ->deferFilters(false)
+            /**
+             * ✅ OPTION A (NO extra UI files):
+             * - Category filter in toolbar row as a "Category" trigger
+             * - Search bar stays in toolbar row
+             * - Auto apply when selecting category (NO Apply button)
+             */
+            ->filtersLayout(FiltersLayout::Dropdown)
+            ->deferFilters(false) // ✅ auto apply (no Apply button)
+            ->filtersTriggerAction(function ($action) {
+                // No type-hint to stay compatible with Filament versions where
+                // this is Filament\Actions\Action instead of Filament\Tables\Actions\Action.
+                return $action
+                    ->label('Category')
+                    ->icon('heroicon-o-tag');
+            })
 
-            // ✅ Ensure selection UI is enabled (so bulk actions show as selection actions)
+            // enable selection UI (bulk actions)
             ->selectable()
 
             ->filters([
-                SelectFilter::make('type')
-                    ->label('Type')
-                    ->options([
-                        'image' => 'Images',
-                        'video' => 'Video',
-                        'pdf' => 'PDF',
-                        'other' => 'Other',
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $v = $data['value'] ?? null;
-
-                        return match ($v) {
-                            'image' => $query->where('mime_type', 'like', 'image/%'),
-                            'video' => $query->where('mime_type', 'like', 'video/%'),
-                            'pdf' => $query->where('mime_type', 'application/pdf'),
-                            'other' => $query->where(function (Builder $q) {
-                                    $q->where('mime_type', 'not like', 'image/%')
-                                    ->where('mime_type', 'not like', 'video/%')
-                                    ->where('mime_type', '!=', 'application/pdf');
-                                }),
-                            default => $query,
-                        };
-                    }),
-
                 SelectFilter::make('category')
                     ->label('Category')
                     ->searchable()
@@ -300,7 +345,7 @@ class ListMedia extends ListRecords
                     }),
             ]);
 
-        // ✅ GRID MODE
+        // GRID MODE
         if ($this->viewMode === 'grid') {
             return $table
                 ->recordClasses(fn() => 'min-w-0')
@@ -319,11 +364,10 @@ class ListMedia extends ListRecords
                 ->recordUrl(fn(Media $record) => MediaResource::getUrl('edit', ['record' => $record]))
                 ->recordAction(null)
                 ->actions([])
-                // ✅ IMPORTANT: keep bulk actions available (Filament will render them in selection bar)
                 ->bulkActions($bulkActions);
         }
 
-        // ✅ LIST MODE
+        // LIST MODE
         return $table
             ->recordClasses(fn() => 'group')
             ->columns([
@@ -370,16 +414,6 @@ class ListMedia extends ListRecords
                     ->separator(',')
                     ->placeholder('—')
                     ->toggleable(),
-
-                TextColumn::make('mime_type')
-                    ->label('Type')
-                    ->extraAttributes(['class' => 'whitespace-nowrap']),
-
-                TextColumn::make('size')
-                    ->label('Size')
-                    ->formatStateUsing(fn($state) => number_format(((int) $state) / 1024, 1) . ' KB')
-                    ->extraAttributes(['class' => 'whitespace-nowrap'])
-                    ->sortable(),
 
                 TextColumn::make('created_at')
                     ->label('Uploaded')

@@ -186,15 +186,15 @@ class PostForm
                                     ->schema([
                                         TextInput::make('meta_json.seo.title')
                                             ->label('SEO Title')
-                                            ->helperText('Recommended: ~50–60 characters.')
-                                            ->maxLength(140)
+                                            ->helperText('')
+                                            ->maxLength(1000)
                                             ->live(onBlur: true),
 
                                         Textarea::make('meta_json.seo.description')
                                             ->label('Meta Description')
-                                            ->helperText('Recommended: ~150–160 characters.')
+                                            ->helperText('')
                                             ->rows(3)
-                                            ->maxLength(200)
+                                            ->maxLength(2000)
                                             ->live(onBlur: true),
 
                                         TextInput::make('meta_json.seo.canonical')

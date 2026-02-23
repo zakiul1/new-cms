@@ -338,7 +338,7 @@ class MediaDefaults extends Page implements HasForms
                                     ->schema([
                                         TextInput::make('default_seo_title')
                                             ->label('Default SEO Title')
-                                            ->maxLength(255)
+                                            ->maxLength(655)
                                             ->helperText('Used only if meta.seo.title is empty.')
                                             ->live(onBlur: true)
                                             ->afterStateUpdated(fn() => $this->bustPreview())

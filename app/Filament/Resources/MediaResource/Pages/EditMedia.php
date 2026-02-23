@@ -326,15 +326,15 @@ class EditMedia extends EditRecord
                                     ->schema([
                                         TextInput::make('meta.seo.title')
                                             ->label('SEO Title')
-                                            ->helperText('Recommended: ~50–60 characters.')
-                                            ->maxLength(140)
+                                            ->helperText('')
+                                            ->maxLength(1140)
                                             ->live(onBlur: true),
 
                                         Textarea::make('meta.seo.description')
                                             ->label('Meta Description')
-                                            ->helperText('Recommended: ~150–160 characters.')
+                                            ->helperText('')
                                             ->rows(3)
-                                            ->maxLength(200)
+                                            ->maxLength(2000)
                                             ->live(onBlur: true),
 
                                         TextInput::make('meta.seo.canonical')
