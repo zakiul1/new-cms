@@ -352,6 +352,8 @@ class ContentRouterController extends Controller
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
         $template = trim((string) ($meta['template'] ?? ''));
+        // inside resolveFrontendView(...) after $meta and $template are set
+
 
         if ($template === '') {
             return $fallback;

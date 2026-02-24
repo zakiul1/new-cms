@@ -202,6 +202,137 @@ class CoreShortcodes
                 return '<!-- [products] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
         });
+
+        /**
+         * ✅ [sp]  (Static Posts)
+         *
+         * Example:
+         * [sp column="5" mobile="2" img catid="6" load="20" class="static_posts"]
+         *
+         * Defaults:
+         * - column = 3
+         * - mobile = 1
+         * - load   = 6   (also accepts typo laod=)
+         * - img    = OFF by default (only on if `img` param exists and truthy)
+         * - class  = static_posts
+         *
+         * IMPORTANT:
+         * - catid is REQUIRED (even though you mentioned default=4)
+         *   If catid not provided => show message and render nothing else.
+         * - Plugin disabled => return '' (no error)
+         */
+        $shortcodes->register('sp', function (array $atts = [], ?string $content = null, array $context = []) {
+            try {
+                // Plugin-safe: if StaticPosts plugin/model not available, do nothing
+                $staticPostClass = '\\Plugins\\StaticPosts\\Models\\StaticPost';
+                if (!class_exists($staticPostClass)) {
+                    return '';
+                }
+
+                // catid REQUIRED
+                if (!array_key_exists('catid', $atts) || trim((string) ($atts['catid'] ?? '')) === '') {
+                    return '<!-- [sp] missing required catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Please provide <b>catid</b> in shortcode. Example: <code>[sp catid="6"]</code></div>';
+                }
+                $catId = (int) $atts['catid'];
+                if ($catId <= 0) {
+                    return '<!-- [sp] invalid catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Invalid <b>catid</b>. Example: <code>[sp catid="6"]</code></div>';
+                }
+
+                // columns
+                $columns = (int) ($atts['column'] ?? 3);
+                $columns = max(1, min(12, $columns));
+
+                // mobile columns
+                $mobile = (int) ($atts['mobile'] ?? 1);
+                $mobile = max(1, min(6, $mobile));
+
+                // load (also accept laod typo)
+                $limit = (int) ($atts['load'] ?? ($atts['laod'] ?? 6));
+                $limit = max(1, min(50, $limit));
+
+                // class
+                $class = trim((string) ($atts['class'] ?? 'static_posts'));
+                $class = $class !== '' ? $class : 'static_posts';
+
+                // img: only enabled if parameter exists. Supports:
+                // [sp img] or [sp img="yes"] or [sp img=true]
+                $showImg = false;
+                if (array_key_exists('img', $atts)) {
+                    $v = $atts['img'];
+                    $showImg = ($v === null || $v === '') ? true : self::toBool($v);
+                }
+
+                // Resolve taxonomy id for Static Posts category (try multiple keys to be robust)
+                $taxonomyId = null;
+                foreach (['static_category', 'static_post_category', 'static_posts_category'] as $key) {
+                    $taxonomyId = Taxonomy::query()->where('key', $key)->value('id');
+                    if ($taxonomyId) {
+                        break;
+                    }
+                }
+
+                // If taxonomy not found, still allow term by ID only (no taxonomy check)
+                $termQuery = Term::query()->whereKey($catId);
+                if ($taxonomyId) {
+                    $termQuery->where('taxonomy_id', $taxonomyId);
+                }
+                $termOk = $termQuery->exists();
+
+                if (!$termOk) {
+                    return '<!-- [sp] catid not found -->';
+                }
+
+                $now = now();
+
+                // Build query
+                /** @var \Illuminate\Database\Eloquent\Builder $query */
+                $query = $staticPostClass::query()
+                    ->where('status', 'published')
+                    ->where(function ($q) use ($now) {
+                        $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
+                    })
+                    ->whereHas('terms', function ($q) use ($catId) {
+                        $q->where('terms.id', $catId);
+                    })
+                    ->orderByDesc('published_at')
+                    ->orderByDesc('id')
+                    ->limit($limit);
+
+                // eager load media if relationships exist
+                $with = [];
+                if (method_exists($staticPostClass, 'featuredMediaPivot')) {
+                    $with[] = 'featuredMediaPivot';
+                }
+                if (method_exists($staticPostClass, 'featuredMedia')) {
+                    $with[] = 'featuredMedia';
+                }
+                if (!empty($with)) {
+                    $query->with($with);
+                }
+
+                $items = $query->get();
+
+                if ($items->isEmpty()) {
+                    return '';
+                }
+
+                if (view()->exists('shortcodes.static-posts-grid')) {
+                    return view('shortcodes.static-posts-grid', [
+                        'items' => $items,
+                        'column' => $columns,
+                        'mobile' => $mobile,
+                        'img' => $showImg,
+                        'class' => $class,
+                    ])->render();
+                }
+
+                return '<!-- [sp] missing view shortcodes.static-posts-grid -->';
+            } catch (\Throwable $e) {
+                return '<!-- [sp] shortcode error: ' . e($e->getMessage()) . ' -->';
+            }
+        });
     }
 
     private static function fallbackPostsHtml(Collection $posts): string

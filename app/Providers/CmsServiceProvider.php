@@ -91,6 +91,14 @@ class CmsServiceProvider extends ServiceProvider
         /** @var Hooks $hooks */
         $hooks = $this->app->make(Hooks::class);
 
+        // ✅ OPTIONAL: Add page template option safely (won’t break if unused)
+        $hooks->addFilter('cms.page_template_options', function (array $opts) {
+            if (view()->exists('templates.static-landing-page')) {
+                $opts['static-landing-page'] = 'Static Landing Page';
+            }
+            return $opts;
+        }, 20, 1);
+
         // Booting hook (safe in console)
         $hooks->doAction(HookPoints::CMS_BOOT);
 
@@ -188,7 +196,7 @@ class CmsServiceProvider extends ServiceProvider
             return '<a href="' . e($url) . '"' . $target . ' class="btn">' . e($label) . '</a>';
         });
 
-        // ✅ Register your core shortcodes into the registry (HELLO, POSTS, PRODUCTS...)
+        // ✅ Register your core shortcodes into the registry (HELLO, POSTS, PRODUCTS, SP...)
         \App\Cms\Shortcodes\CoreShortcodes::register($shortcodes);
 
         // Apply shortcodes through CMS_THE_CONTENT pipeline

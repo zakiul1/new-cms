@@ -73,9 +73,14 @@ class Post extends Model
     /**
      * ✅ Pivot relation for all post/page media (role-based)
      */
-    public function mediaPivot(): BelongsToMany
+    public function mediaPivot(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
-        return $this->belongsToMany(Media::class, 'post_media')
+        return $this->belongsToMany(
+            \App\Models\Media::class,
+            'post_media',
+            'post_id',   // ✅ correct pivot FK
+            'media_id'   // ✅ correct pivot related key
+        )
             ->withPivot(['role', 'sort_order'])
             ->withTimestamps();
     }

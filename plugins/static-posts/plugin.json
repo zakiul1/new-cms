@@ -1,0 +1,6 @@
+{
+  "name": "Static Posts",
+  "slug": "static-posts",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php"
+}
