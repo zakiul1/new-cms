@@ -90,19 +90,7 @@ class CoreShortcodes
         });
 
         /**
-         * ✅ [products]
-         *
-         * Behavior:
-         * - [products] → random products across ALL PUBLIC media categories (NOT one category), default 12
-         * - [products catid="9"] → only that category if valid, otherwise fallback to default (no error)
-         * - [products load="20"] → 20 items
-         * - pricebtn default false; support [products pricebtn] or pricebtn=true/pricebtn="true"
-         * - column="4" default 4 (tablet+desktop)
-         * - mcolumn="2" default 2 (mobile)
-         *
-         * NOTE:
-         * - For Option A (dynamic columns), Blade uses inline grid-template-columns (supports 5/6/7/...)
-         * - So we allow higher limits here (desktop up to 12, mobile up to 6)
+         * ✅ [products] (unchanged)
          */
         $shortcodes->register('products', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
@@ -111,46 +99,32 @@ class CoreShortcodes
                     return '';
                 }
 
-                // load=
                 $limit = (int) ($atts['load'] ?? 12);
                 $limit = max(1, min(50, $limit));
 
-                // catid=
                 $catId = (int) ($atts['catid'] ?? 0);
 
-                // ✅ pricebtn supports:
-                // - [products pricebtn]
-                // - [products pricebtn=true]
-                // - [products pricebtn="true"]
-                // Default false
                 $showPriceBtn = array_key_exists('pricebtn', $atts)
                     ? self::toBool(($atts['pricebtn'] ?? '') === '' ? true : $atts['pricebtn'])
                     : false;
 
-                // ✅ columns (md+): default 4, allow up to 12 (Option A supports any number)
                 $columns = (int) ($atts['column'] ?? 4);
                 $columns = max(1, min(12, $columns));
 
-                // ✅ mobile columns: default 2, allow up to 6
                 $mobileColumns = (int) ($atts['mcolumn'] ?? 2);
                 $mobileColumns = max(1, min(6, $mobileColumns));
 
-                // exclude uncategorized by name/slug
                 $excludeUncategorized = function ($q) {
                     $q->whereRaw("LOWER(terms.slug) != 'uncategorized'")
                         ->whereRaw("LOWER(terms.name) != 'uncategorized'");
                 };
 
-                // ---------------------------------------------------
-                // Base query: products are Media that have at least 1 PUBLIC media_category term (not uncategorized)
-                // ---------------------------------------------------
                 $query = Media::query();
 
                 if (method_exists(Media::class, 'scopeFrontendVisible')) {
                     $query->frontendVisible();
                 }
 
-                // Must be categorized in public media_category and not uncategorized
                 $query->whereHas('terms', function ($q) use ($taxonomyId, $excludeUncategorized) {
                     $q->where('terms.taxonomy_id', $taxonomyId)
                         ->where('terms.visibility', 'public');
@@ -158,9 +132,6 @@ class CoreShortcodes
                     $excludeUncategorized($q);
                 });
 
-                // ---------------------------------------------------
-                // If catid is valid, restrict to it; if invalid, ignore it (fallback without error)
-                // ---------------------------------------------------
                 if ($catId > 0) {
                     $catOk = Term::query()
                         ->whereKey($catId)
@@ -204,118 +175,313 @@ class CoreShortcodes
         });
 
         /**
-         * ✅ [sp]  (Static Posts)
+         * ✅ [logo] (Media Category Logos)
          *
-         * Example:
-         * [sp column="5" mobile="2" img catid="6" load="20" class="static_posts"]
+         * Examples:
+         *  - [logo catid="5"]
+         *  - [logo catid="5" column="6" mobile="2" title style="round" dec load="12" class="mylogos"]
          *
-         * Defaults:
-         * - column = 3
-         * - mobile = 1
-         * - load   = 6   (also accepts typo laod=)
-         * - img    = OFF by default (only on if `img` param exists and truthy)
-         * - class  = static_posts
-         *
-         * IMPORTANT:
-         * - catid is REQUIRED (even though you mentioned default=4)
-         *   If catid not provided => show message and render nothing else.
-         * - Plugin disabled => return '' (no error)
+         * Params:
+         *  - catid (required)
+         *  - column (default 4)
+         *  - mobile (default 2)
+         *  - title (bool flag or title="true/false/1/0/yes/no") default false
+         *  - asc / dec (default asc)  -> order by ID asc/desc
+         *  - load (default all in that category; if provided uses limit)
+         *  - style="square|round" (default square)
+         *  - class="custom classes" (optional) -> appends to default logo_grid
          */
-        $shortcodes->register('sp', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->register('logo', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
-                // Plugin-safe: if StaticPosts plugin/model not available, do nothing
-                $staticPostClass = '\\Plugins\\StaticPosts\\Models\\StaticPost';
-                if (!class_exists($staticPostClass)) {
+                $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
+                if (!$taxonomyId) {
                     return '';
                 }
 
-                // catid REQUIRED
+                // catid REQUIRED (no error page, just message)
                 if (!array_key_exists('catid', $atts) || trim((string) ($atts['catid'] ?? '')) === '') {
-                    return '<!-- [sp] missing required catid -->'
-                        . '<div class="text-sm text-red-600 my-4">Please provide <b>catid</b> in shortcode. Example: <code>[sp catid="6"]</code></div>';
+                    return '<!-- [logo] missing required catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Please provide <b>catid</b>. Example: <code>[logo catid="5"]</code></div>';
                 }
+
                 $catId = (int) $atts['catid'];
                 if ($catId <= 0) {
-                    return '<!-- [sp] invalid catid -->'
-                        . '<div class="text-sm text-red-600 my-4">Invalid <b>catid</b>. Example: <code>[sp catid="6"]</code></div>';
+                    return '<!-- [logo] invalid catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Invalid <b>catid</b>. Example: <code>[logo catid="5"]</code></div>';
                 }
 
                 // columns
-                $columns = (int) ($atts['column'] ?? 3);
+                $columns = (int) ($atts['column'] ?? 4);
                 $columns = max(1, min(12, $columns));
 
                 // mobile columns
-                $mobile = (int) ($atts['mobile'] ?? 1);
+                $mobile = (int) ($atts['mobile'] ?? 2);
                 $mobile = max(1, min(6, $mobile));
 
-                // load (also accept laod typo)
-                $limit = (int) ($atts['load'] ?? ($atts['laod'] ?? 6));
-                $limit = max(1, min(50, $limit));
-
-                // class
-                $class = trim((string) ($atts['class'] ?? 'static_posts'));
-                $class = $class !== '' ? $class : 'static_posts';
-
-                // img: only enabled if parameter exists. Supports:
-                // [sp img] or [sp img="yes"] or [sp img=true]
-                $showImg = false;
-                if (array_key_exists('img', $atts)) {
-                    $v = $atts['img'];
-                    $showImg = ($v === null || $v === '') ? true : self::toBool($v);
+                // title (flag or value)
+                $showTitle = false;
+                if (array_key_exists('title', $atts)) {
+                    $v = $atts['title'];
+                    $showTitle = ($v === null || $v === '') ? true : self::toBool($v);
                 }
 
-                // Resolve taxonomy id for Static Posts category (try multiple keys to be robust)
-                $taxonomyId = null;
-                foreach (['static_category', 'static_post_category', 'static_posts_category'] as $key) {
-                    $taxonomyId = Taxonomy::query()->where('key', $key)->value('id');
-                    if ($taxonomyId) {
-                        break;
+                // style
+                $style = strtolower(trim((string) ($atts['style'] ?? 'square')));
+                $style = in_array($style, ['square', 'squire', 'round'], true) ? $style : 'square';
+                if ($style === 'squire') {
+                    $style = 'square';
+                }
+
+                // order: asc default; if "dec" flag exists OR order="dec"
+                $orderDir = 'asc';
+                if (array_key_exists('dec', $atts)) {
+                    $orderDir = 'desc';
+                }
+                if (array_key_exists('asc', $atts)) {
+                    $orderDir = 'asc';
+                }
+                if (array_key_exists('order', $atts)) {
+                    $ov = strtolower(trim((string) ($atts['order'] ?? '')));
+                    if (in_array($ov, ['asc', 'desc', 'dec'], true)) {
+                        $orderDir = $ov === 'dec' ? 'desc' : $ov;
                     }
                 }
 
-                // If taxonomy not found, still allow term by ID only (no taxonomy check)
-                $termQuery = Term::query()->whereKey($catId);
-                if ($taxonomyId) {
-                    $termQuery->where('taxonomy_id', $taxonomyId);
+                // load: default all; if set, limit
+                $limit = null;
+                if (array_key_exists('load', $atts) && trim((string) ($atts['load'] ?? '')) !== '') {
+                    $limit = (int) $atts['load'];
+                    $limit = max(1, min(500, $limit));
                 }
-                $termOk = $termQuery->exists();
+
+                // ✅ class: keep default + append user class
+                $defaultClass = 'logo_grid';
+                $userClass = trim((string) ($atts['class'] ?? ''));
+                $userClass = preg_replace('/[^a-zA-Z0-9\-_ ]/', '', $userClass);
+                $userClass = trim(preg_replace('/\s+/', ' ', $userClass));
+
+                $class = $defaultClass;
+                if ($userClass !== '') {
+                    $class .= ' ' . $userClass;
+                }
+
+                // validate category exists & is media_category
+                $termOk = Term::query()
+                    ->whereKey($catId)
+                    ->where('taxonomy_id', $taxonomyId)
+                    ->exists();
 
                 if (!$termOk) {
-                    return '<!-- [sp] catid not found -->';
+                    return '<!-- [logo] catid not found -->';
                 }
 
-                $now = now();
+                $query = Media::query();
 
-                // Build query
-                /** @var \Illuminate\Database\Eloquent\Builder $query */
-                $query = $staticPostClass::query()
-                    ->where('status', 'published')
-                    ->where(function ($q) use ($now) {
-                        $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
-                    })
-                    ->whereHas('terms', function ($q) use ($catId) {
-                        $q->where('terms.id', $catId);
-                    })
-                    ->orderByDesc('published_at')
-                    ->orderByDesc('id')
-                    ->limit($limit);
+                if (method_exists(Media::class, 'scopeFrontendVisible')) {
+                    $query->frontendVisible();
+                }
 
-                // eager load media if relationships exist
-                $with = [];
-                if (method_exists($staticPostClass, 'featuredMediaPivot')) {
-                    $with[] = 'featuredMediaPivot';
-                }
-                if (method_exists($staticPostClass, 'featuredMedia')) {
-                    $with[] = 'featuredMedia';
-                }
-                if (!empty($with)) {
-                    $query->with($with);
+                // restrict to category
+                $query->whereHas('terms', function ($q) use ($catId) {
+                    $q->where('terms.id', $catId);
+                });
+
+                // order
+                $query->orderBy('id', $orderDir);
+
+                // limit if load provided
+                if ($limit !== null) {
+                    $query->limit($limit);
                 }
 
                 $items = $query->get();
 
                 if ($items->isEmpty()) {
                     return '';
+                }
+
+                if (view()->exists('shortcodes.logo-grid')) {
+                    return view('shortcodes.logo-grid', [
+                        'items' => $items,
+                        'column' => $columns,
+                        'mobile' => $mobile,
+                        'showTitle' => $showTitle,
+                        'style' => $style,
+                        'class' => $class, // ✅ default + custom
+                    ])->render();
+                }
+
+                return '<!-- [logo] missing view shortcodes.logo-grid -->';
+            } catch (\Throwable $e) {
+                return '<!-- [logo] shortcode error: ' . e($e->getMessage()) . ' -->';
+            }
+        });
+
+        /**
+         * ✅ [sp]  (Static Posts)
+         *
+         * Added:
+         * - postid="14"  => loads that static_post and passes topTitle/topContent to view (top section)
+         * - top="hybrid" => hybrid hero variant with images (uses first 2 featured images)
+         * - lmbtn        => show learn more button (button href comes from per-post field in meta_json)
+         *
+         * Existing:
+         * - If postid is provided and catid is missing => we allow rendering top section only.
+         */
+        $shortcodes->register('sp', function (array $atts = [], ?string $content = null, array $context = []) {
+            try {
+                $staticPostClass = '\\Plugins\\StaticPosts\\Models\\StaticPost';
+                if (!class_exists($staticPostClass)) {
+                    return '';
+                }
+
+                // ---------------------------
+                // postid (top section)
+                // ---------------------------
+                $topTitle = '';
+                $topContent = '';
+                $topImages = [];
+                $topVariant = '';
+
+                if (array_key_exists('top', $atts)) {
+                    $topVariant = strtolower(trim((string) ($atts['top'] ?? '')));
+                }
+
+                $postId = 0;
+                if (array_key_exists('postid', $atts) && trim((string) ($atts['postid'] ?? '')) !== '') {
+                    $postId = (int) $atts['postid'];
+                }
+
+                if ($postId > 0) {
+                    $topPost = Post::query()
+                        ->whereKey($postId)
+                        ->where('type', 'static_post')
+                        ->whereRaw('LOWER(status) = ?', ['published'])
+                        ->first();
+
+                    if ($topPost) {
+                        $topTitle = trim((string) ($topPost->title ?? ''));
+                        $topContent = trim((string) (
+                            $topPost->content_html
+                            ?? data_get($topPost->content_json ?? [], 'html')
+                            ?? $topPost->excerpt
+                            ?? ''
+                        ));
+
+                        // load top images (first 2 only)
+                        try {
+                            $mediaItems = collect();
+
+                            if (method_exists($topPost, 'featuredMediaPivot')) {
+                                $mediaItems = $topPost->featuredMediaPivot()->get();
+                            }
+
+                            if ($mediaItems->isEmpty() && method_exists($topPost, 'featuredMedia')) {
+                                $one = $topPost->featuredMedia()->first();
+                                if ($one) {
+                                    $mediaItems = collect([$one]);
+                                }
+                            }
+
+                            $topImages = $mediaItems
+                                ->map(function ($m) {
+                                    if (is_object($m) && method_exists($m, 'url'))
+                                        return (string) $m->url();
+                                    if (is_object($m) && property_exists($m, 'url') && is_string($m->url))
+                                        return (string) $m->url;
+                                    if (is_object($m) && property_exists($m, 'path') && is_string($m->path))
+                                        return (string) $m->path;
+                                    return null;
+                                })
+                                ->filter(fn($u) => is_string($u) && trim($u) !== '')
+                                ->values()
+                                ->take(2)
+                                ->all();
+                        } catch (\Throwable $e) {
+                            $topImages = [];
+                        }
+                    }
+                }
+
+                // catid (grid)
+                $hasCatId = array_key_exists('catid', $atts) && trim((string) ($atts['catid'] ?? '')) !== '';
+                $catId = $hasCatId ? (int) $atts['catid'] : 0;
+
+                if (!$hasCatId && $postId <= 0) {
+                    return '<!-- [sp] missing required catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Please provide <b>catid</b> in shortcode. Example: <code>[sp catid="6"]</code></div>';
+                }
+
+                if ($hasCatId && $catId <= 0) {
+                    return '<!-- [sp] invalid catid -->'
+                        . '<div class="text-sm text-red-600 my-4">Invalid <b>catid</b>. Example: <code>[sp catid="6"]</code></div>';
+                }
+
+                $columns = (int) ($atts['column'] ?? 3);
+                $columns = max(1, min(12, $columns));
+
+                $mobile = (int) ($atts['mobile'] ?? 1);
+                $mobile = max(1, min(6, $mobile));
+
+                $limit = (int) ($atts['load'] ?? ($atts['laod'] ?? 6));
+                $limit = max(1, min(50, $limit));
+
+                $class = trim((string) ($atts['class'] ?? 'static_posts'));
+                $class = $class !== '' ? $class : 'static_posts';
+
+                $showImg = false;
+                if (array_key_exists('img', $atts)) {
+                    $v = $atts['img'];
+                    $showImg = ($v === null || $v === '') ? true : self::toBool($v);
+                }
+
+                $showLearnMoreBtn = false;
+                if (array_key_exists('lmbtn', $atts)) {
+                    $v = $atts['lmbtn'];
+                    $showLearnMoreBtn = ($v === null || $v === '') ? true : self::toBool($v);
+                }
+
+                $items = collect();
+
+                if ($hasCatId && $catId > 0) {
+                    $taxonomyId = null;
+                    foreach (['static_category', 'static_post_category', 'static_posts_category'] as $key) {
+                        $taxonomyId = Taxonomy::query()->where('key', $key)->value('id');
+                        if ($taxonomyId)
+                            break;
+                    }
+
+                    $termQuery = Term::query()->whereKey($catId);
+                    if ($taxonomyId) {
+                        $termQuery->where('taxonomy_id', $taxonomyId);
+                    }
+                    $termOk = $termQuery->exists();
+
+                    if ($termOk) {
+                        $now = now();
+
+                        $query = $staticPostClass::query()
+                            ->whereRaw('LOWER(status) = ?', ['published'])
+                            ->where(function ($q) use ($now) {
+                                $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
+                            })
+                            ->whereHas('terms', function ($q) use ($catId) {
+                                $q->where('terms.id', $catId);
+                            })
+                            ->orderByDesc('published_at')
+                            ->orderByDesc('id')
+                            ->limit($limit);
+
+                        $with = [];
+                        if (method_exists($staticPostClass, 'featuredMediaPivot'))
+                            $with[] = 'featuredMediaPivot';
+                        if (method_exists($staticPostClass, 'featuredMedia'))
+                            $with[] = 'featuredMedia';
+                        if (!empty($with))
+                            $query->with($with);
+
+                        $items = $query->get();
+                    }
                 }
 
                 if (view()->exists('shortcodes.static-posts-grid')) {
@@ -325,6 +491,13 @@ class CoreShortcodes
                         'mobile' => $mobile,
                         'img' => $showImg,
                         'class' => $class,
+
+                        'topTitle' => $topTitle,
+                        'topContent' => $topContent,
+                        'topVariant' => $topVariant,
+                        'topImages' => $topImages,
+
+                        'showLearnMoreBtn' => $showLearnMoreBtn,
                     ])->render();
                 }
 
@@ -371,7 +544,6 @@ class CoreShortcodes
         }
 
         try {
-            /** @var CurrentContentContext $current */
             $current = app(CurrentContentContext::class);
 
             if (($current->post ?? null) instanceof Post) {
@@ -389,9 +561,7 @@ class CoreShortcodes
     }
 
     /**
-     * ✅ Get ONE primary term (category) for current post/media.
-     * - Post: first category ordered by name
-     * - Media: first media_category term ordered by name
+     * Get ONE primary term for current post/media.
      */
     private static function resolveCurrentPrimaryTerm(array $ctx): ?Term
     {
@@ -400,7 +570,6 @@ class CoreShortcodes
         }
 
         if (($ctx['post'] ?? null) instanceof Post) {
-            /** @var Post $post */
             $post = $ctx['post'];
 
             try {
@@ -415,7 +584,6 @@ class CoreShortcodes
         }
 
         try {
-            /** @var CurrentContentContext $current */
             $current = app(CurrentContentContext::class);
 
             if (($current->media ?? null) instanceof Media) {
@@ -451,7 +619,6 @@ class CoreShortcodes
 
     /**
      * Convert shortcode boolean values safely.
-     * Accepts: true/false, 1/0, yes/no, on/off
      */
     private static function toBool($v): bool
     {

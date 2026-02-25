@@ -53,7 +53,6 @@ class StaticPostForm
                                     })
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
                                     ->rule(function ($record) {
-                                        // $record can be App\Models\Post in Filament closures
                                         return Rule::unique('posts', 'slug')->ignore($record?->id);
                                     })
                                     ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).'),
@@ -71,7 +70,7 @@ class StaticPostForm
                                         return "{$base}/static/{$slug}";
                                     }),
 
-                                // Content editor (same component behavior)
+                                // Content editor
                                 WpClassicEditor::make('content_json')
                                     ->label('Content')
                                     ->height(320)
@@ -92,6 +91,17 @@ class StaticPostForm
                                         return $current;
                                     }),
 
+                                /**
+                                 * ✅ NEW FIELD (under Content as you requested)
+                                 * Used by shortcode when [sp lmbtn] is present.
+                                 */
+                                TextInput::make('meta_json.static_posts.learn_more_url')
+                                    ->label('Learnmore button link')
+                                    ->helperText('Optional. If empty, frontend will use "#" for Learn more button.')
+                                    ->maxLength(2000)
+                                    ->nullable()
+                                    ->columnSpanFull(),
+
                                 Textarea::make('excerpt')
                                     ->label('Excerpt')
                                     ->rows(4)
@@ -99,7 +109,7 @@ class StaticPostForm
                                     ->nullable(),
                             ]),
 
-                        // ✅ Custom CSS & JS + JSON tab (same as Posts)
+                        // ✅ Custom CSS & JS + JSON tab
                         Tab::make('Custom CSS & JS')
                             ->schema([
                                 Textarea::make('meta_json.assets.css')
@@ -144,7 +154,7 @@ class StaticPostForm
                                     }),
                             ]),
 
-                        // ✅ Frontend Preview tab (same idea)
+                        // ✅ Frontend Preview tab
                         Tab::make('Frontend Preview')
                             ->schema([
                                 Placeholder::make('frontend_preview')
@@ -242,7 +252,6 @@ class StaticPostForm
                                     ->values()
                                     ->all();
 
-                                // Keep non-static terms, replace static_category terms
                                 $current = $record->terms()->pluck('terms.id')->all();
 
                                 $staticTermIds = \App\Models\Term::query()
@@ -267,12 +276,6 @@ class StaticPostForm
                             ->modalHeading('Product images')
                             ->multiple()
                             ->maxItems(50),
-
-                        /**
-                         * ✅ Static Categories ONLY (taxonomy key = static_category)
-                         * Not using relationship() to avoid Post categories appearing.
-                         */
-
 
                         Textarea::make('meta_json.static_posts.svg_icon')
                             ->label('SVG Icon (code)')
