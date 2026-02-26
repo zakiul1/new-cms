@@ -14,17 +14,19 @@ class CoreShortcodes
 {
     public static function register(ShortcodeRegistry $shortcodes): void
     {
-        // ✅ Debug
-        $shortcodes->register('hello_test', fn() => 'HELLO');
-
         /**
          * ✅ [h1]
          * Prints current Post/Page/Media title only (no <h1> tag)
          */
-        $shortcodes->register('h1', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->registerWithMeta('h1', function (array $atts = [], ?string $content = null, array $context = []) {
             $title = self::resolveCurrentTitle($context);
             return $title !== '' ? e($title) : '';
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Prints current Post/Page/Media title only (no <h1> tag).',
+            'params' => [],
+            'examples' => ['[h1]'],
+        ]);
 
         /**
          * ✅ [category]
@@ -32,7 +34,7 @@ class CoreShortcodes
          * 1) Current category term "product" field (if exists & not empty)
          * 2) Current category term "name"
          */
-        $shortcodes->register('category', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->registerWithMeta('category', function (array $atts = [], ?string $content = null, array $context = []) {
             $term = self::resolveCurrentPrimaryTerm($context);
 
             if (!$term) {
@@ -46,10 +48,17 @@ class CoreShortcodes
 
             $name = trim((string) ($term->name ?? ''));
             return $name !== '' ? e($name) : '';
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Shows current category title. Uses term->product first (if not empty), otherwise term->name.',
+            'params' => [],
+            'examples' => ['[category]'],
+        ]);
 
-        // ✅ keep your [posts] shortcode unchanged
-        $shortcodes->register('posts', function (array $atts = [], ?string $content = null, array $context = []) {
+        /**
+         * ✅ [posts] shortcode (unchanged)
+         */
+        $shortcodes->registerWithMeta('posts', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
                 $count = (int) ($atts['count'] ?? 12);
                 $count = max(1, min(50, $count));
@@ -87,12 +96,22 @@ class CoreShortcodes
             } catch (\Throwable $e) {
                 return '<!-- [posts] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Shows a random grid of published posts.',
+            'params' => [
+                ['name' => 'count', 'type' => 'int', 'default' => 12, 'desc' => 'Number of posts to show (1–50).'],
+            ],
+            'examples' => [
+                '[posts]',
+                '[posts count="8"]',
+            ],
+        ]);
 
         /**
          * ✅ [products] (unchanged)
          */
-        $shortcodes->register('products', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->registerWithMeta('products', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
                 $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
                 if (!$taxonomyId) {
@@ -172,7 +191,22 @@ class CoreShortcodes
             } catch (\Throwable $e) {
                 return '<!-- [products] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Shows random products from Media taxonomy category.',
+            'params' => [
+                ['name' => 'load', 'type' => 'int', 'default' => 12, 'desc' => 'Number of items (1–50).'],
+                ['name' => 'catid', 'type' => 'int', 'default' => 0, 'desc' => 'Filter by category term id (optional).'],
+                ['name' => 'pricebtn', 'type' => 'bool', 'default' => false, 'desc' => 'Show price button (flag or value).'],
+                ['name' => 'column', 'type' => 'int', 'default' => 4, 'desc' => 'Desktop columns (1–12).'],
+                ['name' => 'mcolumn', 'type' => 'int', 'default' => 2, 'desc' => 'Mobile columns (1–6).'],
+            ],
+            'examples' => [
+                '[products]',
+                '[products load="8" column="4" mcolumn="2"]',
+                '[products catid="5" load="12" pricebtn]',
+            ],
+        ]);
 
         /**
          * ✅ [logo] (Media Category Logos)
@@ -180,18 +214,10 @@ class CoreShortcodes
          * Examples:
          *  - [logo catid="5"]
          *  - [logo catid="5" column="6" mobile="2" title style="round" dec load="12" class="mylogos"]
-         *
-         * Params:
-         *  - catid (required)
-         *  - column (default 4)
-         *  - mobile (default 2)
-         *  - title (bool flag or title="true/false/1/0/yes/no") default false
-         *  - asc / dec (default asc)  -> order by ID asc/desc
-         *  - load (default all in that category; if provided uses limit)
-         *  - style="square|round" (default square)
-         *  - class="custom classes" (optional) -> appends to default logo_grid
+         *  - [logo catid="5" slider]                 ✅ NEW (flag)
+         *  - [logo catid="5" slider="true"]          ✅ NEW (value)
          */
-        $shortcodes->register('logo', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->registerWithMeta('logo', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
                 $taxonomyId = Taxonomy::query()->where('key', 'media_category')->value('id');
                 if (!$taxonomyId) {
@@ -225,6 +251,13 @@ class CoreShortcodes
                     $showTitle = ($v === null || $v === '') ? true : self::toBool($v);
                 }
 
+                // slider (flag or value)
+                $slider = false;
+                if (array_key_exists('slider', $atts)) {
+                    $v = $atts['slider'];
+                    $slider = ($v === null || $v === '') ? true : self::toBool($v);
+                }
+
                 // style
                 $style = strtolower(trim((string) ($atts['style'] ?? 'square')));
                 $style = in_array($style, ['square', 'squire', 'round'], true) ? $style : 'square';
@@ -254,7 +287,7 @@ class CoreShortcodes
                     $limit = max(1, min(500, $limit));
                 }
 
-                // ✅ class: keep default + append user class
+                // class: keep default + append user class
                 $defaultClass = 'logo_grid';
                 $userClass = trim((string) ($atts['class'] ?? ''));
                 $userClass = preg_replace('/[^a-zA-Z0-9\-_ ]/', '', $userClass);
@@ -307,7 +340,8 @@ class CoreShortcodes
                         'mobile' => $mobile,
                         'showTitle' => $showTitle,
                         'style' => $style,
-                        'class' => $class, // ✅ default + custom
+                        'class' => $class,
+                        'slider' => $slider,
                     ])->render();
                 }
 
@@ -315,29 +349,40 @@ class CoreShortcodes
             } catch (\Throwable $e) {
                 return '<!-- [logo] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Shows logos from Media Category (media_category taxonomy) for a given catid.',
+            'params' => [
+                ['name' => 'catid', 'type' => 'int', 'default' => null, 'desc' => 'Required category term id (media_category).'],
+                ['name' => 'column', 'type' => 'int', 'default' => 4, 'desc' => 'Desktop columns (1–12).'],
+                ['name' => 'mobile', 'type' => 'int', 'default' => 2, 'desc' => 'Mobile columns (1–6).'],
+                ['name' => 'title', 'type' => 'bool', 'default' => false, 'desc' => 'Show logo title (flag or value).'],
+                ['name' => 'style', 'type' => 'string', 'default' => 'square', 'desc' => 'square|round (squire accepted as square).'],
+                ['name' => 'asc', 'type' => 'flag', 'default' => 'asc', 'desc' => 'Order by ID ascending.'],
+                ['name' => 'dec', 'type' => 'flag', 'default' => null, 'desc' => 'Order by ID descending.'],
+                ['name' => 'order', 'type' => 'string', 'default' => 'asc', 'desc' => 'asc|desc|dec'],
+                ['name' => 'load', 'type' => 'int', 'default' => null, 'desc' => 'Limit items (1–500). Default: all.'],
+                ['name' => 'class', 'type' => 'string', 'default' => 'logo_grid', 'desc' => 'Extra CSS classes appended.'],
+                ['name' => 'slider', 'type' => 'bool', 'default' => false, 'desc' => 'Enable slider mode (flag or value).'],
+            ],
+            'examples' => [
+                '[logo catid="5"]',
+                '[logo catid="5" column="6" mobile="2" title style="round" dec load="12" class="mylogos"]',
+                '[logo catid="5" slider]',
+            ],
+        ]);
 
         /**
          * ✅ [sp]  (Static Posts)
-         *
-         * Added:
-         * - postid="14"  => loads that static_post and passes topTitle/topContent to view (top section)
-         * - top="hybrid" => hybrid hero variant with images (uses first 2 featured images)
-         * - lmbtn        => show learn more button (button href comes from per-post field in meta_json)
-         *
-         * Existing:
-         * - If postid is provided and catid is missing => we allow rendering top section only.
          */
-        $shortcodes->register('sp', function (array $atts = [], ?string $content = null, array $context = []) {
+        $shortcodes->registerWithMeta('sp', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
                 $staticPostClass = '\\Plugins\\StaticPosts\\Models\\StaticPost';
                 if (!class_exists($staticPostClass)) {
                     return '';
                 }
 
-                // ---------------------------
                 // postid (top section)
-                // ---------------------------
                 $topTitle = '';
                 $topContent = '';
                 $topImages = [];
@@ -385,12 +430,15 @@ class CoreShortcodes
 
                             $topImages = $mediaItems
                                 ->map(function ($m) {
-                                    if (is_object($m) && method_exists($m, 'url'))
+                                    if (is_object($m) && method_exists($m, 'url')) {
                                         return (string) $m->url();
-                                    if (is_object($m) && property_exists($m, 'url') && is_string($m->url))
+                                    }
+                                    if (is_object($m) && property_exists($m, 'url') && is_string($m->url)) {
                                         return (string) $m->url;
-                                    if (is_object($m) && property_exists($m, 'path') && is_string($m->path))
+                                    }
+                                    if (is_object($m) && property_exists($m, 'path') && is_string($m->path)) {
                                         return (string) $m->path;
+                                    }
                                     return null;
                                 })
                                 ->filter(fn($u) => is_string($u) && trim($u) !== '')
@@ -447,8 +495,9 @@ class CoreShortcodes
                     $taxonomyId = null;
                     foreach (['static_category', 'static_post_category', 'static_posts_category'] as $key) {
                         $taxonomyId = Taxonomy::query()->where('key', $key)->value('id');
-                        if ($taxonomyId)
+                        if ($taxonomyId) {
                             break;
+                        }
                     }
 
                     $termQuery = Term::query()->whereKey($catId);
@@ -473,12 +522,15 @@ class CoreShortcodes
                             ->limit($limit);
 
                         $with = [];
-                        if (method_exists($staticPostClass, 'featuredMediaPivot'))
+                        if (method_exists($staticPostClass, 'featuredMediaPivot')) {
                             $with[] = 'featuredMediaPivot';
-                        if (method_exists($staticPostClass, 'featuredMedia'))
+                        }
+                        if (method_exists($staticPostClass, 'featuredMedia')) {
                             $with[] = 'featuredMedia';
-                        if (!empty($with))
+                        }
+                        if (!empty($with)) {
                             $query->with($with);
+                        }
 
                         $items = $query->get();
                     }
@@ -505,7 +557,26 @@ class CoreShortcodes
             } catch (\Throwable $e) {
                 return '<!-- [sp] shortcode error: ' . e($e->getMessage()) . ' -->';
             }
-        });
+        }, [
+            'group' => 'Core',
+            'description' => 'Renders Static Posts grid (plugin StaticPosts). Supports optional top section via postid.',
+            'params' => [
+                ['name' => 'catid', 'type' => 'int', 'default' => null, 'desc' => 'Static category term id (required unless postid is provided).'],
+                ['name' => 'postid', 'type' => 'int', 'default' => 0, 'desc' => 'Static post id for top section. If catid missing, renders top section only.'],
+                ['name' => 'top', 'type' => 'string', 'default' => '', 'desc' => 'Top variant (e.g. "hybrid").'],
+                ['name' => 'column', 'type' => 'int', 'default' => 3, 'desc' => 'Desktop columns (1–12).'],
+                ['name' => 'mobile', 'type' => 'int', 'default' => 1, 'desc' => 'Mobile columns (1–6).'],
+                ['name' => 'load', 'type' => 'int', 'default' => 6, 'desc' => 'Number of items to load (1–50).'],
+                ['name' => 'img', 'type' => 'bool', 'default' => false, 'desc' => 'Show images (flag or value).'],
+                ['name' => 'lmbtn', 'type' => 'bool', 'default' => false, 'desc' => 'Show Learn More button (flag or value).'],
+                ['name' => 'class', 'type' => 'string', 'default' => 'static_posts', 'desc' => 'CSS class for wrapper.'],
+            ],
+            'examples' => [
+                '[sp catid="6"]',
+                '[sp catid="6" column="3" mobile="1" load="6" img]',
+                '[sp postid="14" top="hybrid" lmbtn]',
+            ],
+        ]);
     }
 
     private static function fallbackPostsHtml(Collection $posts): string

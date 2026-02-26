@@ -184,19 +184,7 @@ class CmsServiceProvider extends ServiceProvider
         /** @var ShortcodeRegistry $shortcodes */
         $shortcodes = $this->app->make(ShortcodeRegistry::class);
 
-        // Built-in shortcodes
-        $shortcodes->register('year', fn() => (string) now()->year);
-
-        $shortcodes->register('button', function (array $attrs, ?string $content) {
-            $url = (string) ($attrs['url'] ?? '#');
-            $label = $content ?: (string) ($attrs['label'] ?? 'Click');
-            $blank = !empty($attrs['blank']);
-            $target = $blank ? ' target="_blank" rel="noopener"' : '';
-
-            return '<a href="' . e($url) . '"' . $target . ' class="btn">' . e($label) . '</a>';
-        });
-
-        // ✅ Register your core shortcodes into the registry (HELLO, POSTS, PRODUCTS, SP...)
+        // ✅ Register your core shortcodes into the registry (H1, POSTS, PRODUCTS, LOGO, SP...)
         \App\Cms\Shortcodes\CoreShortcodes::register($shortcodes);
 
         // Apply shortcodes through CMS_THE_CONTENT pipeline

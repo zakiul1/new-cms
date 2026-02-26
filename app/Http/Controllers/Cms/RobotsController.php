@@ -18,6 +18,20 @@ class RobotsController extends Controller
 
     public function show(): Response
     {
+        // ✅ WP-like global block: discourage search engines from indexing
+        $blocked = (bool) $this->settings->get('seo', 'search_engine_block', false);
+
+        if ($blocked) {
+            $lines = [
+                'User-agent: *',
+                'Disallow: /',
+            ];
+
+            return response(implode("\n", $lines), 200)
+                ->header('Content-Type', 'text/plain; charset=UTF-8');
+        }
+
+        // Default robots rules (when not blocked)
         $lines = [
             'User-agent: *',
             'Disallow: /admin',

@@ -127,6 +127,9 @@ class ManageCmsSettings extends Page
             // ✅ Attachment pages (global)
             'attachment_pages_enabled' => (bool) $settings->get('core', 'attachment_pages_enabled', false),
             'attachment_pages_indexable' => (bool) $settings->get('core', 'attachment_pages_indexable', true),
+
+            // ✅ SEO
+            'search_engine_block' => (bool) $settings->get('seo', 'search_engine_block', false),
         ]);
     }
 
@@ -233,6 +236,18 @@ class ManageCmsSettings extends Page
                         ->required()
                         ->reactive(),
 
+                    // ✅ SEO (WP-like)
+                    Section::make('SEO')
+                        ->description('Control search engine indexing (WordPress-like).')
+                        ->collapsible()
+                        ->collapsed()
+                        ->schema([
+                            Toggle::make('search_engine_block')
+                                ->label('Discourage search engines from indexing this site')
+                                ->helperText('If ON: robots.txt will Disallow /, sitemap will be disabled, and pages will output noindex.')
+                                ->default(false),
+                        ]),
+
                     // ✅ Attachment Pages (global) (collapsible)
                     Section::make('Attachment Pages')
                         ->description('Public attachment pages for media at /{media-slug}.')
@@ -319,6 +334,9 @@ class ManageCmsSettings extends Page
         $currentAttachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
         $currentAttachmentsIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
 
+        // ✅ Snapshot current SEO search engine block (for cache bump decision)
+        $currentSearchEngineBlock = (bool) $settings->get('seo', 'search_engine_block', false);
+
         // ✅ Snapshot current site_url for cache bump decision
         $currentSiteUrl = $this->normalizeSiteUrl(
             (string) $settings->get('core', 'site_url', rtrim((string) config('app.url'), '/'))
@@ -348,6 +366,10 @@ class ManageCmsSettings extends Page
             $homepageId = null;
         }
         $settings->set('core', 'homepage_page_id', $homepageId);
+
+        // ✅ SEO (WP-like)
+        $searchEngineBlock = (bool) ($data['search_engine_block'] ?? false);
+        $settings->set('seo', 'search_engine_block', $searchEngineBlock);
 
         // ✅ Attachment pages (global)
         $attachmentsEnabled = (bool) ($data['attachment_pages_enabled'] ?? false);
@@ -389,6 +411,11 @@ class ManageCmsSettings extends Page
 
         // ✅ If status changed, bump render cache (header/topbar/footer may include it)
         if ($status !== $currentStatus) {
+            $renderChanged = true;
+        }
+
+        // ✅ If SEO block changed, bump render cache (robots meta + sitemap behavior + canonicals)
+        if ($searchEngineBlock !== $currentSearchEngineBlock) {
             $renderChanged = true;
         }
 
@@ -452,6 +479,7 @@ class ManageCmsSettings extends Page
             'tag_base' => $tagBase,
             'attachment_pages_enabled' => $attachmentsEnabled,
             'attachment_pages_indexable' => $attachmentsIndexable,
+            'search_engine_block' => $searchEngineBlock,
         ]);
     }
 }

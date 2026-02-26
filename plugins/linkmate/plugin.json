@@ -1,0 +1,11 @@
+{
+  "name": "LinkMate",
+  "slug": "linkmate",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php",
+  "settings": {
+    "group": "plugin:linkmate",
+    "title": "LinkMate Settings",
+    "description": "Auto-link keywords in content when saving posts/pages/media."
+  }
+}

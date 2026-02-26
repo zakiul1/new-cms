@@ -206,7 +206,7 @@
             .{{ $wrapperClass }} {
                 color: #2c2c2c;
                 font-family: 'Source Sans Pro', sans-serif;
-                margin: 60px 0px;
+                margin: 40px 0px;
             }
 
             /* ---------------------------
@@ -412,6 +412,7 @@
                 display: block;
                 width: 100%;
                 margin-bottom: 25px;
+                background: #f9fafb;
             }
 
             .{{ $wrapperClass }} .sp-img img {

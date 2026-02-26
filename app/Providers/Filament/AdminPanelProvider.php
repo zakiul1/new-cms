@@ -143,7 +143,12 @@ HTML;
          * ✅ Your existing no-refresh toggle
          */
         $panel->renderHook(PanelsRenderHook::GLOBAL_SEARCH_BEFORE, function (): string {
-            return Blade::render('@livewire("filament.toggle-frontend-admin-bar")');
+            return Blade::render('
+        <div class="flex items-center gap-2">
+            @livewire("filament.toggle-frontend-admin-bar")
+            @livewire("filament.view-shortcodes")
+        </div>
+    ');
         });
 
         app(Hooks::class)->doAction(HookPoints::FILAMENT_ADMIN_PANEL, $panel);

@@ -1,7 +1,7 @@
-// Exports the "silver" theme for usage with module loaders
+// Exports the "table" plugin for usage with module loaders
 // Usage:
 //   CommonJS:
-//     require('tinymce/themes/silver')
+//     require('tinymce/plugins/table')
 //   ES2015:
-//     import 'tinymce/themes/silver'
-require('./theme.js');
+//     import 'tinymce/plugins/table'
+require('./plugin.js');

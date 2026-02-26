@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Filament\Notifications\Notification;
 use App\Models\Taxonomy;
 use App\Models\Term;
+use App\Cms\Core\SettingsRepository;
 
 class PagesTable
 {
@@ -38,8 +39,22 @@ class PagesTable
                     ->limit(50)
                     ->tooltip(fn($record) => $record->title)
                     ->extraAttributes(['class' => 'max-w-[420px] truncate'])
+                    ->formatStateUsing(function (string $state, Post $record, SettingsRepository $settings): HtmlString {
+                        $homepageId = $settings->get('core', 'homepage_page_id', null);
+                        $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
 
-                    // ✅ WP-like hover actions
+                        $title = e($state);
+
+                        if ($homepageId !== null && (int) $record->id === $homepageId) {
+                            $badge = '<span class="ml-2 inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-600/20">Front Page</span>';
+                            return new HtmlString($title . $badge);
+                        }
+
+                        return new HtmlString($title);
+                    })
+                    ->html()
+
+                    // ✅ keep your existing WP-like hover actions
                     ->description(function (Post $record, PermalinkManager $permalinks): HtmlString {
                         $editUrl = PageResource::getUrl('edit', ['record' => $record]);
                         $viewUrl = $permalinks->pageUrl($record);

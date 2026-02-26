@@ -18,6 +18,7 @@ use App\Models\MenuItem;
 use App\Models\MenuAssignment;
 use App\Observers\MenuItemCacheObserver;
 use App\Observers\MenuAssignmentCacheObserver;
+use App\Livewire\Filament\ViewShortcodes;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -66,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
         // ✅ Livewire components
         Livewire::component('media-browser', MediaBrowser::class);
         Livewire::component('filament.toggle-frontend-admin-bar', ToggleFrontendAdminBar::class);
+        Livewire::component('filament.view-shortcodes', ViewShortcodes::class);
 
         /**
          * ✅ Register CORE shortcodes into ShortcodeRegistry (the one ShortcodeParser uses)

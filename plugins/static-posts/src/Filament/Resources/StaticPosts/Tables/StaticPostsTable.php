@@ -2,18 +2,15 @@
 
 namespace Plugins\StaticPosts\Filament\Resources\StaticPosts\Tables;
 
-
 use Filament\Actions\Action;
-use Filament\Actions\EditAction;
 use Filament\Actions\BulkActionGroup;
-
+use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
-
+use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\HtmlString;
 use Plugins\StaticPosts\Filament\Resources\StaticPosts\StaticPostResource;
-use Filament\Actions\DeleteAction;
 
 class StaticPostsTable
 {
@@ -23,7 +20,18 @@ class StaticPostsTable
             // ✅ Make the whole <tr> a "group row"
             ->recordClasses(fn() => ['group/row'])
 
+            // ✅ Eager-load categories (needed for Category column)
+            ->modifyQueryUsing(fn($query) => $query->with(['categories']))
+
             ->columns([
+                // ✅ 1) Post ID column
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable()
+                    ->toggleable()
+                    ->alignCenter(),
+
+                // ✅ Title column (same as before)
                 TextColumn::make('title')
                     ->label('Title')
                     ->searchable()
@@ -33,7 +41,6 @@ class StaticPostsTable
                         $editUrl = StaticPostResource::getUrl('edit', ['record' => $record]);
                         $viewUrl = url('/static/' . $record->slug);
 
-                        // ✅ Now it responds to full row hover (group/row)
                         return new HtmlString(
                             '<div>
                                 <div class="font-medium text-gray-950 dark:text-white">
@@ -49,23 +56,36 @@ class StaticPostsTable
                         );
                     }),
 
+                // ✅ 3) Category column (header cell)
+                TextColumn::make('categories.name')
+                    ->label('Category')
+                    ->html()
+                    ->formatStateUsing(function ($state, $record) {
+                        // handles multiple categories
+                        $names = $record->categories?->pluck('name')->filter()->values()->all() ?? [];
+                        return implode(', ', array_map('e', $names));
+                    })
+                    ->wrap()
+                    ->toggleable(),
+
+                // Status column (same as before)
                 TextColumn::make('status')
                     ->badge()
                     ->sortable(),
 
-                TextColumn::make('updated_at')
-                    ->since()
-                    ->sortable(),
+                // ✅ 2) Removed updated_at column
             ])
             ->actions([
                 EditAction::make(),
+
                 Action::make('view')
                     ->label('View')
                     ->icon('heroicon-o-eye')
                     ->url(fn($record) => url('/static/' . $record->slug))
                     ->openUrlInNewTab(),
+
                 DeleteAction::make()
-                    ->label('Delete') // or 'Trash'
+                    ->label('Delete')
                     ->icon('heroicon-o-trash')
                     ->requiresConfirmation(),
             ])
