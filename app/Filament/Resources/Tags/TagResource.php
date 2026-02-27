@@ -25,7 +25,10 @@ class TagResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Appearance';
 
-
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
