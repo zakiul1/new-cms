@@ -73,7 +73,8 @@ class MediaUploader
             Storage::disk($disk)->makeDirectory($dir);
         }
 
-        $storedName = $this->safeUniqueFilename($file);
+        // ✅ changed: numeric suffix naming (no random string)
+        $storedName = $this->safeUniqueFilename($file, $disk, $dir);
         $path = $file->storeAs($dir, $storedName, $disk);
 
         $baseName = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
@@ -141,7 +142,8 @@ class MediaUploader
         }
 
         // Store new original first
-        $storedName = $this->safeUniqueFilename($file);
+        // ✅ changed: numeric suffix naming (no random string)
+        $storedName = $this->safeUniqueFilename($file, $disk, $dir);
         $path = $file->storeAs($dir, $storedName, $disk);
 
         // Remove old variant files + records
@@ -313,17 +315,31 @@ class MediaUploader
     }
 
     /**
-     * Keep filename unique on disk (recommended).
+     * ✅ Keep filename unique on disk (numeric suffix: file.png, file-2.png, file-3.png...)
      */
-    private function safeUniqueFilename(UploadedFile|TemporaryUploadedFile $file): string
-    {
+    private function safeUniqueFilename(
+        UploadedFile|TemporaryUploadedFile $file,
+        string $disk,
+        string $dir
+    ): string {
         $name = Str::slug((string) pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
         $name = $name !== '' ? $name : 'file';
 
         $ext = strtolower((string) $file->getClientOriginalExtension());
         $ext = $ext !== '' ? $ext : 'bin';
 
-        return $name . '-' . Str::random(10) . '.' . $ext;
+        $base = $name;
+        $filename = $base . '.' . $ext;
+
+        $dir = trim($dir, '/');
+        $i = 2;
+
+        while (Storage::disk($disk)->exists($dir . '/' . $filename)) {
+            $filename = $base . '-' . $i . '.' . $ext;
+            $i++;
+        }
+
+        return $filename;
     }
 
     /**

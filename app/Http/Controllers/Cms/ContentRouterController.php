@@ -13,6 +13,7 @@ use App\Models\SlugHistory;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 // ✅ Correct Filament resources (fixes your admin bar edit URLs)
 use App\Filament\Resources\MediaResource as FilamentMediaResource;
@@ -93,10 +94,11 @@ class ContentRouterController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $slug, PermalinkManager $permalinks, SettingsRepository $settings)
+    // ✅ FIX: slug can be null when "/" matches catch-all
+    public function show(Request $request, ?string $slug = null, PermalinkManager $permalinks, SettingsRepository $settings)
     {
         // Slug is route param; normalize for matching (no leading/trailing slash)
-        $slug = trim($slug, '/');
+        $slug = trim((string) $slug, '/');
         $path = $request->getPathInfo(); // keeps "/slug/" when present
 
         // ✅ Normalize to "/" if double slash happens
@@ -116,6 +118,59 @@ class ContentRouterController extends Controller
             if ($first === $permalinks->tagBase()) {
                 $termSlug = explode('/', $slug, 2)[1] ?? '';
                 return $this->renderTermArchive($request, 'tag', $termSlug, $path);
+            }
+        }
+
+        // ✅ NEW: Siatex Tags plugin resolver (no "/tag/" prefix)
+        // Only for single-segment slugs (same as pages/attachments), and only if plugin model exists.
+        if ($slug !== '' && !str_contains($slug, '/') && class_exists(\Plugins\SiatexTags\Models\SiatexTag::class)) {
+            $tag = \Plugins\SiatexTags\Models\SiatexTag::query()
+                ->where('slug', $slug)
+                ->first();
+
+            if ($tag) {
+                // Make current tag available to shortcode parsing (context + fallback)
+                $request->attributes->set('siatex_tag', $tag);
+
+                $termId = (int) ($tag->media_category_term_id ?? 0);
+                $media = collect();
+
+                if ($termId > 0) {
+                    $ids = DB::table('termables')
+                        ->where('term_id', $termId)
+                        ->where('termable_type', \App\Models\Media::class)
+                        ->pluck('termable_id')
+                        ->map(fn($v) => (int) $v)
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    if (!empty($ids)) {
+                        $media = \App\Models\Media::query()
+                            ->whereIn('id', $ids)
+                            ->latest('id')
+                            ->get();
+                    }
+                }
+
+                $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
+                $seo = is_array($meta['seo'] ?? null) ? $meta['seo'] : [];
+
+                if (!isset($seo['title']) || trim((string) $seo['title']) === '') {
+                    $seo['title'] = $tag->title;
+                }
+
+                // Optional canonical enforcement: remove trailing slash differences
+                $canonicalPath = '/' . trim((string) $tag->slug, '/');
+                if ($this->pathsDiffer($path, $canonicalPath)) {
+                    return $this->redirectPreserveQuery($request, $canonicalPath, 301);
+                }
+
+                return view('siatex-tags::show', [
+                    'tag' => $tag,
+                    'mediaItems' => $media,
+                    'seo' => $seo,
+                ]);
             }
         }
 
@@ -229,9 +284,6 @@ class ContentRouterController extends Controller
                     if (function_exists('do_action')) {
                         // ✅ apply frontend-only defaults in memory
                         do_action('media.attachment.defaults.persist', $media);
-
-                        // ❌ DO NOT refresh here (refresh wipes in-memory defaults)
-                        // $media->refresh();
                     }
 
                     $publicMediaCategories = $this->publicMediaCategories();
@@ -249,7 +301,7 @@ class ContentRouterController extends Controller
                     return view('attachment', [
                         'media' => $media,
                         'usedIn' => $usedIn,
-                        'seo' => $this->buildAttachmentSeo($media, $indexable), // ✅ now uses core.site_url internally
+                        'seo' => $this->buildAttachmentSeo($media, $indexable),
 
                         'mediaCategories' => $publicMediaCategories,
                         'activeMediaCategory' => $activeMediaCategory,
@@ -288,7 +340,6 @@ class ContentRouterController extends Controller
                         ? $permalinks->pagePath($current)
                         : $permalinks->postPath($current);
 
-                    // Store with normalized (no trailing slash) for lookup safety
                     $fromStore = $this->normalizeForLookup($path);
 
                     Redirect::query()->updateOrCreate(
@@ -304,17 +355,11 @@ class ContentRouterController extends Controller
         abort(404);
     }
 
-    /**
-     * Compare paths safely (ignores only trailing slash differences).
-     */
     private function pathsDiffer(string $a, string $b): bool
     {
         return $this->normalizeForLookup($a) !== $this->normalizeForLookup($b);
     }
 
-    /**
-     * Normalize path for comparisons/DB lookup: "/" stays "/", others have no trailing slash.
-     */
     private function normalizeForLookup(string $path): string
     {
         $path = '/' . ltrim($path, '/');
@@ -327,12 +372,8 @@ class ContentRouterController extends Controller
         return $path;
     }
 
-    /**
-     * Redirect while preserving query string.
-     */
     private function redirectPreserveQuery(Request $request, string $to, int $status = 301)
     {
-        // Ensure leading slash for internal paths
         if ($to !== '' && $to[0] !== '/' && !str_starts_with($to, 'http')) {
             $to = '/' . $to;
         }
@@ -345,15 +386,10 @@ class ContentRouterController extends Controller
         return redirect()->to($to, $status);
     }
 
-    /**
-     * Resolve which frontend view to render.
-     */
     private function resolveFrontendView(Post $post, string $fallback): string
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
         $template = trim((string) ($meta['template'] ?? ''));
-        // inside resolveFrontendView(...) after $meta and $template are set
-
 
         if ($template === '') {
             return $fallback;
@@ -384,7 +420,6 @@ class ContentRouterController extends Controller
             ->exists();
     }
 
-    // ✅ Apply shortcodes safely for SEO fields (plain text)
     private function seoShortcodeText(string $value, array $ctx): string
     {
         $value = trim($value);
@@ -404,7 +439,6 @@ class ContentRouterController extends Controller
         return trim(strip_tags($value));
     }
 
-    // ✅ Apply shortcodes for URL-like fields (canonical / og_image)
     private function seoShortcodeUrl(string $value, array $ctx): string
     {
         $value = trim($value);
@@ -431,14 +465,12 @@ class ContentRouterController extends Controller
 
         $ctx = ['post' => $post];
 
-        // ✅ allow shortcodes in SEO title/description
         $rawTitle = (string) ($seo['title'] ?? $post->title ?? config('app.name'));
         $rawDesc = (string) ($seo['description'] ?? $post->excerpt ?? '');
 
         $title = $this->seoShortcodeText($rawTitle, $ctx);
         $desc = $this->seoShortcodeText($rawDesc, $ctx);
 
-        // Canonical
         $canonicalRaw = (string) ($seo['canonical'] ?? '');
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
@@ -448,14 +480,12 @@ class ContentRouterController extends Controller
                 : $permalinks->postUrl($post);
         }
 
-        // Robots
         $robotsRaw = (string) ($seo['robots'] ?? '');
         $robots = $this->seoShortcodeText($robotsRaw, $ctx);
         if ($robots === '') {
             $robots = 'index, follow';
         }
 
-        // OG image
         $ogImageRaw = (string) ($seo['og_image'] ?? '');
         $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 
@@ -504,18 +534,15 @@ class ContentRouterController extends Controller
 
         $fallbackDesc = trim(strip_tags((string) $fallbackDescSource));
 
-        // ✅ allow shortcodes in SEO title/description
         $rawTitle = (string) ($seo['title'] ?? $fallbackTitle);
         $rawDesc = (string) ($seo['description'] ?? $fallbackDesc);
 
         $title = $this->seoShortcodeText($rawTitle, $ctx);
         $desc = $this->seoShortcodeText($rawDesc, $ctx);
 
-        // Canonical
         $canonicalRaw = (string) ($seo['canonical'] ?? '');
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
-        // ✅ IMPORTANT CHANGE: default canonical uses core.site_url (not APP_URL/url())
         if ($canonical === '') {
             /** @var SettingsRepository $settings */
             $settings = app(SettingsRepository::class);
@@ -526,14 +553,12 @@ class ContentRouterController extends Controller
             $canonical = $base . '/' . trim((string) $media->slug, '/');
         }
 
-        // Robots
         $robotsRaw = (string) ($seo['robots'] ?? '');
         $robots = $this->seoShortcodeText($robotsRaw, $ctx);
         if ($robots === '') {
             $robots = $indexable ? 'index, follow' : 'noindex, follow';
         }
 
-        // OG image
         $ogImageRaw = (string) ($seo['og_image'] ?? '');
         $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 

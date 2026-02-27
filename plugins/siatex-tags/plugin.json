@@ -1,0 +1,9 @@
+{
+  "name": "Siatex Tags",
+  "slug": "siatex-tags",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php",
+  "lifecycle": {
+    "activate": "activate.php"
+  }
+}

@@ -84,7 +84,9 @@ Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
  * ✅ Catch-all route:
  * Handles pages, posts, attachment pages (/media-slug), and slug history redirects.
  * IMPORTANT: keep this LAST.
+ *
+ * FIX: use '.+' instead of '.*' so it cannot match '/' (empty slug).
  */
 Route::get('/{slug}', [ContentRouterController::class, 'show'])
-    ->where('slug', '.*')
+    ->where('slug', '.+')
     ->name('cms.catchall');

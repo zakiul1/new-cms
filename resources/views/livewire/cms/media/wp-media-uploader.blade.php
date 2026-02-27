@@ -12,7 +12,8 @@
             addFiles($event.dataTransfer?.files);
         ">
         <div class="flex h-full w-full items-center justify-center">
-            <div class="pointer-events-none rounded-xl border border-dashed border-slate-300 bg-white px-10 py-8 text-center shadow-lg">
+            <div
+                class="pointer-events-none rounded-xl border border-dashed border-slate-300 bg-white px-10 py-8 text-center shadow-lg">
                 <div class="text-sm font-semibold text-slate-900">Drop files to upload</div>
                 <div class="mt-1 text-xs text-slate-500">Release to start uploading</div>
             </div>
@@ -20,23 +21,34 @@
     </div>
 
     {{-- Global drag detector --}}
-    <div class="hidden" x-init="const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
-
-        ['dragenter','dragover','dragleave','drop'].forEach(n => window.addEventListener(n, prevent, { passive: false }));
-
-        window.addEventListener('dragenter', (e) => { prevent(e); isDropping = true; }, { passive: false });
-        window.addEventListener('dragover',  (e) => { prevent(e); isDropping = true; }, { passive: false });
-
-        window.addEventListener('dragleave', (e) => {
-            prevent(e);
-            if (
-                e.clientX <= 0 || e.clientY <= 0 ||
-                e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
-            ) isDropping = false;
-        }, { passive: false });
-
-        window.addEventListener('drop', (e) => { prevent(e); isDropping = false; }, { passive: false });
-    "></div>
+    <div class="hidden" x-init="const prevent = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(n => window.addEventListener(n, prevent, { passive: false }));
+    
+    window.addEventListener('dragenter', (e) => {
+        prevent(e);
+        isDropping = true;
+    }, { passive: false });
+    window.addEventListener('dragover', (e) => {
+        prevent(e);
+        isDropping = true;
+    }, { passive: false });
+    
+    window.addEventListener('dragleave', (e) => {
+        prevent(e);
+        if (
+            e.clientX <= 0 || e.clientY <= 0 ||
+            e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
+        ) isDropping = false;
+    }, { passive: false });
+    
+    window.addEventListener('drop', (e) => {
+        prevent(e);
+        isDropping = false;
+    }, { passive: false });"></div>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
@@ -47,12 +59,13 @@
                     <div class="text-sm font-semibold text-gray-900">Drop files to upload</div>
                     <div class="mt-1 text-xs text-gray-500">or</div>
 
-                    <label class="mt-3 inline-flex cursor-pointer items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-900">
+                    <label
+                        class="mt-3 inline-flex cursor-pointer items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-900">
                         Select Files
 
                         {{-- No wire:model here --}}
                         <input x-ref="picker" type="file" class="hidden" multiple
-                               @change="addFiles($event.target.files); $event.target.value=null;" />
+                            @change="addFiles($event.target.files); $event.target.value=null;" />
                     </label>
 
                     <div class="mt-3 text-[11px] text-gray-500">
@@ -77,7 +90,7 @@
 
                     <div class="mt-2 h-2 w-full overflow-hidden rounded bg-gray-100">
                         <div class="h-2 rounded bg-primary-600 transition-[width] duration-150"
-                             :style="`width: ${overallPercent}%`"></div>
+                            :style="`width: ${overallPercent}%`"></div>
                     </div>
                 </div>
             </div>
@@ -131,14 +144,15 @@
         {{-- Uploading rows --}}
         <template x-for="item in queue" :key="item.id">
             <div class="flex items-center justify-between gap-4 border-b border-gray-100 p-4"
-                 x-show="item.visible !== false">
+                x-show="item.visible !== false">
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100 border border-gray-200">
                         <template x-if="item.preview">
                             <img :src="item.preview" class="h-full w-full object-contain" alt="" />
                         </template>
                         <template x-if="!item.preview">
-                            <div class="flex h-full w-full items-center justify-center text-[10px] text-gray-400">FILE</div>
+                            <div class="flex h-full w-full items-center justify-center text-[10px] text-gray-400">FILE
+                            </div>
                         </template>
                     </div>
 
@@ -148,12 +162,12 @@
                             <span x-text="item.prettySize"></span>
                             <span class="mx-2">•</span>
                             <span x-text="item.statusLabel"
-                                  :class="{
+                                :class="{
                                     'text-gray-500': item.status === 'queued',
                                     'text-primary-600': item.status === 'uploading',
                                     'text-green-600': item.status === 'done',
                                     'text-red-600': item.status === 'error',
-                                  }"></span>
+                                }"></span>
                             <template x-if="item.error">
                                 <span class="ml-2 text-red-600" x-text="item.error"></span>
                             </template>
@@ -171,7 +185,7 @@
                             </div>
                             <div class="mt-1 h-2 w-full overflow-hidden rounded bg-gray-100">
                                 <div class="h-2 rounded bg-primary-600 transition-[width] duration-75"
-                                     :style="`width: ${item.progress}%`"></div>
+                                    :style="`width: ${item.progress}%`"></div>
                             </div>
                         </div>
                     </template>
@@ -207,7 +221,8 @@
                             @if ($thumb)
                                 <img src="{{ $thumb }}" class="h-full w-full object-contain" alt="" />
                             @else
-                                <div class="flex h-full w-full items-center justify-center text-[10px] text-gray-400">FILE</div>
+                                <div class="flex h-full w-full items-center justify-center text-[10px] text-gray-400">
+                                    FILE</div>
                             @endif
                         </div>
 
@@ -223,7 +238,7 @@
                                 <a href="{{ $editUrl }}" class="text-primary-600 hover:underline">Edit</a>
 
                                 <button type="button" class="text-primary-600 hover:underline"
-                                        @click.prevent="safeCopy(@js($copyUrl))">
+                                    @click.prevent="safeCopy(@js($copyUrl))">
                                     Copy URL to clipboard
                                 </button>
                             </div>
@@ -242,7 +257,9 @@
 @once
     <script>
         if (typeof window.wpUploader !== 'function') {
-            window.wpUploader = function({ maxMb } = {}) {
+            window.wpUploader = function({
+                maxMb
+            } = {}) {
                 return {
                     isDropping: false,
 
@@ -272,7 +289,9 @@
                         el.style.top = '-9999px';
                         document.body.appendChild(el);
                         el.select();
-                        try { document.execCommand('copy'); } catch (e) {}
+                        try {
+                            document.execCommand('copy');
+                        } catch (e) {}
                         document.body.removeChild(el);
                     },
 
@@ -315,9 +334,12 @@
                     humanSize(bytes) {
                         const thresh = 1024;
                         if (Math.abs(bytes) < thresh) return bytes + ' B';
-                        const units = ['KB','MB','GB','TB'];
+                        const units = ['KB', 'MB', 'GB', 'TB'];
                         let u = -1;
-                        do { bytes /= thresh; ++u; } while (Math.abs(bytes) >= thresh && u < units.length - 1);
+                        do {
+                            bytes /= thresh;
+                            ++u;
+                        } while (Math.abs(bytes) >= thresh && u < units.length - 1);
                         return bytes.toFixed(1) + ' ' + units[u];
                     },
 
@@ -340,6 +362,9 @@
                         this.isUploading = false;
                         this.statusText = 'Done';
                         this.recalcOverall();
+
+                        // ✅ If everything is done/hidden, cleanup queue fully
+                        this.queue = this.queue.filter(i => i.visible !== false);
                     },
 
                     recalcOverall() {
@@ -368,42 +393,67 @@
                                 item.file,
 
                                 async () => {
-                                    try {
-                                        // ✅ This creates DB record + pushes into uploadedIds
-                                        await this.$wire.persistSingleUpload();
+                                        try {
+                                            // ✅ This creates DB record + pushes into uploadedIds
+                                            await this.$wire.persistSingleUpload();
 
-                                        item.status = 'done';
-                                        item.statusLabel = 'Completed';
-                                        item.progress = 100;
+                                            item.status = 'done';
+                                            item.statusLabel = 'Completed';
+                                            item.progress = 100;
 
-                                        // ✅ force Livewire to re-render view so uploadedMedia rows show
-                                        this.$wire.$refresh();
+                                            // ✅ force Livewire to re-render view so uploadedMedia rows show
+                                            this.$wire.$refresh();
 
-                                    } catch (e) {
+                                            // ✅ NEW: auto-hide/remove completed progress row
+                                            setTimeout(() => {
+                                                item.visible = false;
+
+                                                // remove from queue array
+                                                this.queue = this.queue.filter(q => q.id !== item
+                                                    .id);
+
+                                                // recalc overall progress + stop upload UI if nothing left
+                                                this.recalcOverall();
+                                                if (!this.queue.some(q => q.status === 'queued' || q
+                                                        .status === 'uploading')) {
+                                                    this.isUploading = false;
+                                                    this.statusText = 'Done';
+                                                }
+                                            }, 600);
+
+                                        } catch (e) {
+                                            item.status = 'error';
+                                            item.statusLabel = 'Failed';
+                                            item.error = 'Server error while saving.';
+                                            item.progress = 0;
+                                        }
+
+                                        if (item.preview) {
+                                            try {
+                                                URL.revokeObjectURL(item.preview);
+                                            } catch (e) {}
+                                        }
+                                        resolve();
+                                    },
+
+                                    () => {
                                         item.status = 'error';
                                         item.statusLabel = 'Failed';
-                                        item.error = 'Server error while saving.';
+                                        item.error = 'Upload failed.';
                                         item.progress = 0;
+
+                                        if (item.preview) {
+                                            try {
+                                                URL.revokeObjectURL(item.preview);
+                                            } catch (e) {}
+                                        }
+                                        resolve();
+                                    },
+
+                                    (event) => {
+                                        const p = event?.detail?.progress ?? 0;
+                                        item.progress = Math.max(0, Math.min(100, Math.round(p)));
                                     }
-
-                                    if (item.preview) { try { URL.revokeObjectURL(item.preview); } catch (e) {} }
-                                    resolve();
-                                },
-
-                                () => {
-                                    item.status = 'error';
-                                    item.statusLabel = 'Failed';
-                                    item.error = 'Upload failed.';
-                                    item.progress = 0;
-
-                                    if (item.preview) { try { URL.revokeObjectURL(item.preview); } catch (e) {} }
-                                    resolve();
-                                },
-
-                                (event) => {
-                                    const p = event?.detail?.progress ?? 0;
-                                    item.progress = Math.max(0, Math.min(100, Math.round(p)));
-                                }
                             );
                         });
                     },

@@ -71,7 +71,7 @@
 @endphp
 
 @if ($items->count() > 0)
-    <div class="{{ $rootClassAttr }}">
+    <div class="{{ $rootClassAttr }} ">
         @if ($slider)
             {{-- SLIDER MODE (same look like uploaded image, no arrows, smooth rolling swipe) --}}
             <div class="logo-carousel-wrap">
@@ -300,7 +300,7 @@
              * ---------------------------- */
 
             .{{ $scopeClass }} .logo-carousel-wrap {
-                margin-top: 40px;
+                margin-top: 20px;
                 background: #ffffff;
                 padding: 12px 0;
             }

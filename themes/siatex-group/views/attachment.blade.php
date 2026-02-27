@@ -441,17 +441,19 @@
     </div>
 
     {{-- HERO --}}
+    {{-- HERO --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
-            <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12">
-                {{-- IMAGE --}}
-                <div class="order-1 lg:order-2 lg:col-span-5">
+            <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
+                {{-- IMAGE (sticky on desktop) --}}
+                <div class="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-24 lg:self-start">
                     @if ($media->isImage())
                         {!! cms_picture(
                             $media,
                             [
                                 'alt' => e($title),
-                                'class' => 'w-full object-contain',
+                                // make image fit nicely + not overflow viewport
+                                'class' => 'w-full object-contain max-h-[70vh]',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
                                 'decoding' => 'async',
@@ -482,7 +484,6 @@
                         </div>
                     @endif
 
-                    {{-- ✅ UPDATED ONLY: Get Price -> Cart button (no other code changed) --}}
                     <a href="#"
                         class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
                         data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ e($title) }}"
