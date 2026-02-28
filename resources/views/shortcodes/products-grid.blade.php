@@ -63,7 +63,7 @@
                             data-item-id="{{ (int) $media->id }}" data-item-type="media"
                             data-item-title="{{ e($title) }}" data-item-url="{{ e($url) }}"
                             data-item-image="{{ e($productImage) }}">
-                            Get Price
+                            Custom Quote
                         </button>
                     @endif
                 </div>

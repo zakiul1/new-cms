@@ -11,7 +11,7 @@
         // =========================
         $heroTitle = '';
         $heroSubtitle = '';
-        $heroImageUrl = '';
+        $heroMedia = null;
 
         try {
             $taxonomy = \App\Models\Taxonomy::query()->where('key', 'static_category')->first();
@@ -37,6 +37,7 @@
                             (string) ($heroPost->content_html ??
                                 (data_get($heroPost->content_json ?? [], 'html') ?? ($heroPost->excerpt ?? '')));
 
+                        // ✅ Get Media model for responsive variants (cms_picture)
                         $img = null;
                         if (method_exists($heroPost, 'featuredMediaPivot')) {
                             $img = $heroPost->featuredMediaPivot()->first();
@@ -45,14 +46,8 @@
                             $img = $heroPost->featuredMedia()->first();
                         }
 
-                        if (is_object($img)) {
-                            if (method_exists($img, 'url')) {
-                                $heroImageUrl = (string) $img->url();
-                            } elseif (property_exists($img, 'url') && is_string($img->url)) {
-                                $heroImageUrl = (string) $img->url;
-                            } elseif (property_exists($img, 'path') && is_string($img->path)) {
-                                $heroImageUrl = (string) $img->path;
-                            }
+                        if ($img instanceof \App\Models\Media) {
+                            $heroMedia = $img;
                         }
                     }
                 }
@@ -60,10 +55,10 @@
         } catch (\Throwable $e) {
             $heroTitle = '';
             $heroSubtitle = '';
-            $heroImageUrl = '';
+            $heroMedia = null;
         }
 
-        $showHero = trim($heroTitle) !== '' || trim($heroSubtitle) !== '' || trim($heroImageUrl) !== '';
+        $showHero = trim($heroTitle) !== '' || trim($heroSubtitle) !== '' || $heroMedia instanceof \App\Models\Media;
 
         // =========================
         // PAGE CONTENT (filters + shortcodes)
@@ -82,7 +77,7 @@
 
     {{-- HERO (ONLY if slider term + published static post exists) --}}
     @if ($showHero)
-        <section class="bg-white">
+        <section class="bg-white mt-[20px]">
             <div class="cms-container mx-auto px-4 py-10">
                 <div class="bg-gray-50 p-12">
 
@@ -94,11 +89,24 @@
                     <div class="grid grid-cols-1 lg:grid-cols-2 items-center gap-0">
                         {{-- IMAGE (mobile top) --}}
                         <div class="order-1 lg:order-2">
-                            @if (trim($heroImageUrl) !== '')
+                            @if ($heroMedia instanceof \App\Models\Media && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
                                 <div class="w-full">
-                                    <img src="{{ $heroImageUrl }}" alt="{{ e($heroTitle) }}"
-                                        class="w-full h-64 sm:h-80 lg:h-[420px] object-cover" loading="lazy"
-                                        decoding="async" />
+                                    {!! cms_picture(
+                                        $heroMedia,
+                                        [
+                                            'alt' => e($heroTitle),
+                                            // mimic your old sizing behavior
+                                            'class' => 'w-full h-64 sm:h-80 lg:h-[420px] object-cover',
+                                            // ✅ responsive hint: full width on mobile, half on desktop
+                                            'sizes' => '(max-width: 1024px) 100vw, 50vw',
+                                            'loading' => 'lazy',
+                                            'decoding' => 'async',
+                                        ],
+                                        // base variant
+                                        'large',
+                                        // srcset candidates
+                                        ['medium', 'medium_large', 'large'],
+                                    ) !!}
                                 </div>
                             @endif
                         </div>
@@ -111,8 +119,7 @@
                                 @endif
 
                                 @if (trim($heroSubtitle) !== '')
-                                    <div
-                                        class="mt-6 text-[15px] sm:text-[16px] lg:text-[17px] leading-relaxed text-gray-700 font-semibold italic">
+                                    <div class="mt-6 leading-relaxed text-gray-700 font-semibold italic">
                                         {!! $heroSubtitle !!}
                                     </div>
                                 @endif
@@ -120,7 +127,6 @@
                         </div>
                     </div>
 
-                    {{-- Your requested CSS + small fix to match image #1 weight --}}
                     <style>
                         .slider-text h1,
                         .slider-text h2 {
@@ -142,7 +148,7 @@
     @endif
 
     {{-- PAGE CONTENT --}}
-    <section class="bg-white">
+    <section class="bg-white ">
         <div class="cms-container mx-auto px-4 pb-12 my-10">
             @if ($hasShortcode)
                 <div class="cms-content">

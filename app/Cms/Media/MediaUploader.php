@@ -73,15 +73,17 @@ class MediaUploader
             Storage::disk($disk)->makeDirectory($dir);
         }
 
-        // ✅ changed: numeric suffix naming (no random string)
-        $storedName = $this->safeUniqueFilename($file, $disk, $dir);
-        $path = $file->storeAs($dir, $storedName, $disk);
-
+        // ----------------------------
+        // ✅ NEW: Normalize title + stored filename base using keyword list
+        // ----------------------------
         $baseName = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+        $title = $this->makeNormalizedTitle($baseName);
 
-        // Convert dashes/underscores to spaces, collapse spaces, Title Case (optional)
-        $title = trim(preg_replace('/\s+/', ' ', str_replace(['-', '_'], ' ', $baseName)) ?: '');
-        $title = $title !== '' ? Str::title($title) : 'Untitled';
+        // Store using normalized base (numeric suffix for uniqueness)
+        $ext = strtolower((string) $file->getClientOriginalExtension());
+        $storedName = $this->safeUniqueFilenameFromBase($title, $ext, $disk, $dir);
+
+        $path = $file->storeAs($dir, $storedName, $disk);
 
         $media = Media::create([
             'uploaded_by' => Auth::id(),
@@ -142,8 +144,12 @@ class MediaUploader
         }
 
         // Store new original first
-        // ✅ changed: numeric suffix naming (no random string)
-        $storedName = $this->safeUniqueFilename($file, $disk, $dir);
+        // ✅ Use normalized title for stored filename base (but keep existing Media title/slug)
+        $baseName = (string) (pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
+        $normalizedForFile = $this->makeNormalizedTitle($baseName);
+        $ext = strtolower((string) $file->getClientOriginalExtension());
+        $storedName = $this->safeUniqueFilenameFromBase($normalizedForFile, $ext, $disk, $dir);
+
         $path = $file->storeAs($dir, $storedName, $disk);
 
         // Remove old variant files + records
@@ -164,7 +170,7 @@ class MediaUploader
         $titleForSlug = (string) ($media->title ?: pathinfo($originalName, PATHINFO_FILENAME) ?: 'Untitled');
         $slug = $media->slug ?: $this->makeUniqueAttachmentSlug($titleForSlug);
 
-        // Update DB
+        // Update DB (do not change title/slug)
         $media->update([
             'filename' => basename((string) $path),
             'original_filename' => $originalName,
@@ -315,17 +321,95 @@ class MediaUploader
     }
 
     /**
-     * ✅ Keep filename unique on disk (numeric suffix: file.png, file-2.png, file-3.png...)
+     * ✅ Build a normalized human title from the filename base.
+     * - Applies Str::title first (nice human formatting)
+     * - Then enforces canonical keyword casing from config (USA, v-neck, etc.)
      */
-    private function safeUniqueFilename(
-        UploadedFile|TemporaryUploadedFile $file,
+    private function makeNormalizedTitle(string $rawBaseName): string
+    {
+        $rawBaseName = trim($rawBaseName);
+        $rawBaseName = $rawBaseName !== '' ? $rawBaseName : 'Untitled';
+
+        // Convert common separators to spaces, collapse spaces
+        $text = str_replace(['-', '_'], ' ', $rawBaseName);
+        $text = trim(preg_replace('/\s+/', ' ', $text) ?: '');
+
+        // Humanize
+        $text = $text !== '' ? Str::title(mb_strtolower($text)) : 'Untitled';
+
+        // Enforce canonical keyword casing/forms
+        return $this->applyCanonicalKeywords($text);
+    }
+
+    /**
+     * ✅ Replace keyword variants with canonical forms from config.
+     * Matching:
+     * - case-insensitive
+     * - treats separators (space, -, _) as equivalent while matching
+     */
+    private function applyCanonicalKeywords(string $text): string
+    {
+        $keywords = config('cms-media.filename_keyword_canonical', []);
+        $seps = config('cms-media.filename_keyword_separators', [' ', '-', '_']);
+
+        if (!is_array($keywords) || count($keywords) === 0) {
+            return $text;
+        }
+        if (!is_array($seps) || count($seps) === 0) {
+            $seps = [' ', '-', '_'];
+        }
+
+        // Normalize separators list into a regex class or alternation
+        $sepPattern = '[' . preg_quote(implode('', $seps), '/') . '\s]+';
+
+        // Map lower => canonical
+        $canon = [];
+        foreach ($keywords as $k) {
+            $k = trim((string) $k);
+            if ($k === '') {
+                continue;
+            }
+            $canon[mb_strtolower($k)] = $k;
+        }
+
+        // Replace longest phrases first (so "in Bangladesh" wins over "in")
+        uksort($canon, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+
+        foreach ($canon as $lower => $canonical) {
+            // Build flexible pattern:
+            // - spaces inside keywords become "any separator(s)"
+            // - hyphens/underscores inside keyword also treated as separators while matching
+            $p = preg_quote($lower, '/');
+            $p = str_replace(['\ ', '\-', '\_'], $sepPattern, $p);
+
+            // Boundary-ish: avoid matching inside other alphanumerics
+            $text = preg_replace(
+                '/(?<![A-Za-z0-9])' . $p . '(?![A-Za-z0-9])/iu',
+                $canonical,
+                $text
+            ) ?? $text;
+        }
+
+        // Clean spacing
+        $text = trim(preg_replace('/\s+/', ' ', $text) ?: '');
+
+        return $text !== '' ? $text : 'Untitled';
+    }
+
+    /**
+     * ✅ Keep filename unique on disk (numeric suffix: file.png, file-2.png, file-3.png...)
+     * Uses a provided base string (typically normalized title).
+     */
+    private function safeUniqueFilenameFromBase(
+        string $baseForName,
+        string $ext,
         string $disk,
         string $dir
     ): string {
-        $name = Str::slug((string) pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
+        $name = Str::slug($baseForName, '-');
         $name = $name !== '' ? $name : 'file';
 
-        $ext = strtolower((string) $file->getClientOriginalExtension());
+        $ext = strtolower(trim($ext));
         $ext = $ext !== '' ? $ext : 'bin';
 
         $base = $name;

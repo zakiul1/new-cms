@@ -7,12 +7,14 @@
         /** @var \Illuminate\Support\Collection|\App\Models\Media[] $mediaItems */
 
         // -----------------------------
-        // Helpers (similar to attachment)
+        // Helpers (same style as attachment)
         // -----------------------------
         $allowedHtml =
             '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
             '<div><span><section><article><header><footer>' .
-            '<picture><source><img><button><script>';
+            '<picture><source><img>' .
+            '<button>' .
+            '<script>';
 
         $removeScriptStyleBlocks = function (string $html): string {
             $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
@@ -27,15 +29,18 @@
             if (is_string($value)) {
                 return $value;
             }
+
             if (is_array($value)) {
                 $html = $value['html'] ?? ($value['value'] ?? ($value['content'] ?? ''));
                 return is_string($html) ? $html : '';
             }
+
             if (is_object($value)) {
                 $arr = (array) $value;
                 $html = $arr['html'] ?? ($arr['value'] ?? ($arr['content'] ?? ''));
                 return is_string($html) ? $html : '';
             }
+
             return '';
         };
 
@@ -52,34 +57,42 @@
             return $text === '';
         };
 
-        // -----------------------------
-        // Tag data
-        // -----------------------------
-        $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
-
-        $title = trim((string) $tag->title);
-        $subtitle = trim((string) data_get($meta, 'subtitle', ''));
-        $subDesc = data_get($meta, 'sub_description', '');
-
-        $contentHtml = '';
-        if (is_array($tag->content_json ?? null)) {
-            $contentHtml = (string) ($tag->content_json['html'] ?? '');
-        } elseif (is_string($tag->content_json ?? null)) {
-            $contentHtml = (string) $tag->content_json;
-        }
-
         // Shortcode parser (CMS)
         $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
         $shortcodeCtx = ['siatex_tag' => $tag];
-
-        $subDescHtml = $htmlValue($subDesc);
 
         // URL (no /tag/)
         $tagUrl = url('/' . ltrim((string) $tag->slug, '/'));
 
         // -----------------------------
-        // SEO: use controller $seo if exists, else build from tag meta.seo
-        // supports shortcodes (like attachment)
+        // ✅ Apply tag defaults on frontend (preview + normal)
+        // -----------------------------
+        if (function_exists('do_action')) {
+            do_action('siatex.tag.defaults.persist', $tag);
+        }
+
+        // -----------------------------
+        // Tag data (after defaults applied)
+        // -----------------------------
+        $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        $title = trim((string) $tag->title);
+        $subtitle = trim((string) data_get($meta, 'subtitle', ''));
+        $subDesc = data_get($meta, 'sub_description', '');
+        $subDescHtmlRaw = $htmlValue($subDesc);
+
+        $contentHtmlRaw = '';
+        if (is_array($tag->content_json ?? null)) {
+            $contentHtmlRaw = (string) ($tag->content_json['html'] ?? '');
+        } elseif (is_string($tag->content_json ?? null)) {
+            $contentHtmlRaw = (string) $tag->content_json;
+        }
+
+        // -----------------------------
+        // SEO (keep your existing behavior)
         // -----------------------------
         if (!isset($seo) || !is_array($seo)) {
             $seo = [];
@@ -93,6 +106,7 @@
             if ($value === '') {
                 return '';
             }
+
             if (function_exists('do_shortcode')) {
                 try {
                     $value = (string) do_shortcode($value, $shortcodeCtx);
@@ -100,6 +114,7 @@
                     // ignore
                 }
             }
+
             $value = $removeScriptStyleBlocks($value);
             return trim(strip_tags($value));
         };
@@ -109,6 +124,7 @@
             if ($value === '') {
                 return '';
             }
+
             if (function_exists('do_shortcode')) {
                 try {
                     $value = (string) do_shortcode($value, $shortcodeCtx);
@@ -116,16 +132,16 @@
                     // ignore
                 }
             }
+
             $value = $removeScriptStyleBlocks($value);
             return trim($value);
         };
 
-        // title/description defaults
         $fallbackDescSource = '';
-        if (!$htmlIsEmpty($subDescHtml)) {
-            $fallbackDescSource = (string) $subDescHtml;
-        } elseif (trim($contentHtml) !== '') {
-            $fallbackDescSource = (string) $contentHtml;
+        if (!$htmlIsEmpty($subDescHtmlRaw)) {
+            $fallbackDescSource = (string) $subDescHtmlRaw;
+        } elseif (trim($contentHtmlRaw) !== '') {
+            $fallbackDescSource = (string) $contentHtmlRaw;
         }
 
         $fallbackDescText = trim(strip_tags($removeScriptStyleBlocks((string) $fallbackDescSource)));
@@ -147,62 +163,87 @@
             $seoRobots = 'index, follow';
         }
 
-        // We'll set og image later using hero image if available.
-$seoOgImage = $seoShortcodeUrl(
-    (string) ($seo['og']['image'] ?? ($tagSeo['og_image'] ?? ($seo['og_image'] ?? ''))),
-);
+        $seoOgImage = $seoShortcodeUrl(
+            (string) ($seo['og']['image'] ?? ($tagSeo['og_image'] ?? ($seo['og_image'] ?? ''))),
+        );
 
-// finalize seo array for layout
-$seo = array_merge($seo, [
-    'title' => $seoTitle,
-    'description' => $seoDesc,
-    'canonical' => $seoCanonical,
-    'robots' => $seoRobots,
-    'og' => array_merge(is_array($seo['og'] ?? null) ? $seo['og'] : [], [
-        'title' => $seoTitle,
-        'description' => $seoDesc,
-        'type' => 'website',
-        'url' => $seoCanonical,
-        'image' => $seoOgImage,
-    ]),
-]);
+        $seo = array_merge($seo, [
+            'title' => $seoTitle,
+            'description' => $seoDesc,
+            'canonical' => $seoCanonical,
+            'robots' => $seoRobots,
+            'og' => array_merge(is_array($seo['og'] ?? null) ? $seo['og'] : [], [
+                'title' => $seoTitle,
+                'description' => $seoDesc,
+                'type' => 'website',
+                'url' => $seoCanonical,
+                'image' => $seoOgImage,
+            ]),
+        ]);
 
-// -----------------------------
-// Media selection:
-// - Hero: 2 images (random)
-// - Related products: max 12 random, excluding hero
-// - Related links: max 10 random, excluding hero + related
-// - Apply media defaults (same as attachment) for display
-// -----------------------------
-$allMedia = collect($mediaItems ?? []);
+        // -----------------------------
+        // ✅ Media selection (FIXED to behave like attachment)
+        // - hero: 1 random image
+        // - related: 12 random (exclude hero)
+        // - related links: 10 random (exclude hero + related)
+        // - BUT if the pool is small, we refill from category again (like attachment)
+        // -----------------------------
+        $allMedia = collect($mediaItems ?? [])
+            ->filter(fn($m) => $m instanceof \App\Models\Media)
+            ->values();
 
-// keep only images (hero needs images)
-$imageMedia = $allMedia
-    ->filter(function ($m) {
-        return $m && method_exists($m, 'isImage') ? $m->isImage() : true;
-    })
-    ->values();
+        $imageMedia = $allMedia->filter(fn($m) => method_exists($m, 'isImage') ? $m->isImage() : false)->values();
 
-$hero = $imageMedia->shuffle()->take(2)->values();
-$heroIds = $hero->pluck('id')->map(fn($v) => (int) $v)->all();
+        // 1) Hero image (random)
+        $heroMedia = $imageMedia->shuffle()->first();
+        $heroId = $heroMedia ? (int) $heroMedia->id : 0;
 
-$pool = $allMedia->reject(fn($m) => in_array((int) ($m->id ?? 0), $heroIds, true))->values();
+        // candidate pool excluding hero
+        $pool = $allMedia->reject(fn($m) => (int) $m->id === $heroId)->values();
 
-$related = $pool->shuffle()->take(12)->values();
-$relatedIds = $related->pluck('id')->map(fn($v) => (int) $v)->all();
+        // 2) Related products: random max 12
+        $related = $pool->shuffle()->take(12)->values();
+        $relatedIds = $related->pluck('id')->map(fn($v) => (int) $v)->all();
 
-$relatedLinks = $pool
-    ->reject(fn($m) => in_array((int) ($m->id ?? 0), $relatedIds, true))
-    ->shuffle()
-    ->take(10)
-    ->values();
+        // 3) Related links: start from remaining pool, exclude related
+        $relatedLinks = $pool
+            ->reject(fn($m) => in_array((int) $m->id, $relatedIds, true))
+            ->shuffle()
+            ->take(10)
+            ->values();
 
-// if no og image set, pick from hero
-if (($seo['og']['image'] ?? '') === '' && $hero->count()) {
+        // ✅ IMPORTANT FIX:
+        // If category is small, the above may produce 0 links.
+        // So we refill by sampling again from the full category set (excluding hero + related),
+        // similar to attachment's "more" logic.
+$need = 10 - $relatedLinks->count();
+if ($need > 0) {
+    $excludeIds = collect([$heroId])
+        ->merge($relatedIds)
+        ->unique()
+        ->values()
+        ->all();
+
+    $more = $allMedia
+        ->reject(fn($m) => in_array((int) $m->id, $excludeIds, true))
+        ->shuffle()
+        ->take($need)
+        ->values();
+
+    $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
+}
+
+// If still empty (extreme small category), allow links to reuse non-hero media
+// BUT keep order different from related products.
+if ($relatedLinks->isEmpty() && $pool->count() > 0) {
+    $relatedLinks = $pool->shuffle()->take(10)->values();
+}
+
+// If no og image set, pick from hero
+if (($seo['og']['image'] ?? '') === '' && $heroMedia) {
     try {
-        $firstHero = $hero->first();
-        if ($firstHero && method_exists($firstHero, 'url')) {
-            $seo['og']['image'] = (string) $firstHero->url('large');
+        if (method_exists($heroMedia, 'url')) {
+            $seo['og']['image'] = (string) $heroMedia->url('large');
         }
     } catch (\Throwable $e) {
         // ignore
@@ -210,14 +251,48 @@ if (($seo['og']['image'] ?? '') === '' && $hero->count()) {
 }
 
 // -----------------------------
-// Tag hero text:
-// Prefer Sub description; else Content (render shortcodes)
+// Hero text: use Tag CONTENT (shortcode-rendered + sanitized)
 // -----------------------------
 $heroTextHtml = '';
-if (!$htmlIsEmpty($subDescHtml)) {
-    $heroTextHtml = (string) $parser->render((string) $subDescHtml, $shortcodeCtx);
-} elseif (trim($contentHtml) !== '') {
-            $heroTextHtml = (string) $parser->render((string) $contentHtml, $shortcodeCtx);
+if (trim($contentHtmlRaw) !== '') {
+    try {
+        $heroTextHtml = (string) $parser->render((string) $contentHtmlRaw, $shortcodeCtx);
+    } catch (\Throwable $e) {
+        $heroTextHtml = (string) $contentHtmlRaw;
+    }
+} elseif (!$htmlIsEmpty($subDescHtmlRaw)) {
+    try {
+        $heroTextHtml = (string) $parser->render((string) $subDescHtmlRaw, $shortcodeCtx);
+    } catch (\Throwable $e) {
+        $heroTextHtml = (string) $subDescHtmlRaw;
+    }
+}
+
+$heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
+$heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
+
+// Bottom-left content (must be from Sub title + Sub description)
+$bottomTitle = $subtitle !== '' ? $subtitle : $title;
+
+$bottomDescHtml = '';
+if (!$htmlIsEmpty($subDescHtmlRaw)) {
+    try {
+        $bottomDescHtml = (string) $parser->render((string) $subDescHtmlRaw, $shortcodeCtx);
+    } catch (\Throwable $e) {
+        $bottomDescHtml = (string) $subDescHtmlRaw;
+    }
+}
+$bottomDescHtml = $removeScriptStyleBlocks((string) $bottomDescHtml);
+$bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
+
+// "Get Price" payload (same idea as attachment)
+$tagImage = '';
+try {
+    if ($heroMedia && method_exists($heroMedia, 'url')) {
+        $tagImage = (string) $heroMedia->url('medium');
+    }
+} catch (\Throwable $e) {
+    $tagImage = '';
         }
     @endphp
 
@@ -226,74 +301,78 @@ if (!$htmlIsEmpty($subDescHtml)) {
         <nav class="text-sm text-slate-500">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
             <span class="mx-2 text-slate-300">/</span>
-            <a class="text-[#1f5f99] hover:underline" href="{{ $tagUrl }}">{{ $title }}</a>
+            <span class="text-slate-600">{{ $title }}</span>
         </nav>
     </div>
 
-    {{-- HERO (design like screenshot: big text left + 2 overlapping images right) --}}
+    {{-- HERO (same layout style as attachment: sticky image + text) --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
-            <div class="grid gap-12 bg-gray-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
+            <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
 
-                {{-- TEXT LEFT --}}
+                {{-- IMAGE (sticky on desktop) --}}
+                <div class="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-24 lg:self-start">
+                    @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
+                        {!! cms_picture(
+                            $heroMedia,
+                            [
+                                'alt' => e($title),
+                                'class' => 'w-full object-contain max-h-[70vh]',
+                                'sizes' => '(max-width: 1024px) 100vw, 420px',
+                                'loading' => 'eager',
+                                'decoding' => 'async',
+                                'fetchpriority' => 'high',
+                            ],
+                            'large',
+                            ['medium', 'medium_large', 'large'],
+                        ) !!}
+                    @else
+                        <div class="h-80 w-full bg-slate-100"></div>
+                    @endif
+                </div>
+
+                {{-- CONTENT --}}
                 <div class="order-2 min-w-0 lg:order-1 lg:col-span-7">
-                    <div class="mt-2 text-xs font-semibold tracking-widest text-slate-700">
-                        {{ $subtitle !== '' ? $subtitle : 'YOUR TECH-PACK, OUR PRODUCTION' }}
+                    <div class="h-1 w-20 bg-red-500"></div>
+
+                    <div class="mt-4 text-sm font-semibold text-slate-700">
+                        {{ $subtitle !== '' ? $subtitle : 'Your Tech-pack, Our production' }}
                     </div>
 
-                    <h1 class="mt-4 break-words text-5xl font-extrabold leading-[1.05] tracking-tight text-slate-900">
+                    <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
                         {{ $title }}
                     </h1>
 
                     @if (trim($heroTextHtml) !== '')
-                        <div class="mt-6 space-y-4 text-justify text-base leading-8 text-slate-700">
+                        <div class="mt-4 space-y-4 text-justify text-sm leading-7 text-slate-700">
                             {!! $heroTextHtml !!}
                         </div>
                     @endif
+
+                    <a href="#"
+                        class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        data-item-id="{{ (int) $tag->id }}" data-item-type="tag" data-item-title="{{ e($title) }}"
+                        data-item-url="{{ e($tagUrl) }}" data-item-image="{{ e($tagImage) }}">
+                        Get Price
+                    </a>
                 </div>
 
-                {{-- IMAGES RIGHT (2 images, overlap) --}}
-                <div class="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-24 lg:self-start">
-                    <div class="relative mx-auto max-w-[520px]">
-                        @php
-                            $h1 = $hero->get(0);
-                            $h2 = $hero->get(1);
-                        @endphp
-
-                        @if ($h1)
-                            {{-- big image --}}
-                            <div class="relative overflow-hidden bg-white shadow-lg">
-                                {!! cms_picture($h1, ['class' => 'w-full h-auto object-cover'], 'large', ['medium', 'medium_large', 'large']) !!}
-                            </div>
-                        @else
-                            <div class="h-80 w-full bg-slate-100"></div>
-                        @endif
-
-                        @if ($h2)
-                            {{-- overlay image --}}
-                            <div class="absolute left-[-12%] top-[18%] w-[72%] overflow-hidden bg-white shadow-2xl">
-                                {!! cms_picture($h2, ['class' => 'w-full h-auto object-cover'], 'large', ['medium', 'medium_large', 'large']) !!}
-                            </div>
-                        @endif
-                    </div>
-                </div>
             </div>
         </div>
     </section>
 
-    {{-- RELATED PRODUCTS + META + RELATED LINKS (same bottom style logic as attachment) --}}
-    @if ($related->count() || $relatedLinks->count())
+    {{-- RELATED GRID + (Sub title + Sub description) + RELATED LINKS --}}
+    @if ($related->count() || $relatedLinks->count() || trim($bottomTitle) !== '' || trim($bottomDescHtml) !== '')
         <section class="bg-white">
-            <div class="page-container mx-auto px-4 py-10">
+            <div class="cms-container mx-auto px-4 py-10">
 
                 {{-- RELATED PRODUCTS GRID (max 12, random, hero excluded) --}}
                 @if ($related->count())
-                    <div class="mt-6 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
+                    <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
                             @php
                                 /** @var \App\Models\Media $r */
 
-                                // Apply defaults in-memory (same as attachment)
                                 if (function_exists('do_action')) {
                                     do_action('media.attachment.defaults.persist', $r);
                                 }
@@ -318,7 +397,6 @@ if (!$htmlIsEmpty($subDescHtml)) {
 
                                 $rUrl = filled($r->slug) ? url('/' . ltrim((string) $r->slug, '/')) : $r->url();
 
-                                // For Get Price button (same payload style as attachment)
                                 $rImage = '';
                                 try {
                                     if (method_exists($r, 'url')) {
@@ -365,22 +443,21 @@ if (!$htmlIsEmpty($subDescHtml)) {
                     </div>
                 @endif
 
-                {{-- BOTTOM: META + RELATED LINKS (attachment-like) --}}
+                {{-- META + RELATED LINKS (attachment-like) --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
-                            {{ $title }}
+                            {{ $bottomTitle !== '' ? $bottomTitle : $title }}
                         </h2>
 
-                        {{-- Tag content shown again as “meta description block” --}}
-                        @if (trim($heroTextHtml) !== '')
+                        @if (trim($bottomDescHtml) !== '')
                             <div class="prose prose-slate mt-4 max-w-none text-sm leading-7 text-justify">
-                                {!! $heroTextHtml !!}
+                                {!! $bottomDescHtml !!}
                             </div>
                         @endif
                     </div>
 
-                    {{-- Hide on mobile --}}
+                    {{-- ✅ Hide on mobile (same as attachment) --}}
                     <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
@@ -391,7 +468,6 @@ if (!$htmlIsEmpty($subDescHtml)) {
                                         @php
                                             /** @var \App\Models\Media $q */
 
-                                            // Apply defaults in-memory (same as attachment)
                                             if (function_exists('do_action')) {
                                                 do_action('media.attachment.defaults.persist', $q);
                                             }

@@ -148,26 +148,28 @@
                                         (data_get($item, 'content') ?? (data_get($item, 'excerpt') ?? ''))));
                             $contentHtml = trim($contentHtml);
 
-                            $imageUrl = '';
+                            // ✅ Use Media object for responsive variants (cms_picture)
+                            $featuredMedia = null;
+
                             if ($img) {
                                 try {
-                                    $mObj = null;
-
                                     if (is_object($item) && method_exists($item, 'featuredMediaPivot')) {
-                                        $mObj = $item->featuredMediaPivot()->first();
+                                        $featuredMedia = $item->featuredMediaPivot()->first();
                                     }
-                                    if (!$mObj && is_object($item) && method_exists($item, 'featuredMedia')) {
-                                        $mObj = $item->featuredMedia()->first();
+                                    if (!$featuredMedia && is_object($item) && method_exists($item, 'featuredMedia')) {
+                                        $featuredMedia = $item->featuredMedia()->first();
                                     }
+                                } catch (\Throwable $e) {
+                                    $featuredMedia = null;
+                                }
+                            }
 
-                                    if ($mObj) {
-                                        if (method_exists($mObj, 'url')) {
-                                            $imageUrl = (string) $mObj->url();
-                                        } elseif (property_exists($mObj, 'url') && is_string($mObj->url)) {
-                                            $imageUrl = (string) $mObj->url;
-                                        } elseif (property_exists($mObj, 'path') && is_string($mObj->path)) {
-                                            $imageUrl = (string) $mObj->path;
-                                        }
+                            // Fallback URL (only if cms_picture is unavailable)
+                            $imageUrl = '';
+                            if ($img && $featuredMedia) {
+                                try {
+                                    if (method_exists($featuredMedia, 'url')) {
+                                        $imageUrl = (string) $featuredMedia->url('large');
                                     }
                                 } catch (\Throwable $e) {
                                     $imageUrl = '';
@@ -180,7 +182,31 @@
                         @endphp
 
                         <article class="sp-item">
-                            @if ($img && $imageUrl !== '')
+                            @if ($img && $featuredMedia)
+                                <div class="sp-img">
+                                    @if (function_exists('cms_picture'))
+                                        {!! cms_picture(
+                                            $featuredMedia,
+                                            [
+                                                'alt' => e($title),
+                                                'class' => 'w-full h-full object-cover',
+                                                // responsive sizing similar to attachment usage
+                                                'sizes' => '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw',
+                                                'loading' => 'lazy',
+                                                'decoding' => 'async',
+                                            ],
+                                            // prefer a bigger base for good quality
+                                            'large',
+                                            // allow srcset variants
+                                            ['medium', 'medium_large', 'large'],
+                                        ) !!}
+                                    @else
+                                        {{-- fallback --}}
+                                        <img src="{{ $imageUrl }}" alt="{{ e($title) }}" loading="lazy"
+                                            decoding="async">
+                                    @endif
+                                </div>
+                            @elseif ($img && $imageUrl !== '')
                                 <div class="sp-img">
                                     <img src="{{ $imageUrl }}" alt="{{ e($title) }}" loading="lazy"
                                         decoding="async">
@@ -221,8 +247,6 @@
                     margin: 0 auto 56px auto;
                 }
 
-
-
                 .{{ $wrapperClass }} .sp-top-title {
                     font-size: 36px;
                     line-height: 1.2;
@@ -243,8 +267,6 @@
 
                 /* ---------------------------
        TOP SECTION - HYBRID VARIANT
-       - Desktop: 12-col grid => Left 5, Right 7
-       - Mobile: overlap style, image top, text bottom
        --------------------------- */
                 .{{ $wrapperClass }} .sp-top-hybrid {
                     background: #f9f9f9;
@@ -252,7 +274,6 @@
                     padding: 0;
                 }
 
-                /* ✅ 12-col grid (5 + 7) */
                 .{{ $wrapperClass }} .sp-top-hybrid__grid {
                     max-width: 1200px;
                     margin: 0 auto;
@@ -302,7 +323,6 @@
                 }
 
                 .{{ $wrapperClass }} .sp-top-hybrid__content {
-                    font-size: 20px;
                     line-height: 1.8;
                     color: #111;
                 }
@@ -319,7 +339,6 @@
                     box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
                 }
 
-                /* Desktop stacked images */
                 .{{ $wrapperClass }} .sp-top-hybrid__stack {
                     position: relative;
                     min-height: 520px;
@@ -354,7 +373,6 @@
                     z-index: 2;
                 }
 
-                /* ✅ Mobile: image top, text bottom AND keep overlap */
                 @media (max-width: 900px) {
                     .{{ $wrapperClass }} .sp-top-hybrid__grid {
                         grid-template-columns: 1fr;
@@ -362,13 +380,11 @@
                         padding: 48px 16px;
                     }
 
-                    /* full width for both */
                     .{{ $wrapperClass }} .sp-top-hybrid__left,
                     .{{ $wrapperClass }} .sp-top-hybrid__right {
                         grid-column: span 12;
                     }
 
-                    /* images first */
                     .{{ $wrapperClass }} .sp-top-hybrid__right {
                         order: -1;
                         display: block;
@@ -431,6 +447,8 @@
                     background: #f9fafb;
                 }
 
+                /* ✅ IMPORTANT:
+                   cms_picture outputs <picture>/<img>, so we style any img inside */
                 .{{ $wrapperClass }} .sp-img img {
                     width: 100%;
                     height: 280px;
@@ -458,7 +476,6 @@
 
                 /* Content text */
                 .{{ $wrapperClass }} .sp-content {
-                    font-size: 16px;
                     line-height: 1.7;
                     color: #2c2c2c;
                 }
@@ -502,11 +519,6 @@
                     }
                 }
 
-
-
-
-
-
                 /* Make section wide + left aligned like image */
                 .why-siatex .sp-top {
                     max-width: 1400px;
@@ -530,7 +542,6 @@
                     display: grid;
                     grid-template-columns: repeat(3, minmax(0, 1fr));
                     gap: 90px;
-                    font-size: 16px;
                     line-height: 1.7;
                 }
 
@@ -546,12 +557,6 @@
                 .why-siatex .sp-top-content p:nth-child(2) {
                     border-right: 2px solid #0e4f7f;
                 }
-
-                /* Space after the line for col 2 & 3 text */
-                /*     .why-siatex .sp-top-content p:nth-child(2),
-            .why-siatex .sp-top-content p:nth-child(3) {
-                padding-left: 60px;
-            } */
 
                 /* Nice spacing between bullet lines made with <br> */
                 .why-siatex .sp-top-content p br {
@@ -577,7 +582,6 @@
                         padding: 0 !important;
                     }
 
-                    /* Optional: horizontal separator on mobile */
                     .why-siatex .sp-top-content p:not(:last-child) {
                         border-bottom: 2px solid #0e4f7f;
                         padding-bottom: 18px !important;

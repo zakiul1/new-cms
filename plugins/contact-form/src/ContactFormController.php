@@ -89,7 +89,7 @@ class ContactFormController extends Controller
         // ✅ Subject handling
         $subject = trim((string) ($data['subject'] ?? ''));
         if ($subject === '') {
-            $subject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
+            $subject = $isCartSubmit ? 'Custom Quote Request' : 'Contact Form';
         }
 
         /**

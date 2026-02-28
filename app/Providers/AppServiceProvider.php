@@ -24,21 +24,37 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // ✅ Boot enabled plugins EARLY so they can register routes via CMS_ROUTES hook.
+        // ✅ Boot enabled plugins EARLY so they can register routes.
         $this->app->booting(function () {
             $pluginManager = $this->app->make(PluginManager::class);
 
-            // In console we still want plugin routes available for route:cache etc.
+            // Console: plugins should be available for route:list, route:cache, etc.
             if ($this->app->runningInConsole()) {
                 $pluginManager->bootEnabledPlugins();
                 return;
             }
 
-            // HTTP: respect safe mode
+            // HTTP: respect safe mode, but allow critical plugin endpoints/assets
             $request = request();
             $safeMode = $this->app->make(SafeMode::class);
             $safeMode->maybeEnableFromRequest($request);
 
+            // Normalize path
+            $path = '/' . ltrim((string) $request->path(), '/');
+
+            /**
+             * ✅ IMPORTANT FIX:
+             * cart.js/cart.css are served from plugin routes.
+             * If safe mode blocks plugins, those routes do not exist → /_contact/cart.js becomes 404.
+             *
+             * So for /_contact/* we ALWAYS boot enabled plugins.
+             */
+            if (str_starts_with($path, '/_contact/')) {
+                $pluginManager->bootEnabledPlugins();
+                return;
+            }
+
+            // Default behavior: only boot plugins when safe mode is NOT enabled
             if (!$safeMode->isEnabled($request)) {
                 $pluginManager->bootEnabledPlugins();
             }
@@ -47,9 +63,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-
         MenuItem::observe(MenuItemCacheObserver::class);
         MenuAssignment::observe(MenuAssignmentCacheObserver::class);
+
         // ✅ SUPER ADMIN BYPASS
         Gate::before(function ($user, $ability) {
             return method_exists($user, 'hasRole') && $user->hasRole('super-admin')

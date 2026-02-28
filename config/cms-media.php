@@ -101,4 +101,128 @@ return [
     | (hierarchical like WP)
     */
     'folder_taxonomy_key' => env('CMS_MEDIA_FOLDER_TAXONOMY_KEY', 'media_folder'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Filename / Title Keyword Canonicalization
+    |--------------------------------------------------------------------------
+    | One canonical keyword per entry. Matching should be case-insensitive,
+    | but replacement output should use exactly the string here.
+    */
+    'filename_keyword_canonical' => [
+        // --- Region / abbreviations ---
+        'EU',
+
+        // --- Common words (as provided) ---
+        'of',
+        'for',
+        'the',
+        'in',
+        'on',
+        'at',
+        'to',
+        'by',
+        'with',
+        'about',
+        'against',
+        'and',
+        'between',
+        'into',
+        'through',
+        'during',
+        'before',
+        'after',
+        'above',
+        'below',
+        'from',
+        'up',
+        'down',
+        'off',
+        'over',
+        'under',
+        'again',
+        'further',
+        'then',
+        'once',
+
+        // --- Countries / regions ---
+        'USA',
+        'UK',
+        'UAE',
+
+        // --- Product terms ---
+        'T-shirt',
+        'T-shirts',
+        'v-neck',
+
+        // --- US States / territories (as provided) ---
+        'AL',
+        'AK',
+        'AZ',
+        'AR',
+        'CA',
+        'CO',
+        'CT',
+        'DE',
+        'FL',
+        'GA',
+        'HI',
+        'ID',
+        'IL',
+        'IA',
+        'KS',
+        'KY',
+        'LA',
+        'ME',
+        'MD',
+        'MA',
+        'MI',
+        'MN',
+        'MS',
+        'MO',
+        'MT',
+        'NE',
+        'NV',
+        'NH',
+        'NJ',
+        'NM',
+        'NY',
+        'NC',
+        'ND',
+        'OH',
+        'OK',
+        'OR',
+        'PA',
+        'RI',
+        'SC',
+        'SD',
+        'TN',
+        'TX',
+        'UT',
+        'VT',
+        'VA',
+        'WA',
+        'WV',
+        'WI',
+        'WY',
+        'DC',
+        'PR',
+        'US',
+
+        // --- Phrases ---
+        'Made in',
+        'in Bangladesh',
+
+        // --- Business terms ---
+        'OEM',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Keyword separators
+    |--------------------------------------------------------------------------
+    | Treat these characters as equivalent separators while matching keywords.
+    | e.g. v neck / v-neck / v_neck should all match "v-neck" if configured.
+    */
+    'filename_keyword_separators' => [' ', '-', '_'],
 ];

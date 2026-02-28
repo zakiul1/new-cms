@@ -62,6 +62,9 @@
     $faviconId = (int) ($o['favicon_media_id'] ?? 0);
     $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
     $faviconUrl = $favicon ? $favicon->url() : null;
+
+    // WP-like admin bar height
+    $adminBarHeight = $showAdminBar ? 32 : 0;
 @endphp
 
 <head>
@@ -95,9 +98,29 @@
     @php $stackHead = ob_get_clean(); @endphp
 
     {!! $hooks->applyFilters('theme.head', $stackHead) !!}
+
+    {{-- ✅ ONLY Topbar fixed (admin bar aware) --}}
+    <style>
+        :root {
+            --cms-adminbar-h: {{ $adminBarHeight }}px;
+        }
+
+        #site-topbar-shell {
+            position: fixed;
+            top: var(--cms-adminbar-h);
+            left: 0;
+            right: 0;
+            z-index: 9990;
+            background: transparent;
+        }
+
+        body.has-fixed-topbar {
+            padding-top: calc(var(--cms-adminbar-h) + var(--cms-topbar-h, 0px));
+        }
+    </style>
 </head>
 
-<body class="min-h-screen bg-white text-slate-900 antialiased">
+<body class="min-h-screen bg-white text-slate-900 antialiased has-fixed-topbar">
     {!! $hooks->applyFilters('theme.body.before', '') !!}
 
     {{-- ✅ Frontend Admin Bar (WordPress-like) --}}
@@ -127,12 +150,14 @@
                 </div>
             </div>
         </div>
-
-        {{-- push site down like WP admin bar --}}
-        <div style="height:32px;"></div>
     @endif
 
-    @include('partials.topbar')
+    {{-- ✅ Fixed wrapper ONLY for Topbar --}}
+    <div id="site-topbar-shell">
+        @include('partials.topbar')
+    </div>
+
+    {{-- ✅ Header is normal (NOT fixed) --}}
     @include('partials.header')
 
     <main class="flex-1">
@@ -151,6 +176,22 @@
             {!! $pageAssetsJs !!}
         </script>
     @endif
+
+    {{-- ✅ Measure topbar height so content starts right under it (no extra gap) --}}
+    <script>
+        (function() {
+            const shell = document.getElementById('site-topbar-shell');
+            if (!shell) return;
+
+            const setH = () => {
+                const h = shell.offsetHeight || 0;
+                document.documentElement.style.setProperty('--cms-topbar-h', h + 'px');
+            };
+
+            setH();
+            window.addEventListener('resize', setH);
+        })();
+    </script>
 
     {!! $hooks->applyFilters('theme.body.after', '') !!}
 </body>

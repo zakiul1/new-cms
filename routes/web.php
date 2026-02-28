@@ -19,16 +19,21 @@ Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('cms.sitem
 
 /**
  * ✅ Serve sub-sitemaps like:
- * /pages.xml
- * /posts.xml
- * /posts-2.xml
+ * /page.xml
+ * /post.xml
+ * /siatex-tags.xml
+ * /post-2.xml
  * /media.xml
  * /media-2.xml
  *
  * Must be before catch-all.
+ *
+ * SECURITY:
+ * Only allow safe filename characters. Controller should still check file exists.
  */
 Route::get('/{name}.xml', [SitemapController::class, 'file'])
-    ->where('name', '(pages|posts(?:-\d+)?|media(?:-\d+)?)')
+    // name like "post", "page", "siatex-tags", "siatex-tags-2"
+    ->where('name', '[A-Za-z0-9\-_]+(?:-\d+)?')
     ->name('cms.sitemap.file');
 
 // ✅ Customizer (FULL SCREEN, WP-like) - MUST be before catch-all
@@ -85,8 +90,11 @@ Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
  * Handles pages, posts, attachment pages (/media-slug), and slug history redirects.
  * IMPORTANT: keep this LAST.
  *
- * FIX: use '.+' instead of '.*' so it cannot match '/' (empty slug).
+ * ✅ CRITICAL FIX:
+ * Exclude reserved prefixes so plugin/system endpoints are NOT captured.
+ * This prevents /_contact/cart.js being routed to ContentRouterController@show.
  */
 Route::get('/{slug}', [ContentRouterController::class, 'show'])
-    ->where('slug', '.+')
+    // Exclude: _contact, lara-admin, filament, storage, api (add/remove as you need)
+    ->where('slug', '^(?!_contact/)(?!lara-admin/)(?!filament/)(?!storage/)(?!api/).+')
     ->name('cms.catchall');

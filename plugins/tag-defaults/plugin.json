@@ -1,0 +1,6 @@
+{
+  "name": "Tags Defaults",
+  "slug": "tag-defaults",
+  "version": "1.0.0",
+  "description": "Default Title/Content/Sub title/Sub description for Siatex Tag Edit. Auto-fills only when fields are empty."
+}

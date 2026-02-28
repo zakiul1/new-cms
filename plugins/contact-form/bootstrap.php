@@ -12,7 +12,7 @@ require_once __DIR__ . '/src/ContactSubmission.php';
 require_once __DIR__ . '/src/ContactLead.php';
 require_once __DIR__ . '/src/Support/Installer.php';
 
-// ✅ add this
+// ✅ console
 require_once __DIR__ . '/src/Console/PruneContactSubmissionsCommand.php';
 
 // ✅ services
@@ -48,23 +48,41 @@ add_filter('cms.page_template_options', function (array $options) {
     return $options;
 }, 20, 1);
 
-// ✅ Routes (submit + cron + cart endpoints)
-add_action(HookPoints::CMS_ROUTES, function () {
-    Route::post('/_contact/submit', [\Plugins\ContactForm\ContactFormController::class, 'submit'])
-        ->name('contact-form.submit');
+/**
+ * ✅ Routes (submit + cron + cart endpoints + raw assets)
+ *
+ * IMPORTANT:
+ * Do NOT register these via HookPoints::CMS_ROUTES, because CMS_ROUTES may run
+ * after Laravel has already built its route table for the current request.
+ *
+ * Register via Laravel's boot cycle instead so /_contact/cart.js exists.
+ */
+app()->booted(function () {
+    Route::middleware('web')->group(function () {
 
-    Route::get('/_contact/cron', [\Plugins\ContactForm\CronController::class, 'run'])
-        ->name('contact-form.cron');
+        // Avoid duplicates if something registers twice
+        if (!Route::has('contact-form.submit')) {
+            Route::post('/_contact/submit', [\Plugins\ContactForm\ContactFormController::class, 'submit'])
+                ->name('contact-form.submit');
+        }
 
-    // ✅ cart related routes (optional extra endpoints)
-    if (class_exists(\Plugins\ContactForm\Cart\CartRoutes::class)) {
-        \Plugins\ContactForm\Cart\CartRoutes::register();
-    }
+        if (!Route::has('contact-form.cron')) {
+            Route::get('/_contact/cron', [\Plugins\ContactForm\CronController::class, 'run'])
+                ->name('contact-form.cron');
+        }
 
-    // ✅ cart asset raw routes (/cart.js, /cart.css)
-    if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
-        \Plugins\ContactForm\Cart\CartAssets::registerRoutes();
-    }
+        // ✅ cart related routes (optional extra endpoints)
+        if (class_exists(\Plugins\ContactForm\Cart\CartRoutes::class)) {
+            \Plugins\ContactForm\Cart\CartRoutes::register();
+        }
+
+        // ✅ cart asset raw routes (/cart.js, /cart.css)
+        // Guard to prevent duplicate route registration if registerRoutes() adds names internally.
+        if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
+            // If your CartAssets::registerRoutes() defines route names, you can add Route::has() checks here.
+            \Plugins\ContactForm\Cart\CartAssets::registerRoutes();
+        }
+    });
 });
 
 /**
@@ -93,5 +111,4 @@ add_action(HookPoints::CMS_ENQUEUE_ASSETS, function () {
     if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
         \Plugins\ContactForm\Cart\CartAssets::enqueue();
     }
-
 });

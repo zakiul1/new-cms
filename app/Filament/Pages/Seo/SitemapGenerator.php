@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Seo;
 
 use App\Cms\Core\SettingsRepository;
 use App\Cms\Seo\SitemapGenerator as GeneratorService;
+use App\Models\Post;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -32,13 +33,77 @@ class SitemapGenerator extends Page
         return Width::Full;
     }
 
+    /**
+     * Get all content types (post types) found in DB.
+     *
+     * @return array<int, string>
+     */
+    private function discoverContentTypes(): array
+    {
+        return Post::query()
+            ->select('type')
+            ->whereNotNull('type')
+            ->where('type', '!=', '')
+            ->distinct()
+            ->pluck('type')
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Human label for a type slug.
+     */
+    private function typeLabel(string $type): string
+    {
+        // page => Pages, post => Posts, siatex-tags => Siatex Tags, etc.
+        $t = str_replace(['_', '-'], ' ', $type);
+        $t = trim($t);
+
+        if ($type === 'page') {
+            return 'Pages';
+        }
+        if ($type === 'post') {
+            return 'Posts';
+        }
+
+        return ucwords($t);
+    }
+
     public function mount(SettingsRepository $settings): void
     {
         $directory = (string) $settings->get('seo', 'sitemap_directory', '');
 
+        $availableTypes = $this->discoverContentTypes();
+
+        // New dynamic selection (fallback to legacy)
+        $selectedTypes = $settings->get('seo', 'sitemap_include_types', null);
+        if (!is_array($selectedTypes) || count($selectedTypes) === 0) {
+            // fallback to old toggles
+            $selectedTypes = [];
+            if ((bool) $settings->get('seo', 'sitemap_include_pages', true)) {
+                $selectedTypes[] = 'page';
+            }
+            if ((bool) $settings->get('seo', 'sitemap_include_posts', true)) {
+                $selectedTypes[] = 'post';
+            }
+        }
+
+        // constrain to existing types
+        $selectedTypes = array_values(array_intersect(array_map('strval', $selectedTypes), $availableTypes));
+
+        // Precompute labels for blade
+        $typeOptions = [];
+        foreach ($availableTypes as $t) {
+            $typeOptions[$t] = $this->typeLabel($t);
+        }
+
         $this->form->fill([
-            'include_posts' => (bool) $settings->get('seo', 'sitemap_include_posts', true),
-            'include_pages' => (bool) $settings->get('seo', 'sitemap_include_pages', true),
+            // ✅ Dynamic types
+            'include_types' => $selectedTypes,
+            'type_options' => $typeOptions, // for blade display
+
+            // ✅ Keep media separate (not a Post type)
             'include_media' => (bool) $settings->get('seo', 'sitemap_include_media', false),
 
             'directory' => $directory,
@@ -54,6 +119,9 @@ class SitemapGenerator extends Page
             'pages_changefreq' => (string) $settings->get('seo', 'sitemap_pages_changefreq', 'monthly'),
             'media_changefreq' => (string) $settings->get('seo', 'sitemap_media_changefreq', 'monthly'),
         ]);
+
+        // Also sync into $data because your UI uses Blade + Livewire updates $this->data
+        $this->data = array_merge($this->data, $this->form->getState());
     }
 
     protected function getHeaderActions(): array
@@ -73,6 +141,7 @@ class SitemapGenerator extends Page
                         ->body('All generated sitemap files removed.')
                         ->send();
                 }),
+
             Action::make('save')
                 ->label('Update Settings')
                 ->icon('heroicon-o-check')
@@ -80,12 +149,11 @@ class SitemapGenerator extends Page
                 ->action(fn() => $this->save(app(SettingsRepository::class)))
                 ->keyBindings(['mod+s']),
 
-
-
             Action::make('view_sitemap')
                 ->label('View Sitemap')
                 ->icon('heroicon-o-eye')
                 ->url(fn() => url('/sitemap.xml'), shouldOpenInNewTab: true),
+
             Action::make('generate_all')
                 ->label('Generate All')
                 ->icon('heroicon-o-arrow-path')
@@ -101,8 +169,6 @@ class SitemapGenerator extends Page
                         ->body('Generated: ' . implode(', ', array_map('basename', $files)))
                         ->send();
                 }),
-
-
         ];
     }
 
@@ -130,6 +196,8 @@ class SitemapGenerator extends Page
                                         SchemaView::make('filament.pages.seo.partials.sitemap-content')
                                             ->viewData([
                                                 'data' => fn() => $this->data,
+                                                // Provide options for dynamic types
+                                                'contentTypes' => fn() => (array) ($this->data['type_options'] ?? []),
                                             ]),
                                     ]),
 
@@ -185,11 +253,22 @@ class SitemapGenerator extends Page
     public function save(SettingsRepository $settings): void
     {
         // ✅ IMPORTANT: inputs are plain Blade (SchemaView), so Livewire updates $this->data.
-        // Filament form state may be empty/stale when no real Form fields exist.
         $state = $this->data;
 
-        $settings->set('seo', 'sitemap_include_posts', (bool) ($state['include_posts'] ?? true));
-        $settings->set('seo', 'sitemap_include_pages', (bool) ($state['include_pages'] ?? true));
+        // ✅ New dynamic types (array)
+        $includeTypes = $state['include_types'] ?? [];
+        if (!is_array($includeTypes)) {
+            $includeTypes = [];
+        }
+        $includeTypes = array_values(array_filter(array_map(fn($v) => trim((string) $v), $includeTypes)));
+
+        $settings->set('seo', 'sitemap_include_types', $includeTypes);
+
+        // Keep legacy toggles updated for backward compatibility (optional)
+        $settings->set('seo', 'sitemap_include_pages', in_array('page', $includeTypes, true));
+        $settings->set('seo', 'sitemap_include_posts', in_array('post', $includeTypes, true));
+
+        // ✅ Media toggle stays separate
         $settings->set('seo', 'sitemap_include_media', (bool) ($state['include_media'] ?? false));
 
         $settings->set('seo', 'sitemap_directory', (string) ($state['directory'] ?? ''));
@@ -225,6 +304,7 @@ class SitemapGenerator extends Page
 
         $paths = $dir === '' ? $disk->files() : $disk->files($dir);
 
+        // Show sitemap.xml + any generated sitemap part xml files
         $paths = array_values(array_filter($paths, function (string $path): bool {
             $name = basename($path);
 
@@ -232,7 +312,8 @@ class SitemapGenerator extends Page
                 return true;
             }
 
-            return (bool) preg_match('/^(pages|posts|media)(-\d+)?\.xml$/', $name);
+            // Any "{slug}.xml" or "{slug}-2.xml"
+            return (bool) preg_match('/^[A-Za-z0-9\-_]+(?:-\d+)?\.xml$/', $name);
         }));
 
         usort($paths, function (string $a, string $b): int {
@@ -268,10 +349,12 @@ class SitemapGenerator extends Page
         if ($name === 'sitemap.xml') {
             return 0;
         }
-        if (str_starts_with($name, 'pages')) {
+
+        // Prefer page/post/media first if they exist
+        if (str_starts_with($name, 'page')) {
             return 1;
         }
-        if (str_starts_with($name, 'posts')) {
+        if (str_starts_with($name, 'post')) {
             return 2;
         }
         if (str_starts_with($name, 'media')) {

@@ -148,7 +148,7 @@ class SubmissionSender
 
             // ✅ Ensure we always have a subject
             if ($rawSubject === '') {
-                $rawSubject = $isCartSubmit ? 'Get Price Request' : 'Contact Form';
+                $rawSubject = $isCartSubmit ? 'Custom Quote Request' : 'Contact Form';
             }
 
             // ✅ Build items table HTML

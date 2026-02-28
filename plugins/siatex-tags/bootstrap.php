@@ -34,6 +34,9 @@ function siatex_tags_render_by_slug(string $slug)
     // Make current tag available to shortcode parsing (context + fallback)
     request()->attributes->set('siatex_tag', $tag);
 
+    // ✅ Allow plugins to apply runtime defaults (no DB save)
+    do_action('siatex.tag.defaults.persist', $tag);
+
     $termId = (int) ($tag->media_category_term_id ?? 0);
     $media = collect();
 
@@ -99,10 +102,12 @@ add_action(HookPoints::CMS_BOOTED, function () {
      */
     $shortcodes->register('page-tags', function (array $attrs, ?string $content, array $ctx): string {
         $limit = (int) ($attrs['number'] ?? 10);
-        if ($limit <= 0)
+        if ($limit <= 0) {
             $limit = 10;
-        if ($limit > 100)
+        }
+        if ($limit > 100) {
             $limit = 100;
+        }
 
         $current = $ctx['siatex_tag'] ?? request()->attributes->get('siatex_tag');
         $currentId = $current instanceof \Plugins\SiatexTags\Models\SiatexTag ? (int) $current->id : null;
@@ -162,7 +167,7 @@ add_action(HookPoints::CMS_ROUTES, function () {
         }
 
         // 2) Fallback to CMS content router (pages/posts/etc.)
-        return app(ContentRouterControlle::class)->show($slug);
+        return app(ContentRouterController::class)->show($slug);
 
     })->where('slug', '^(?!lara-admin(?:/|$)|api(?:/|$)|storage(?:/|$)|sitemap\.xml$|robots\.txt$|customizer$).*$');
 

@@ -358,7 +358,7 @@
 
         if ($mediaCategoryTaxId && !empty($mediaCategoryIds)) {
             $related = $fetchSameCategoryRandom([$media->id], 80)
-                ->take(10)
+                ->take(12)
                 ->values();
 
             $excludeForLinks = collect([$media->id])

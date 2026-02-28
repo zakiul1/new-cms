@@ -153,12 +153,12 @@
                         </div>
                     @endif
 
-                    {{-- ✅ UPDATED ONLY: Get Price -> Cart button (no other code changed) --}}
+                    {{-- ✅ UPDATED ONLY: Custom Quote -> Cart button (no other code changed) --}}
                     <a href="#"
                         class="cf-get-price mt-6 inline-flex items-center bg-[#1f5f99] px-5 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
                         data-item-id="{{ (int) $post->id }}" data-item-type="post" data-item-title="{{ e($title) }}"
                         data-item-url="{{ e($productUrl) }}" data-item-image="{{ e($productImage) }}">
-                        Get Price
+                        Custom Quote
                     </a>
                 </div>
 
@@ -404,7 +404,7 @@
                                     </div>
                                 </a>
 
-                                {{-- ✅ Get Price button (adds related post to cart) --}}
+                                {{-- ✅ Custom Quote button (adds related post to cart) --}}
                                 @php
                                     $rImage = '';
                                     try {
@@ -423,7 +423,7 @@
                                     data-item-id="{{ (int) $r->id }}" data-item-type="post"
                                     data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
                                     data-item-image="{{ e($rImage) }}">
-                                    Get Price
+                                    Custom Quote
                                 </button>
                             </div>
                         @endforeach

@@ -35,4 +35,55 @@ class SitemapStorage
     {
         return $this->path($this->indexFilename());
     }
+
+    /**
+     * Validate a sitemap name (without ".xml").
+     * Allows:
+     * - post
+     * - page
+     * - siatex-tags
+     * - siatex-tags-2
+     */
+    public function isValidSitemapName(string $name): bool
+    {
+        if ($name === '') {
+            return false;
+        }
+
+        // Prevent traversal characters
+        if (str_contains($name, '..') || str_contains($name, '/') || str_contains($name, '\\')) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[A-Za-z0-9\-_]+(?:-\d+)?$/', $name);
+    }
+
+    /**
+     * Convert a sitemap name (no extension) to filename (with .xml).
+     */
+    public function filenameFromName(string $name): string
+    {
+        return $name . '.xml';
+    }
+
+    /**
+     * Validate a sitemap part filename like:
+     * - post.xml
+     * - post-2.xml
+     * - siatex-tags.xml
+     * - siatex-tags-3.xml
+     */
+    public function isSitemapPartFilename(string $filename): bool
+    {
+        if ($filename === '' || $filename === $this->indexFilename()) {
+            return false;
+        }
+
+        // Prevent traversal
+        if (str_contains($filename, '..') || str_contains($filename, '/') || str_contains($filename, '\\')) {
+            return false;
+        }
+
+        return (bool) preg_match('/^[A-Za-z0-9\-_]+(?:-\d+)?\.xml$/', $filename);
+    }
 }

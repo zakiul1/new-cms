@@ -345,7 +345,7 @@ function ensureCartModal() {
               <textarea name="message" placeholder="Write your Message Here" rows="7" required></textarea>
             </div>
 
-            <input type="hidden" name="subject" value="Get Price Request">
+            <input type="hidden" name="subject" value="Custom Quote Request">
             <input type="hidden" name="cart_items" id="cf-cart-items-hidden" value="[]">
 
             <div class="cf-form__actions">
@@ -546,7 +546,7 @@ function ensureCartModal() {
       } else {
         btn.classList.remove("cf-added");
         btn.removeAttribute("data-added");
-        btn.textContent = "Get Price";
+        btn.textContent = "Custom Quote";
       }
     });
   }
