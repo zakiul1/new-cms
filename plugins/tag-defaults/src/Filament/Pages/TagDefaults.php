@@ -197,7 +197,7 @@ class TagDefaults extends Page implements HasForms
                                     ->statePath('data')
                                     ->schema([
                                         TextInput::make('default_title')
-                                            ->label('Default Title')
+                                            ->label('H1')
                                             ->maxLength(255)
                                             ->helperText('Used only if Tag title is empty.')
                                             ->live(onBlur: true)

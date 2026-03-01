@@ -29,6 +29,246 @@ class PageForm
 {
     public static function configure(Schema $schema): Schema
     {
+        /**
+         * ✅ RIGHT (1/3): Publish schema extracted so plugins can inject metaboxes
+         */
+        $publishSchema = [
+            Select::make('status')
+                ->options([
+                    'draft' => 'Draft',
+                    'published' => 'Published',
+                    'scheduled' => 'Scheduled',
+                ])
+                ->default('published')
+                ->required(),
+
+            // ✅ Template select
+            Select::make('meta_json.template')
+                ->label('Template')
+                ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
+                ->options(function (): array {
+                    $base = [
+                        '' => 'Theme Default (page.blade.php)',
+                        'default' => 'Slider Template',
+                    ];
+
+                    // Allow plugins to add templates
+                    if (function_exists('apply_filters')) {
+                        $base = (array) apply_filters('cms.page_template_options', $base);
+                    }
+
+                    return $base;
+                })
+                ->default('')
+                ->native(false)
+                ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
+
+            // ✅ Home Hero Slider (shows ONLY when this page is selected as homepage in Settings)
+            Section::make('Home Hero Slider (Siatex)')
+                ->collapsible()
+                ->collapsed()
+                ->visible(function (?Post $record): bool {
+                    if (!$record) {
+                        return false; // Create page: no record yet
+                    }
+
+                    /** @var SettingsRepository $settings */
+                    $settings = app(SettingsRepository::class);
+
+                    $homepageId = $settings->get('core', 'homepage_page_id', null);
+                    $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
+
+                    return $homepageId !== null && (int) $record->getKey() === $homepageId;
+                })
+                ->schema([
+                    Select::make('meta_json.home.hero_slider_key')
+                        ->label('Hero Slider')
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('— None —')
+                        ->nullable()
+                        ->options(function (): array {
+                            if (!class_exists(Slider::class)) {
+                                return [];
+                            }
+
+                            try {
+                                return Slider::query()
+                                    ->where('is_active', true)
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->mapWithKeys(fn($s) => [$s->key => "{$s->name} ({$s->key})"])
+                                    ->all();
+                            } catch (\Throwable $e) {
+                                return [];
+                            }
+                        }),
+
+                    Select::make('meta_json.home.hero_slider_variant')
+                        ->label('Variant')
+                        ->native(false)
+                        ->options(fn(): array => function_exists('siatex_slider_variants')
+                            ? siatex_slider_variants()
+                            : ['siatex-default' => 'Siatex Default'])
+                        ->default('siatex-default'),
+                ]),
+
+            // ✅ Featured Images
+            MediaPicker::make('featured_media_ids')
+                ->label('Featured Images')
+                ->modalHeading('Featured images')
+                ->multiple()
+                ->maxItems(20),
+
+            // ✅ Product Images
+            MediaPicker::make('product_media_ids')
+                ->label('Product Images')
+                ->modalHeading('Product images')
+                ->multiple()
+                ->maxItems(50),
+
+            // ✅ Duotone panel
+            Section::make('Duotone')
+                ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
+                ->collapsible()
+                ->collapsed()
+                ->schema([
+                    ColorPicker::make('meta_json.duotone.color')
+                        ->label('Color')
+                        ->nullable(),
+
+                    TextInput::make('meta_json.duotone.opacity')
+                        ->label('Opacity')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(100)
+                        ->default(0)
+                        ->suffix('%')
+                        ->helperText('0 = transparent, 100 = fully opaque.')
+                        ->nullable(),
+                ]),
+
+            Select::make('meta_json.parent_id')
+                ->label('Parent Page (optional)')
+                ->searchable()
+                ->preload()
+                ->nullable()
+                ->options(fn(): array => Post::query()
+                    ->where('type', 'page')
+                    ->orderBy('title')
+                    ->pluck('title', 'id')
+                    ->all()),
+
+            TextInput::make('meta_json.menu_order')
+                ->label('Order')
+                ->helperText('Lower numbers appear first (like WordPress menu order).')
+                ->numeric()
+                ->default(0),
+
+            Select::make('categories')
+                ->label('Categories')
+                ->relationship('categories', 'name')
+                ->multiple()
+                ->searchable()
+                ->preload()
+                ->optionsLimit(50)
+                ->createOptionForm([
+                    TextInput::make('name')
+                        ->required()
+                        ->maxLength(255)
+                        ->live(onBlur: true)
+                        ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                            if (!filled($get('slug'))) {
+                                $set('slug', Str::slug((string) $state));
+                            }
+                        }),
+
+                    TextInput::make('slug')
+                        ->required()
+                        ->maxLength(255)
+                        ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                        ->dehydrateStateUsing(fn($state) => Str::slug((string) $state))
+                        ->helperText('Lowercase letters, numbers, and hyphens only.')
+                        ->rule(function (?Term $record) {
+                            $taxonomyId = Taxonomy::where('key', 'category')->value('id');
+                            if (!$taxonomyId) {
+                                return null;
+                            }
+
+                            return Rule::unique('terms', 'slug')
+                                ->where('taxonomy_id', $taxonomyId)
+                                ->ignore($record?->id);
+                        }),
+
+                    Select::make('parent_id')
+                        ->label('Parent Category (optional)')
+                        ->searchable()
+                        ->preload()
+                        ->nullable()
+                        ->options(function (): array {
+                            $taxonomyId = Taxonomy::where('key', 'category')->value('id');
+                            if (!$taxonomyId) {
+                                return [];
+                            }
+
+                            return Term::query()
+                                ->where('taxonomy_id', $taxonomyId)
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all();
+                        }),
+                ])
+                ->createOptionUsing(function (array $data) {
+                    $taxonomyId = Taxonomy::firstOrCreate(
+                        ['key' => 'category'],
+                        ['label' => 'Categories', 'hierarchical' => true],
+                    )->id;
+
+                    $base = filled($data['slug'] ?? null)
+                        ? Str::slug((string) $data['slug'])
+                        : Str::slug((string) ($data['name'] ?? ''));
+
+                    $base = $base !== '' ? $base : 'category';
+
+                    $slug = $base;
+                    $i = 2;
+
+                    while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
+                        $slug = $base . '-' . $i;
+                        $i++;
+                    }
+
+                    $term = Term::create([
+                        'taxonomy_id' => $taxonomyId,
+                        'name' => (string) $data['name'],
+                        'slug' => $slug,
+                        'parent_id' => $data['parent_id'] ?? null,
+                    ]);
+
+                    return $term->getKey();
+                }),
+
+            Select::make('tags')
+                ->label('Tags')
+                ->relationship('tags', 'name')
+                ->multiple()
+                ->preload()
+                ->searchable(),
+
+            DateTimePicker::make('published_at')
+                ->label('Publish At')
+                ->seconds(false)
+                ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
+        ];
+
+        /**
+         * ✅ Allow plugins to inject additional Publish panel sections/fields
+         * Example: MultiPage "Multipage Settings" metabox.
+         */
+        if (function_exists('apply_filters')) {
+            $publishSchema = (array) apply_filters('cms.page_publish_schema', $publishSchema);
+        }
+
         return $schema
             ->columns([
                 'default' => 1,
@@ -258,241 +498,14 @@ class PageForm
                     ]),
 
                 /**
-                 * RIGHT (1/3): Publish
+                 * RIGHT (1/3): Publish (now plugin-extendable)
                  */
                 Section::make('Publish')
                     ->columnSpan([
                         'default' => 1,
                         'lg' => 1,
                     ])
-                    ->schema([
-                        Select::make('status')
-                            ->options([
-                                'draft' => 'Draft',
-                                'published' => 'Published',
-                                'scheduled' => 'Scheduled',
-                            ])
-                            ->default('published')
-                            ->required(),
-
-                        // ✅ Template select
-                        Select::make('meta_json.template')
-                            ->label('Template')
-                            ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
-                            ->options(function (): array {
-                                $base = [
-                                    '' => 'Theme Default (page.blade.php)',
-                                    'default' => 'Slider Template',
-                                ];
-
-                                // Allow plugins to add templates
-                                if (function_exists('apply_filters')) {
-                                    $base = (array) apply_filters('cms.page_template_options', $base);
-                                }
-
-                                return $base;
-                            })
-                            ->default('')
-                            ->native(false)
-                            ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
-
-                        // ✅ Home Hero Slider (shows ONLY when this page is selected as homepage in Settings)
-                        Section::make('Home Hero Slider (Siatex)')
-                            ->collapsible()
-                            ->collapsed()
-                            ->visible(function (?Post $record): bool {
-                                if (!$record) {
-                                    return false; // Create page: no record yet
-                                }
-
-                                /** @var SettingsRepository $settings */
-                                $settings = app(SettingsRepository::class);
-
-                                $homepageId = $settings->get('core', 'homepage_page_id', null);
-                                $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
-
-                                return $homepageId !== null && (int) $record->getKey() === $homepageId;
-                            })
-                            ->schema([
-                                Select::make('meta_json.home.hero_slider_key')
-                                    ->label('Hero Slider')
-                                    ->searchable()
-                                    ->preload()
-                                    ->placeholder('— None —')
-                                    ->nullable()
-                                    ->options(function (): array {
-                                        if (!class_exists(Slider::class)) {
-                                            return [];
-                                        }
-
-                                        try {
-                                            return Slider::query()
-                                                ->where('is_active', true)
-                                                ->orderBy('name')
-                                                ->get()
-                                                ->mapWithKeys(fn($s) => [$s->key => "{$s->name} ({$s->key})"])
-                                                ->all();
-                                        } catch (\Throwable $e) {
-                                            return [];
-                                        }
-                                    }),
-
-                                Select::make('meta_json.home.hero_slider_variant')
-                                    ->label('Variant')
-                                    ->native(false)
-                                    ->options(fn(): array => function_exists('siatex_slider_variants')
-                                        ? siatex_slider_variants()
-                                        : ['siatex-default' => 'Siatex Default'])
-                                    ->default('siatex-default'),
-                            ]),
-
-                        // ✅ Featured Images
-                        MediaPicker::make('featured_media_ids')
-                            ->label('Featured Images')
-                            ->modalHeading('Featured images')
-                            ->multiple()
-                            ->maxItems(20),
-
-                        // ✅ Product Images
-                        MediaPicker::make('product_media_ids')
-                            ->label('Product Images')
-                            ->modalHeading('Product images')
-                            ->multiple()
-                            ->maxItems(50),
-
-                        // ✅ Duotone panel
-                        Section::make('Duotone')
-                            ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
-                            ->collapsible()
-                            ->collapsed()
-                            ->schema([
-                                ColorPicker::make('meta_json.duotone.color')
-                                    ->label('Color')
-                                    ->nullable(),
-
-                                TextInput::make('meta_json.duotone.opacity')
-                                    ->label('Opacity')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->maxValue(100)
-                                    ->default(0)
-                                    ->suffix('%')
-                                    ->helperText('0 = transparent, 100 = fully opaque.')
-                                    ->nullable(),
-                            ]),
-
-                        Select::make('meta_json.parent_id')
-                            ->label('Parent Page (optional)')
-                            ->searchable()
-                            ->preload()
-                            ->nullable()
-                            ->options(fn(): array => Post::query()
-                                ->where('type', 'page')
-                                ->orderBy('title')
-                                ->pluck('title', 'id')
-                                ->all()),
-
-                        TextInput::make('meta_json.menu_order')
-                            ->label('Order')
-                            ->helperText('Lower numbers appear first (like WordPress menu order).')
-                            ->numeric()
-                            ->default(0),
-
-                        Select::make('categories')
-                            ->label('Categories')
-                            ->relationship('categories', 'name')
-                            ->multiple()
-                            ->searchable()
-                            ->preload()
-                            ->optionsLimit(50)
-                            ->createOptionForm([
-                                TextInput::make('name')
-                                    ->required()
-                                    ->maxLength(255)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        if (!filled($get('slug'))) {
-                                            $set('slug', Str::slug((string) $state));
-                                        }
-                                    }),
-
-                                TextInput::make('slug')
-                                    ->required()
-                                    ->maxLength(255)
-                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                                    ->dehydrateStateUsing(fn($state) => Str::slug((string) $state))
-                                    ->helperText('Lowercase letters, numbers, and hyphens only.')
-                                    ->rule(function (?Term $record) {
-                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
-                                        if (!$taxonomyId) {
-                                            return null;
-                                        }
-
-                                        return Rule::unique('terms', 'slug')
-                                            ->where('taxonomy_id', $taxonomyId)
-                                            ->ignore($record?->id);
-                                    }),
-
-                                Select::make('parent_id')
-                                    ->label('Parent Category (optional)')
-                                    ->searchable()
-                                    ->preload()
-                                    ->nullable()
-                                    ->options(function (): array {
-                                        $taxonomyId = Taxonomy::where('key', 'category')->value('id');
-                                        if (!$taxonomyId) {
-                                            return [];
-                                        }
-
-                                        return Term::query()
-                                            ->where('taxonomy_id', $taxonomyId)
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->all();
-                                    }),
-                            ])
-                            ->createOptionUsing(function (array $data) {
-                                $taxonomyId = Taxonomy::firstOrCreate(
-                                    ['key' => 'category'],
-                                    ['label' => 'Categories', 'hierarchical' => true],
-                                )->id;
-
-                                $base = filled($data['slug'] ?? null)
-                                    ? Str::slug((string) $data['slug'])
-                                    : Str::slug((string) ($data['name'] ?? ''));
-
-                                $base = $base !== '' ? $base : 'category';
-
-                                $slug = $base;
-                                $i = 2;
-
-                                while (Term::where('taxonomy_id', $taxonomyId)->where('slug', $slug)->exists()) {
-                                    $slug = $base . '-' . $i;
-                                    $i++;
-                                }
-
-                                $term = Term::create([
-                                    'taxonomy_id' => $taxonomyId,
-                                    'name' => (string) $data['name'],
-                                    'slug' => $slug,
-                                    'parent_id' => $data['parent_id'] ?? null,
-                                ]);
-
-                                return $term->getKey();
-                            }),
-
-                        Select::make('tags')
-                            ->label('Tags')
-                            ->relationship('tags', 'name')
-                            ->multiple()
-                            ->preload()
-                            ->searchable(),
-
-                        DateTimePicker::make('published_at')
-                            ->label('Publish At')
-                            ->seconds(false)
-                            ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
-                    ]),
+                    ->schema($publishSchema),
             ]);
     }
 }

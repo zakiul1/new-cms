@@ -34,6 +34,42 @@ class EditSiatexTag extends EditRecord
         return Width::Full;
     }
 
+    /**
+     * ✅ IMPORTANT FIX:
+     * If SEO title is empty in the form, Filament sometimes doesn't overwrite the existing JSON value.
+     * This method ensures empty SEO title truly clears meta_json.seo.title so Tag Defaults can apply.
+     */
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $meta = $data['meta_json'] ?? [];
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        $seo = $meta['seo'] ?? [];
+        if (!is_array($seo)) {
+            $seo = [];
+        }
+
+        // Normalize SEO title (trim + NBSP cleanup)
+        $seoTitle = (string) ($seo['title'] ?? '');
+        $seoTitle = html_entity_decode($seoTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $seoTitle = str_replace("\xc2\xa0", ' ', $seoTitle); // NBSP
+        $seoTitle = trim($seoTitle);
+
+        // If empty -> remove key so defaults can apply
+        if ($seoTitle === '') {
+            unset($seo['title']);
+        } else {
+            $seo['title'] = $seoTitle;
+        }
+
+        $meta['seo'] = $seo;
+        $data['meta_json'] = $meta;
+
+        return $data;
+    }
+
     private function getSlugTemplate(): string
     {
         $value = (string) CmsSetting::query()
@@ -78,9 +114,8 @@ class EditSiatexTag extends EditRecord
                                             $set('slug', $this->makeSlugFromTemplate((string) $state));
                                         }
 
-                                        if (!filled($get('meta_json.seo.title'))) {
-                                            $set('meta_json.seo.title', (string) $state);
-                                        }
+                                        // ❌ Removed: auto-filling meta_json.seo.title from H1
+                                        // This was blocking Tag Defaults "Default SEO Title"
                                     }),
 
                                 TextInput::make('slug')

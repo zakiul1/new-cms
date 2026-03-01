@@ -49,13 +49,12 @@ add_filter('cms.page_template_options', function (array $options) {
 }, 20, 1);
 
 /**
- * ✅ Routes (submit + cron + cart endpoints + raw assets)
+ * ✅ Routes (submit + cron + cart endpoints)
  *
  * IMPORTANT:
- * Do NOT register these via HookPoints::CMS_ROUTES, because CMS_ROUTES may run
- * after Laravel has already built its route table for the current request.
- *
- * Register via Laravel's boot cycle instead so /_contact/cart.js exists.
+ * We still register submit/cron/cart endpoints via Laravel boot cycle.
+ * BUT we do NOT register /_contact/cart.js and /_contact/cart.css as routes anymore,
+ * because those are now static files in public/_contact/.
  */
 app()->booted(function () {
     Route::middleware('web')->group(function () {
@@ -76,12 +75,10 @@ app()->booted(function () {
             \Plugins\ContactForm\Cart\CartRoutes::register();
         }
 
-        // ✅ cart asset raw routes (/cart.js, /cart.css)
-        // Guard to prevent duplicate route registration if registerRoutes() adds names internally.
-        if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
-            // If your CartAssets::registerRoutes() defines route names, you can add Route::has() checks here.
-            \Plugins\ContactForm\Cart\CartAssets::registerRoutes();
-        }
+        // ✅ IMPORTANT: removed CartAssets::registerRoutes()
+        // Because cart.js/cart.css are now static:
+        //   public/_contact/cart.js
+        //   public/_contact/cart.css
     });
 });
 

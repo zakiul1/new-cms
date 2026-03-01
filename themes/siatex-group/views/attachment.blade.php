@@ -428,12 +428,11 @@
         <nav class="text-sm text-slate-500">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
 
-            {{--    @if ($breadcrumbTerm)
+            @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
-                <a class="text-slate-600 hover:underline" href="{{ cms_term_url($breadcrumbTerm) }}">
-                    {{ $breadcrumbTerm->name }}
-                </a>
-            @endif --}}
+
+                <span class="text-slate-600"> {{ $breadcrumbTerm->name }}</span>
+            @endif
 
             <span class="mx-2 text-slate-300">/</span>
             <span class="text-slate-600">{{ $title }}</span>
@@ -446,14 +445,14 @@
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
                 {{-- IMAGE (sticky on desktop) --}}
-                <div class="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-24 lg:self-start">
+                <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
                     @if ($media->isImage())
                         {!! cms_picture(
                             $media,
                             [
                                 'alt' => e($title),
                                 // make image fit nicely + not overflow viewport
-                                'class' => 'w-full object-contain max-h-[70vh]',
+                                'class' => 'w-full object-contain ',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
                                 'decoding' => 'async',
@@ -468,7 +467,7 @@
                 </div>
 
                 {{-- CONTENT --}}
-                <div class="order-2 min-w-0 lg:order-1 lg:col-span-7">
+                <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
                         Your Tech-pack, Our production

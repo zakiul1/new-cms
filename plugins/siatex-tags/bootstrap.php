@@ -1,5 +1,6 @@
 <?php
 
+use App\Cms\Core\Settings;
 use App\Cms\Hooks\HookPoints;
 use App\Http\Controllers\ContentRouterController;
 use App\Models\Taxonomy;
@@ -21,55 +22,138 @@ View::addNamespace('siatex-tags', __DIR__ . '/views');
 /**
  * Helper: render tag page by slug (returns Response) or null if not found.
  */
-function siatex_tags_render_by_slug(string $slug)
-{
-    $tag = \Plugins\SiatexTags\Models\SiatexTag::query()
-        ->where('slug', $slug)
-        ->first();
+if (!function_exists('siatex_tags_render_by_slug')) {
+    function siatex_tags_render_by_slug(string $slug)
+    {
+        $tag = \Plugins\SiatexTags\Models\SiatexTag::query()
+            ->where('slug', $slug)
+            ->first();
 
-    if (!$tag) {
-        return null;
-    }
-
-    // Make current tag available to shortcode parsing (context + fallback)
-    request()->attributes->set('siatex_tag', $tag);
-
-    // ✅ Allow plugins to apply runtime defaults (no DB save)
-    do_action('siatex.tag.defaults.persist', $tag);
-
-    $termId = (int) ($tag->media_category_term_id ?? 0);
-    $media = collect();
-
-    if ($termId > 0) {
-        $ids = \Illuminate\Support\Facades\DB::table('termables')
-            ->where('term_id', $termId)
-            ->where('termable_type', \App\Models\Media::class)
-            ->pluck('termable_id')
-            ->map(fn($v) => (int) $v)
-            ->unique()
-            ->values()
-            ->all();
-
-        if (!empty($ids)) {
-            $media = \App\Models\Media::query()
-                ->whereIn('id', $ids)
-                ->latest('id')
-                ->get();
+        if (!$tag) {
+            return null;
         }
+
+        // Make current tag available to shortcode parsing (context + fallback)
+        request()->attributes->set('siatex_tag', $tag);
+
+        // ✅ Allow plugins to apply runtime defaults (no DB save)
+        do_action('siatex.tag.defaults.persist', $tag);
+
+        /**
+         * ✅ Parse shortcodes in tag fields for frontend output
+         */
+        /** @var \App\Cms\Content\Shortcodes\ShortcodeParser $parser */
+        $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
+
+        $ctx = [
+            'siatex_tag' => $tag,
+        ];
+
+        // Title
+        if (is_string($tag->title ?? null) && $tag->title !== '') {
+            $tag->title = $parser->parse($tag->title, $ctx);
+        }
+
+        // Content HTML (content_json.html)
+        if (is_array($tag->content_json ?? null)) {
+            $contentHtml = $tag->content_json['html'] ?? '';
+            if (is_string($contentHtml) && $contentHtml !== '') {
+                $tag->content_json['html'] = $parser->parse($contentHtml, $ctx);
+            }
+        }
+
+        // Meta fields + SEO fields
+        $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        $subtitle = data_get($meta, 'subtitle', '');
+        if (is_string($subtitle) && $subtitle !== '') {
+            data_set($meta, 'subtitle', $parser->parse($subtitle, $ctx));
+        }
+
+        $subDesc = data_get($meta, 'sub_description', '');
+        if (is_string($subDesc) && $subDesc !== '') {
+            data_set($meta, 'sub_description', $parser->parse($subDesc, $ctx));
+        }
+
+        // ✅ Parse SEO title/description if present
+        $seoTitle = data_get($meta, 'seo.title', '');
+        if (is_string($seoTitle) && $seoTitle !== '') {
+            data_set($meta, 'seo.title', $parser->parse($seoTitle, $ctx));
+        }
+
+        $seoDesc = data_get($meta, 'seo.description', '');
+        if (is_string($seoDesc) && $seoDesc !== '') {
+            data_set($meta, 'seo.description', $parser->parse($seoDesc, $ctx));
+        }
+
+        // Save meta back onto tag
+        $tag->meta_json = $meta;
+
+        $termId = (int) ($tag->media_category_term_id ?? 0);
+        $media = collect();
+
+        if ($termId > 0) {
+            $ids = \Illuminate\Support\Facades\DB::table('termables')
+                ->where('term_id', $termId)
+                ->where('termable_type', \App\Models\Media::class)
+                ->pluck('termable_id')
+                ->map(fn($v) => (int) $v)
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!empty($ids)) {
+                $media = \App\Models\Media::query()
+                    ->whereIn('id', $ids)
+                    ->latest('id')
+                    ->get();
+            }
+        }
+
+        /**
+         * ✅ Build $seo from meta
+         */
+        $seo = data_get($meta, 'seo', []);
+        $seo = is_array($seo) ? $seo : [];
+
+        /**
+         * ✅ CRITICAL FIX:
+         * If seo.title is empty, use Tag Defaults setting default_seo_title (plugins.tag-defaults).
+         * This ensures Default SEO Title actually shows on frontend.
+         */
+        $seoTitleFinal = trim((string) data_get($seo, 'title', ''));
+
+        if ($seoTitleFinal === '') {
+            try {
+                /** @var \App\Cms\Core\Settings $settings */
+                $settings = app(Settings::class);
+                $defaultSeoTitle = (string) $settings->get('default_seo_title', '', 'plugins.tag-defaults');
+                $defaultSeoTitle = trim($defaultSeoTitle);
+
+                if ($defaultSeoTitle !== '') {
+                    // allow shortcodes like [tag]
+                    $seo['title'] = $parser->parse($defaultSeoTitle, $ctx);
+                    $seoTitleFinal = trim((string) $seo['title']);
+                }
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
+        // Final fallback to tag title if still empty
+        if ($seoTitleFinal === '') {
+            $seo['title'] = (string) ($tag->title ?? '');
+        }
+
+        return view('siatex-tags::show', [
+            'tag' => $tag,
+            'mediaItems' => $media,
+            'seo' => $seo,
+        ]);
     }
-
-    $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
-    $seo = is_array($meta['seo'] ?? null) ? $meta['seo'] : [];
-
-    if (!isset($seo['title']) || trim((string) $seo['title']) === '') {
-        $seo['title'] = $tag->title;
-    }
-
-    return view('siatex-tags::show', [
-        'tag' => $tag,
-        'mediaItems' => $media,
-        'seo' => $seo,
-    ]);
 }
 
 // 3) Ensure taxonomy exists + Register shortcodes in plugin
@@ -100,7 +184,7 @@ add_action(HookPoints::CMS_BOOTED, function () {
      *
      * NOTE: Links now point to "/{slug}" (no /tag/ prefix).
      */
-    $shortcodes->register('page-tags', function (array $attrs, ?string $content, array $ctx): string {
+    $shortcodes->registerWithMeta('page-tags', function (array $attrs, ?string $content, array $ctx): string {
         $limit = (int) ($attrs['number'] ?? 10);
         if ($limit <= 0) {
             $limit = 10;
@@ -135,7 +219,22 @@ add_action(HookPoints::CMS_BOOTED, function () {
         }
 
         return (string) new \Illuminate\Support\HtmlString(implode($separator, $items));
-    });
+    }, [
+        'group' => 'Tags',
+        'description' => 'Prints random tags (optionally as links), excluding the current tag.',
+        'params' => [
+            ['name' => 'number', 'type' => 'int', 'default' => 10, 'desc' => 'How many tags to show (1–100).'],
+            ['name' => 'links', 'type' => 'bool', 'default' => true, 'desc' => 'Render as links (true) or plain text (false).'],
+            ['name' => 'sep', 'type' => 'string', 'default' => ', ', 'desc' => 'Separator between items.'],
+        ],
+        'examples' => [
+            '[page-tags]',
+            '[page-tags number=20]',
+            '[page-tags links=false]',
+            '[page-tags sep=" | "]',
+            '[page-tags number=20 links=false sep=" | "]',
+        ],
+    ]);
 });
 
 // 4) Register Filament resource (NO import submenu, import is modal in list page)

@@ -1,9 +1,11 @@
 @php
+    use App\Cms\Core\Settings;
     use App\Cms\Core\SettingsRepository;
 
-    // ✅ Safe vars (prevents "Undefined variable $media/$post")
+    // ✅ Safe vars (prevents "Undefined variable")
     $postObj = isset($post) && $post ? $post : null;
     $mediaObj = isset($media) && $media ? $media : null;
+    $tagObj = isset($tag) && $tag ? $tag : null;
 
     // ------------------------------------
     // ✅ Global SEO switch (WP-like):
@@ -17,14 +19,23 @@
     $seoInput = isset($seo) && is_array($seo) ? $seo : null;
 
     if (!is_array($seoInput)) {
+        // 1) Post SEO
         $postMeta = [];
-
         if ($postObj && is_array($postObj->meta_json ?? null)) {
             $postMeta = $postObj->meta_json;
         }
-
         $postSeo = is_array($postMeta['seo'] ?? null) ? $postMeta['seo'] ?? [] : [];
-        $seoInput = is_array($postSeo) ? $postSeo : [];
+
+        // 2) Tag SEO
+        $tagMeta = [];
+        if ($tagObj && is_array($tagObj->meta_json ?? null)) {
+            $tagMeta = $tagObj->meta_json;
+        }
+        $tagSeo = is_array($tagMeta['seo'] ?? null) ? $tagMeta['seo'] ?? [] : [];
+
+        // Prefer post, then tag
+        $seoInput = !empty($postSeo) ? $postSeo : $tagSeo;
+        $seoInput = is_array($seoInput) ? $seoInput : [];
     }
 
     // ------------------------------------
@@ -36,11 +47,48 @@
         $baseTitle = (string) $postObj->title;
     } elseif ($mediaObj && !empty($mediaObj->title)) {
         $baseTitle = (string) $mediaObj->title;
+    } elseif ($tagObj && !empty($tagObj->title)) {
+        $baseTitle = (string) $tagObj->title;
     }
 
     $title = trim((string) ($seoInput['title'] ?? $baseTitle));
     if ($title === '') {
         $title = $baseTitle ?: config('app.name');
+    }
+
+    // ------------------------------------
+    // ✅ IMPORTANT FIX: Tag Defaults SEO Title fallback for TAG pages
+    // Run when seoInput.title is empty OR equals tag title
+    // ------------------------------------
+    if ($tagObj) {
+        $currentSeoTitle = trim((string) ($seoInput['title'] ?? ''));
+        $tagTitle = trim((string) ($tagObj->title ?? ''));
+
+        if ($currentSeoTitle === '' || ($tagTitle !== '' && $currentSeoTitle === $tagTitle)) {
+            try {
+                /** @var \App\Cms\Core\Settings $settings */
+                $settings = app(Settings::class);
+
+                $defaultSeoTitle = trim((string) $settings->get('default_seo_title', '', 'plugins.tag-defaults'));
+
+                if ($defaultSeoTitle !== '') {
+                    // apply shortcodes like [tag]
+                    $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
+                    $titleFromDefaults = (string) $parser->parse($defaultSeoTitle, [
+                        'post' => $postObj,
+                        'media' => $mediaObj,
+                        'siatex_tag' => $tagObj,
+                    ]);
+
+                    $titleFromDefaults = trim(strip_tags($titleFromDefaults));
+                    if ($titleFromDefaults !== '') {
+                        $title = $titleFromDefaults;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
     }
 
     $desc = trim((string) ($seoInput['description'] ?? ''));
@@ -99,19 +147,34 @@
     }
 
     // ------------------------------------
-    // ✅ Apply shortcodes to SEO fields
+    // ✅ Apply shortcodes to SEO fields (CMS parser preferred)
     // ------------------------------------
-    $applyShortcodes = function (?string $value) use ($postObj, $mediaObj): string {
+    $shortcodeCtx = [
+        'post' => $postObj,
+        'media' => $mediaObj,
+        'siatex_tag' => $tagObj,
+    ];
+
+    $applyShortcodes = function (?string $value) use ($shortcodeCtx): string {
         $value = (string) $value;
+
+        // Prefer CMS parser (more consistent)
+        try {
+            $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
+            return (string) $parser->parse($value, $shortcodeCtx);
+        } catch (\Throwable $e) {
+            // fallback to do_shortcode if available
+        }
 
         if (!function_exists('do_shortcode')) {
             return $value;
         }
 
-        return (string) do_shortcode($value, [
-            'post' => $postObj,
-            'media' => $mediaObj,
-        ]);
+        try {
+            return (string) do_shortcode($value, $shortcodeCtx);
+        } catch (\Throwable $e) {
+            return $value;
+        }
     };
 
     $title = trim($applyShortcodes($title));
@@ -137,6 +200,11 @@
     if (($rawJsonLd === '' || $rawJsonLd === null) && $mediaObj) {
         $m2 = is_array($mediaObj->meta ?? null) ? $mediaObj->meta : [];
         $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+    }
+
+    if (($rawJsonLd === '' || $rawJsonLd === null) && $tagObj) {
+        $m3 = is_array($tagObj->meta_json ?? null) ? $tagObj->meta_json : [];
+        $rawJsonLd = data_get($m3, 'custom_json', '') ?: data_get($m3, 'seo.custom_json', '');
     }
 
     $jsonLd = '';
@@ -214,9 +282,8 @@
         $name = trim((string) $name);
         $content = trim((string) $content);
 
-        // optional: allow shortcodes inside extra meta too
-        if ($content !== '' && function_exists('do_shortcode')) {
-            $content = (string) do_shortcode($content, ['post' => $postObj, 'media' => $mediaObj]);
+        if ($content !== '') {
+            $content = (string) $applyShortcodes($content);
         }
     @endphp
 

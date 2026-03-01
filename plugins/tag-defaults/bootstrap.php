@@ -255,13 +255,13 @@ add_action('siatex.tag.defaults.persist', function ($tag): void {
                 data_set($meta, 'custom_json', $data['default_custom_json']);
             }
 
-            // SEO defaults in preview mode
+            // ✅ SEO defaults in preview mode (ROBUST: supports nested + flat keys)
             $seoDefaultsPreview = [
-                'title' => trim((string) ($data['default_seo_title'] ?? '')),
-                'description' => trim((string) ($data['default_seo_description'] ?? '')),
-                'canonical' => trim((string) ($data['default_seo_canonical'] ?? '')),
-                'robots' => trim((string) ($data['default_seo_robots'] ?? '')),
-                'og_image' => trim((string) ($data['default_seo_og_image'] ?? '')),
+                'title' => trim((string) data_get($data, 'default_seo.title', data_get($data, 'default_seo_title', ''))),
+                'description' => trim((string) data_get($data, 'default_seo.description', data_get($data, 'default_seo_description', ''))),
+                'canonical' => trim((string) data_get($data, 'default_seo.canonical', data_get($data, 'default_seo_canonical', ''))),
+                'robots' => trim((string) data_get($data, 'default_seo.robots', data_get($data, 'default_seo_robots', ''))),
+                'og_image' => trim((string) data_get($data, 'default_seo.og_image', data_get($data, 'default_seo_og_image', ''))),
             ];
             tag_defaults_apply_seo_defaults($meta, $seoDefaultsPreview);
 

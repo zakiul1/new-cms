@@ -1,0 +1,6 @@
+{
+  "name": "Multi Page",
+  "slug": "multi-page",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php"
+}

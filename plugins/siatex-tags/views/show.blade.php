@@ -61,6 +61,39 @@
         $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
         $shortcodeCtx = ['siatex_tag' => $tag];
 
+        // Unified helpers using CMS shortcode parser (works everywhere)
+        $renderShortcodeText = function ($value) use ($parser, $shortcodeCtx, $removeScriptStyleBlocks): string {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+
+            try {
+                // parse() is best for text fields (returns string)
+                $value = (string) $parser->parse($value, $shortcodeCtx);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+
+            $value = $removeScriptStyleBlocks($value);
+
+            // Text output only (SEO/title/subtitle)
+            return trim(strip_tags($value));
+        };
+
+        $renderShortcodeHtml = function ($value) use ($parser, $shortcodeCtx): string {
+            $value = (string) $value;
+            if (trim($value) === '') {
+                return '';
+            }
+
+            try {
+                return (string) $parser->render($value, $shortcodeCtx);
+            } catch (\Throwable $e) {
+                return $value;
+            }
+        };
+
         // URL (no /tag/)
         $tagUrl = url('/' . ltrim((string) $tag->slug, '/'));
 
@@ -79,8 +112,10 @@
             $meta = [];
         }
 
-        $title = trim((string) $tag->title);
-        $subtitle = trim((string) data_get($meta, 'subtitle', ''));
+        // RAW values (may contain shortcodes like [tag])
+        $titleRaw = (string) ($tag->title ?? '');
+        $subtitleRaw = (string) data_get($meta, 'subtitle', '');
+
         $subDesc = data_get($meta, 'sub_description', '');
         $subDescHtmlRaw = $htmlValue($subDesc);
 
@@ -91,8 +126,12 @@
             $contentHtmlRaw = (string) $tag->content_json;
         }
 
+        // ✅ Render shortcodes for title/subtitle (text)
+        $title = $renderShortcodeText($titleRaw);
+        $subtitle = $renderShortcodeText($subtitleRaw);
+
         // -----------------------------
-        // SEO (keep your existing behavior)
+        // SEO (keep your existing behavior, but use parser consistently)
         // -----------------------------
         if (!isset($seo) || !is_array($seo)) {
             $seo = [];
@@ -100,42 +139,6 @@
 
         $tagSeo = data_get($meta, 'seo', []);
         $tagSeo = is_array($tagSeo) ? $tagSeo : [];
-
-        $seoShortcodeText = function (string $value) use ($shortcodeCtx, $removeScriptStyleBlocks): string {
-            $value = trim($value);
-            if ($value === '') {
-                return '';
-            }
-
-            if (function_exists('do_shortcode')) {
-                try {
-                    $value = (string) do_shortcode($value, $shortcodeCtx);
-                } catch (\Throwable $e) {
-                    // ignore
-                }
-            }
-
-            $value = $removeScriptStyleBlocks($value);
-            return trim(strip_tags($value));
-        };
-
-        $seoShortcodeUrl = function (string $value) use ($shortcodeCtx, $removeScriptStyleBlocks): string {
-            $value = trim($value);
-            if ($value === '') {
-                return '';
-            }
-
-            if (function_exists('do_shortcode')) {
-                try {
-                    $value = (string) do_shortcode($value, $shortcodeCtx);
-                } catch (\Throwable $e) {
-                    // ignore
-                }
-            }
-
-            $value = $removeScriptStyleBlocks($value);
-            return trim($value);
-        };
 
         $fallbackDescSource = '';
         if (!$htmlIsEmpty($subDescHtmlRaw)) {
@@ -146,26 +149,32 @@
 
         $fallbackDescText = trim(strip_tags($removeScriptStyleBlocks((string) $fallbackDescSource)));
 
-        $seoTitle = $seoShortcodeText((string) ($seo['title'] ?? ($tagSeo['title'] ?? $title)));
+        // ✅ SEO Title: use defaults only if tagSeo is empty; and shortcode-render it
+        $seoTitleSource = (string) ($seo['title'] ?? ($tagSeo['title'] ?? $titleRaw));
+        $seoTitle = $renderShortcodeText($seoTitleSource);
         if ($seoTitle === '') {
-            $seoTitle = $title;
+            $seoTitle = $title !== '' ? $title : $renderShortcodeText($titleRaw);
         }
 
-        $seoDesc = $seoShortcodeText((string) ($seo['description'] ?? ($tagSeo['description'] ?? $fallbackDescText)));
+        // ✅ SEO Description: shortcode-render to text (already working, keep)
+        $seoDescSource = (string) ($seo['description'] ?? ($tagSeo['description'] ?? $fallbackDescText));
+        $seoDesc = $renderShortcodeText($seoDescSource);
 
-        $seoCanonical = $seoShortcodeUrl((string) ($seo['canonical'] ?? ($tagSeo['canonical'] ?? '')));
+        // Canonical / Robots / OG
+        $seoCanonicalSource = (string) ($seo['canonical'] ?? ($tagSeo['canonical'] ?? ''));
+        $seoCanonical = trim($renderShortcodeText($seoCanonicalSource));
         if ($seoCanonical === '') {
             $seoCanonical = $tagUrl;
         }
 
-        $seoRobots = $seoShortcodeText((string) ($seo['robots'] ?? ($tagSeo['robots'] ?? '')));
+        $seoRobotsSource = (string) ($seo['robots'] ?? ($tagSeo['robots'] ?? ''));
+        $seoRobots = $renderShortcodeText($seoRobotsSource);
         if ($seoRobots === '') {
             $seoRobots = 'index, follow';
         }
 
-        $seoOgImage = $seoShortcodeUrl(
-            (string) ($seo['og']['image'] ?? ($tagSeo['og_image'] ?? ($seo['og_image'] ?? ''))),
-        );
+        $seoOgImageSource = (string) ($seo['og']['image'] ?? ($tagSeo['og_image'] ?? ($seo['og_image'] ?? '')));
+        $seoOgImage = trim($renderShortcodeText($seoOgImageSource));
 
         $seo = array_merge($seo, [
             'title' => $seoTitle,
@@ -182,11 +191,7 @@
         ]);
 
         // -----------------------------
-        // ✅ Media selection (FIXED to behave like attachment)
-        // - hero: 1 random image
-        // - related: 12 random (exclude hero)
-        // - related links: 10 random (exclude hero + related)
-        // - BUT if the pool is small, we refill from category again (like attachment)
+        // ✅ Media selection (same as your current code)
         // -----------------------------
         $allMedia = collect($mediaItems ?? [])
             ->filter(fn($m) => $m instanceof \App\Models\Media)
@@ -212,87 +217,75 @@
             ->take(10)
             ->values();
 
-        // ✅ IMPORTANT FIX:
-        // If category is small, the above may produce 0 links.
-        // So we refill by sampling again from the full category set (excluding hero + related),
-        // similar to attachment's "more" logic.
-$need = 10 - $relatedLinks->count();
-if ($need > 0) {
-    $excludeIds = collect([$heroId])
-        ->merge($relatedIds)
-        ->unique()
-        ->values()
-        ->all();
+        // If category is small, refill
+        $need = 10 - $relatedLinks->count();
+        if ($need > 0) {
+            $excludeIds = collect([$heroId])
+                ->merge($relatedIds)
+                ->unique()
+                ->values()
+                ->all();
 
-    $more = $allMedia
-        ->reject(fn($m) => in_array((int) $m->id, $excludeIds, true))
-        ->shuffle()
-        ->take($need)
-        ->values();
+            $more = $allMedia
+                ->reject(fn($m) => in_array((int) $m->id, $excludeIds, true))
+                ->shuffle()
+                ->take($need)
+                ->values();
 
-    $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
-}
-
-// If still empty (extreme small category), allow links to reuse non-hero media
-// BUT keep order different from related products.
-if ($relatedLinks->isEmpty() && $pool->count() > 0) {
-    $relatedLinks = $pool->shuffle()->take(10)->values();
-}
-
-// If no og image set, pick from hero
-if (($seo['og']['image'] ?? '') === '' && $heroMedia) {
-    try {
-        if (method_exists($heroMedia, 'url')) {
-            $seo['og']['image'] = (string) $heroMedia->url('large');
+            $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
         }
-    } catch (\Throwable $e) {
-        // ignore
-    }
-}
 
-// -----------------------------
-// Hero text: use Tag CONTENT (shortcode-rendered + sanitized)
-// -----------------------------
-$heroTextHtml = '';
-if (trim($contentHtmlRaw) !== '') {
-    try {
-        $heroTextHtml = (string) $parser->render((string) $contentHtmlRaw, $shortcodeCtx);
-    } catch (\Throwable $e) {
-        $heroTextHtml = (string) $contentHtmlRaw;
-    }
-} elseif (!$htmlIsEmpty($subDescHtmlRaw)) {
-    try {
-        $heroTextHtml = (string) $parser->render((string) $subDescHtmlRaw, $shortcodeCtx);
-    } catch (\Throwable $e) {
-        $heroTextHtml = (string) $subDescHtmlRaw;
-    }
-}
+        if ($relatedLinks->isEmpty() && $pool->count() > 0) {
+            $relatedLinks = $pool->shuffle()->take(10)->values();
+        }
 
-$heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
-$heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
+        // If no og image set, pick from hero
+        if (($seo['og']['image'] ?? '') === '' && $heroMedia) {
+            try {
+                if (method_exists($heroMedia, 'url')) {
+                    $seo['og']['image'] = (string) $heroMedia->url('large');
+                }
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
 
-// Bottom-left content (must be from Sub title + Sub description)
-$bottomTitle = $subtitle !== '' ? $subtitle : $title;
+        // -----------------------------
+        // Hero text: use Tag CONTENT (shortcode-rendered + sanitized)
+        // -----------------------------
+        $heroTextHtml = '';
+        if (trim($contentHtmlRaw) !== '') {
+            $heroTextHtml = $renderShortcodeHtml((string) $contentHtmlRaw);
+        } elseif (!$htmlIsEmpty($subDescHtmlRaw)) {
+            $heroTextHtml = $renderShortcodeHtml((string) $subDescHtmlRaw);
+        }
 
-$bottomDescHtml = '';
-if (!$htmlIsEmpty($subDescHtmlRaw)) {
-    try {
-        $bottomDescHtml = (string) $parser->render((string) $subDescHtmlRaw, $shortcodeCtx);
-    } catch (\Throwable $e) {
-        $bottomDescHtml = (string) $subDescHtmlRaw;
-    }
-}
-$bottomDescHtml = $removeScriptStyleBlocks((string) $bottomDescHtml);
-$bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
+        $heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
+        $heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
 
-// "Get Price" payload (same idea as attachment)
-$tagImage = '';
-try {
-    if ($heroMedia && method_exists($heroMedia, 'url')) {
-        $tagImage = (string) $heroMedia->url('medium');
-    }
-} catch (\Throwable $e) {
-    $tagImage = '';
+        // Bottom-left content (must be from Sub title + Sub description)
+        // ✅ Also render shortcode in bottom title
+        $bottomTitleRaw = $subtitleRaw !== '' ? $subtitleRaw : $titleRaw;
+        $bottomTitle = $renderShortcodeText($bottomTitleRaw);
+        if ($bottomTitle === '') {
+            $bottomTitle = $title;
+        }
+
+        $bottomDescHtml = '';
+        if (!$htmlIsEmpty($subDescHtmlRaw)) {
+            $bottomDescHtml = $renderShortcodeHtml((string) $subDescHtmlRaw);
+        }
+        $bottomDescHtml = $removeScriptStyleBlocks((string) $bottomDescHtml);
+        $bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
+
+        // "Get Price" payload
+        $tagImage = '';
+        try {
+            if ($heroMedia && method_exists($heroMedia, 'url')) {
+                $tagImage = (string) $heroMedia->url('medium');
+            }
+        } catch (\Throwable $e) {
+            $tagImage = '';
         }
     @endphp
 
@@ -305,19 +298,19 @@ try {
         </nav>
     </div>
 
-    {{-- HERO (same layout style as attachment: sticky image + text) --}}
+    {{-- HERO --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
 
-                {{-- IMAGE (sticky on desktop) --}}
-                <div class="order-1 lg:order-2 lg:col-span-5 lg:sticky lg:top-24 lg:self-start">
+                {{-- IMAGE --}}
+                <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
                     @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
                         {!! cms_picture(
                             $heroMedia,
                             [
                                 'alt' => e($title),
-                                'class' => 'w-full object-contain max-h-[70vh]',
+                                'class' => 'w-full object-contain',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
                                 'decoding' => 'async',
@@ -332,11 +325,11 @@ try {
                 </div>
 
                 {{-- CONTENT --}}
-                <div class="order-2 min-w-0 lg:order-1 lg:col-span-7">
+                <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
 
                     <div class="mt-4 text-sm font-semibold text-slate-700">
-                        {{ $subtitle !== '' ? $subtitle : 'Your Tech-pack, Our production' }}
+                        Your Tech-pack, Our production
                     </div>
 
                     <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
@@ -361,12 +354,12 @@ try {
         </div>
     </section>
 
-    {{-- RELATED GRID + (Sub title + Sub description) + RELATED LINKS --}}
+    {{-- RELATED GRID + META + RELATED LINKS --}}
     @if ($related->count() || $relatedLinks->count() || trim($bottomTitle) !== '' || trim($bottomDescHtml) !== '')
         <section class="bg-white">
             <div class="cms-container mx-auto px-4 py-10">
 
-                {{-- RELATED PRODUCTS GRID (max 12, random, hero excluded) --}}
+                {{-- RELATED PRODUCTS GRID --}}
                 @if ($related->count())
                     <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -443,7 +436,7 @@ try {
                     </div>
                 @endif
 
-                {{-- META + RELATED LINKS (attachment-like) --}}
+                {{-- META + RELATED LINKS --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
@@ -457,7 +450,7 @@ try {
                         @endif
                     </div>
 
-                    {{-- ✅ Hide on mobile (same as attachment) --}}
+                    {{-- Hide on mobile --}}
                     <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
