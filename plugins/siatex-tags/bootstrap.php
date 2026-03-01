@@ -40,7 +40,7 @@ if (!function_exists('siatex_tags_render_by_slug')) {
         do_action('siatex.tag.defaults.persist', $tag);
 
         /**
-         * ✅ Parse shortcodes in tag fields for frontend output
+         * ✅ Render shortcodes in tag fields for frontend output
          */
         /** @var \App\Cms\Content\Shortcodes\ShortcodeParser $parser */
         $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
@@ -51,14 +51,14 @@ if (!function_exists('siatex_tags_render_by_slug')) {
 
         // Title
         if (is_string($tag->title ?? null) && $tag->title !== '') {
-            $tag->title = $parser->parse($tag->title, $ctx);
+            $tag->title = $parser->render($tag->title, $ctx);
         }
 
         // Content HTML (content_json.html)
         if (is_array($tag->content_json ?? null)) {
             $contentHtml = $tag->content_json['html'] ?? '';
             if (is_string($contentHtml) && $contentHtml !== '') {
-                $tag->content_json['html'] = $parser->parse($contentHtml, $ctx);
+                $tag->content_json['html'] = $parser->render($contentHtml, $ctx);
             }
         }
 
@@ -70,23 +70,23 @@ if (!function_exists('siatex_tags_render_by_slug')) {
 
         $subtitle = data_get($meta, 'subtitle', '');
         if (is_string($subtitle) && $subtitle !== '') {
-            data_set($meta, 'subtitle', $parser->parse($subtitle, $ctx));
+            data_set($meta, 'subtitle', $parser->render($subtitle, $ctx));
         }
 
         $subDesc = data_get($meta, 'sub_description', '');
         if (is_string($subDesc) && $subDesc !== '') {
-            data_set($meta, 'sub_description', $parser->parse($subDesc, $ctx));
+            data_set($meta, 'sub_description', $parser->render($subDesc, $ctx));
         }
 
-        // ✅ Parse SEO title/description if present
+        // ✅ Render SEO title/description if present
         $seoTitle = data_get($meta, 'seo.title', '');
         if (is_string($seoTitle) && $seoTitle !== '') {
-            data_set($meta, 'seo.title', $parser->parse($seoTitle, $ctx));
+            data_set($meta, 'seo.title', $parser->render($seoTitle, $ctx));
         }
 
         $seoDesc = data_get($meta, 'seo.description', '');
         if (is_string($seoDesc) && $seoDesc !== '') {
-            data_set($meta, 'seo.description', $parser->parse($seoDesc, $ctx));
+            data_set($meta, 'seo.description', $parser->render($seoDesc, $ctx));
         }
 
         // Save meta back onto tag
@@ -135,7 +135,7 @@ if (!function_exists('siatex_tags_render_by_slug')) {
 
                 if ($defaultSeoTitle !== '') {
                     // allow shortcodes like [tag]
-                    $seo['title'] = $parser->parse($defaultSeoTitle, $ctx);
+                    $seo['title'] = $parser->render($defaultSeoTitle, $ctx);
                     $seoTitleFinal = trim((string) $seo['title']);
                 }
             } catch (\Throwable $e) {

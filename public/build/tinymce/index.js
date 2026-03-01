@@ -1,7 +1,7 @@
-// Exports the "wordcount" plugin for usage with module loaders
+// Exports the "silver" theme for usage with module loaders
 // Usage:
 //   CommonJS:
-//     require('tinymce/plugins/wordcount')
+//     require('tinymce/themes/silver')
 //   ES2015:
-//     import 'tinymce/plugins/wordcount'
-require('./plugin.js');
+//     import 'tinymce/themes/silver'
+require('./theme.js');

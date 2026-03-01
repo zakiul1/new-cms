@@ -69,8 +69,8 @@
             }
 
             try {
-                // parse() is best for text fields (returns string)
-                $value = (string) $parser->parse($value, $shortcodeCtx);
+                // ✅ FIX: ShortcodeParser does NOT have parse(); use render()
+                $value = (string) $parser->render($value, $shortcodeCtx);
             } catch (\Throwable $e) {
                 // ignore
             }
@@ -129,6 +129,23 @@
         // ✅ Render shortcodes for title/subtitle (text)
         $title = $renderShortcodeText($titleRaw);
         $subtitle = $renderShortcodeText($subtitleRaw);
+
+        // -----------------------------
+        // ✅ Breadcrumb category: Home / Category Name / Tag Title
+        // Category name is NOT a link
+        // -----------------------------
+        $categoryName = '';
+        try {
+            $termId = (int) ($tag->media_category_term_id ?? 0);
+            if ($termId > 0) {
+                $term = \App\Models\Term::query()->find($termId);
+                if ($term && !empty($term->name)) {
+                    $categoryName = trim((string) $term->name);
+                }
+            }
+        } catch (\Throwable $e) {
+            $categoryName = '';
+        }
 
         // -----------------------------
         // SEO (keep your existing behavior, but use parser consistently)
@@ -263,17 +280,22 @@
         $heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
         $heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
 
-        // Bottom-left content (must be from Sub title + Sub description)
-        // ✅ Also render shortcode in bottom title
-        $bottomTitleRaw = $subtitleRaw !== '' ? $subtitleRaw : $titleRaw;
+        // Bottom-left content:
+        // ✅ MUST be from Sub title + Sub description
+        // and if empty => Tag Defaults (already applied by do_action persist)
+        $bottomTitleRaw = (string) data_get($meta, 'subtitle', '');
         $bottomTitle = $renderShortcodeText($bottomTitleRaw);
         if ($bottomTitle === '') {
+            // final fallback (should rarely happen if defaults are configured)
             $bottomTitle = $title;
         }
 
         $bottomDescHtml = '';
-        if (!$htmlIsEmpty($subDescHtmlRaw)) {
-            $bottomDescHtml = $renderShortcodeHtml((string) $subDescHtmlRaw);
+        $bottomDescRaw = data_get($meta, 'sub_description', '');
+        $bottomDescHtmlRaw = $htmlValue($bottomDescRaw);
+
+        if (!$htmlIsEmpty($bottomDescHtmlRaw)) {
+            $bottomDescHtml = $renderShortcodeHtml((string) $bottomDescHtmlRaw);
         }
         $bottomDescHtml = $removeScriptStyleBlocks((string) $bottomDescHtml);
         $bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
@@ -293,6 +315,12 @@
     <div class="cms-container mx-auto px-4 pt-6">
         <nav class="text-sm text-slate-500">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
+
+            @if (trim($categoryName) !== '')
+                <span class="mx-2 text-slate-300">/</span>
+                <span class="text-slate-600">{{ $categoryName }}</span>
+            @endif
+
             <span class="mx-2 text-slate-300">/</span>
             <span class="text-slate-600">{{ $title }}</span>
         </nav>
@@ -357,11 +385,11 @@
     {{-- RELATED GRID + META + RELATED LINKS --}}
     @if ($related->count() || $relatedLinks->count() || trim($bottomTitle) !== '' || trim($bottomDescHtml) !== '')
         <section class="bg-white">
-            <div class="cms-container mx-auto px-4 py-10">
+            <div class="page-container mx-auto px-4 py-10">
 
                 {{-- RELATED PRODUCTS GRID --}}
                 @if ($related->count())
-                    <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
+                    <div class="my-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
                             @php
                                 /** @var \App\Models\Media $r */

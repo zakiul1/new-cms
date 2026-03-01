@@ -497,11 +497,11 @@
     {{-- RELATED GRID + META + RELATED LINKS --}}
     @if ($related->count() || $relatedLinks->count() || $metaTitle !== '' || $metaDescHtml !== '')
         <section class="bg-white">
-            <div class="cms-container mx-auto px-4 py-10">
+            <div class="page-container mx-auto px-4 py-10">
 
                 {{-- RELATED GRID --}}
                 @if ($related->count())
-                    <div class="mt-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
+                    <div class="my-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
                             @php
                                 /** @var \App\Models\Media $r */

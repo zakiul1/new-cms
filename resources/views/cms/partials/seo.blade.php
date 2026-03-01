@@ -74,7 +74,7 @@
                 if ($defaultSeoTitle !== '') {
                     // apply shortcodes like [tag]
                     $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
-                    $titleFromDefaults = (string) $parser->parse($defaultSeoTitle, [
+                    $titleFromDefaults = (string) $parser->render($defaultSeoTitle, [
                         'post' => $postObj,
                         'media' => $mediaObj,
                         'siatex_tag' => $tagObj,
@@ -161,7 +161,7 @@
         // Prefer CMS parser (more consistent)
         try {
             $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
-            return (string) $parser->parse($value, $shortcodeCtx);
+            return (string) $parser->render($value, $shortcodeCtx);
         } catch (\Throwable $e) {
             // fallback to do_shortcode if available
         }
