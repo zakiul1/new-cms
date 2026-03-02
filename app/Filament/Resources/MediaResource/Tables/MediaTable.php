@@ -21,7 +21,7 @@ class MediaTable
         return $table
             // ✅ Needed for hover UI (group-hover)
             ->recordClasses(fn() => 'group')
-
+            ->defaultSort('id', 'desc')
             ->columns([
                 ImageColumn::make('thumb')
                     ->label('')

@@ -13,14 +13,15 @@ final class MultiPageGenerator
     }
 
     /**
-     * Generate static link mapping files for a page (file-based, no DB for generated URLs).
+     * Generate static link mapping files for a multipage (file-based, no DB for generated URLs).
      *
      * @return array{count:int, tracker_path:string, sample?:array<int,string>}
      */
     public function generateForPage(Post $page): array
     {
-        if ($page->type !== 'page') {
-            throw new \RuntimeException('Selected record is not a page.');
+        // ✅ MultiPages are their own CPT now
+        if ($page->type !== 'multipage') {
+            throw new \RuntimeException('Selected record is not a multipage.');
         }
 
         $meta = is_array($page->meta_json ?? null) ? $page->meta_json : [];
@@ -28,7 +29,7 @@ final class MultiPageGenerator
 
         $enabled = (bool) ($cfg['enabled'] ?? false);
         if (!$enabled) {
-            throw new \RuntimeException('Multi Page is disabled for this page.');
+            throw new \RuntimeException('Multi Page is disabled for this multipage.');
         }
 
         $csvFile = trim((string) ($cfg['csv_file'] ?? ''));
@@ -97,15 +98,19 @@ final class MultiPageGenerator
 
             // Write mapping JSON for this generated URL
             $key = MultiPageStorage::pathKey($url);
+
             $map = [
-                'base_slug' => (string) $page->slug,
+                'base_slug' => (string) ($page->slug ?? ''),
                 'base_page_id' => (int) $page->id,
                 'url' => $url,
                 'replacer' => array_values($segments), // segment-1, segment-2 ...
                 'created_at' => now()->toISOString(),
             ];
 
-            $disk->put(MultiPageStorage::LINKS . '/' . $key . '.json', json_encode($map, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $disk->put(
+                MultiPageStorage::LINKS . '/' . $key . '.json',
+                json_encode($map, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+            );
 
             $urls[] = $url;
             $count++;
@@ -117,9 +122,14 @@ final class MultiPageGenerator
 
         fclose($fh);
 
-        // Tracker (per base page slug)
+        // Tracker (per base multipage slug OR fallback to record id)
+        $trackerKey = (string) ($page->slug ?? '');
+        if ($trackerKey === '') {
+            $trackerKey = 'multipage-' . (int) $page->id;
+        }
+
         $tracker = [
-            'base_slug' => (string) $page->slug,
+            'base_slug' => (string) ($page->slug ?? ''),
             'base_page_id' => (int) $page->id,
             'generated' => $urls,
             'count' => $count,
@@ -129,8 +139,11 @@ final class MultiPageGenerator
             'updated_at' => now()->toISOString(),
         ];
 
-        $trackerPath = MultiPageStorage::TRACKERS . '/' . $page->slug . '.json';
-        $disk->put($trackerPath, json_encode($tracker, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $trackerPath = MultiPageStorage::TRACKERS . '/' . $trackerKey . '.json';
+        $disk->put(
+            $trackerPath,
+            json_encode($tracker, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+        );
 
         return [
             'count' => $count,
@@ -141,13 +154,15 @@ final class MultiPageGenerator
 
     public function buildDefaultUrl(string $urlStructure, array $defaultSegments): ?string
     {
-        if ($urlStructure === '')
+        if ($urlStructure === '') {
             return null;
+        }
+
         $url = $urlStructure;
 
         foreach ($defaultSegments as $i => $val) {
             $n = $i + 1;
-            $url = str_replace('{col' . $n . '}', $this->slugify($val), $url);
+            $url = str_replace('{col' . $n . '}', $this->slugify((string) $val), $url);
         }
 
         if (preg_match('/\{col\d+\}/', $url)) {
@@ -161,8 +176,9 @@ final class MultiPageGenerator
     private function slugify(string $s): string
     {
         $s = trim($s);
-        if ($s === '')
+        if ($s === '') {
             return '';
+        }
 
         $s = mb_strtolower($s);
         $s = preg_replace('/[^\p{L}\p{N}]+/u', '-', $s) ?? $s;

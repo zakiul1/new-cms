@@ -2,7 +2,6 @@
 
 namespace Plugins\MultiPage\Filament\Resources;
 
-use App\Filament\Resources\Pages\Schemas\PageForm;
 use App\Filament\Resources\Pages\Tables\PagesTable;
 use App\Models\Post;
 use Filament\Resources\Resource;
@@ -12,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\CreateMultiPage;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\EditMultiPage;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\ListMultiPages;
+use Plugins\MultiPage\Filament\Schemas\MultiPageForm;
 use UnitEnum;
 
 class MultiPageResource extends Resource
@@ -30,7 +30,7 @@ class MultiPageResource extends Resource
 
     public static function getNavigationLabel(): string
     {
-        return 'Multi Page';
+        return 'Multi Pages';
     }
 
     public static function getNavigationGroup(): UnitEnum|string|null
@@ -38,13 +38,11 @@ class MultiPageResource extends Resource
         return 'Pages';
     }
 
-    // ✅ MUST match base: Resource::getNavigationSort(): ?int
     public static function getNavigationSort(): ?int
     {
         return 50;
     }
 
-    // ✅ safest signature across builds
     public static function getNavigationIcon(): ?string
     {
         return 'heroicon-o-squares-plus';
@@ -53,27 +51,24 @@ class MultiPageResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->where('type', 'page')
-            ->where(function ($q) {
-                $q->where('meta_json->multipage->enabled', true)
-                    ->orWhere('meta_json->multipage->enabled', 1)
-                    ->orWhere('meta_json->multipage->enabled', '1');
-            });
+            ->where('type', 'multipage');
     }
 
     public static function form(Schema $schema): Schema
     {
-        return PageForm::configure($schema);
+        return MultiPageForm::configure($schema);
     }
 
     public static function table(Table $table): Table
     {
         return PagesTable::configure($table);
     }
+
     public static function canCreate(): bool
     {
         return true;
     }
+
     public static function getPages(): array
     {
         return [

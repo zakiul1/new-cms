@@ -11,6 +11,7 @@ use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Plugins\MultiPage\Support\MultiPageGenerator;
 use Plugins\MultiPage\Support\MultiPageStorage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -78,17 +79,33 @@ class MultiPageGeneratorPage extends Page implements Forms\Contracts\HasForms
                         ->preserveFilenames()
                         ->maxSize(10240)
                         ->dehydrated(false)
-                        ->helperText('Uploaded to storage/app/multipage/csvs/')
-                        ->afterStateUpdated(function ($state) {
-                            if (is_string($state) && $state !== '') {
-                                $this->data['csv_file'] = basename($state);
+                        ->helperText('Uploaded to storage/app/private/' . MultiPageStorage::CSVS)
 
-                                // Refresh form state
+                        // ✅ Store immediately (Livewire v3 / Filament v5 safe)
+                        ->afterStateUpdated(function ($state, callable $set): void {
+                            MultiPageStorage::ensureDirs();
+
+                            // Livewire typically gives TemporaryUploadedFile here
+                            if ($state instanceof TemporaryUploadedFile) {
+                                $name = $state->getClientOriginalName();
+
+                                $state->storeAs(MultiPageStorage::CSVS, $name, 'local');
+
+                                // ✅ Set the selected CSV for generation
+                                $this->data['csv_file'] = $name;
+
+                                // ✅ Refresh form state
                                 $this->form->fill([
                                     'page_id' => $this->page_id,
                                     'data' => $this->data,
                                 ]);
                             }
+
+                            // ✅ Clear upload field state (remove temp)
+                            $set('csv_upload', null);
+
+                            // Optional: refresh whole UI
+                            $this->dispatch('$refresh');
                         }),
                 ])->columnSpan(1),
             ]),
@@ -101,7 +118,7 @@ class MultiPageGeneratorPage extends Page implements Forms\Contracts\HasForms
                     ->label('CSV File')
                     ->options(fn() => $this->csvOptions())
                     ->searchable()
-                    ->helperText('Pick an existing file in storage/app/multipage/csvs'),
+                    ->helperText('Pick an existing file in storage/app/private/' . MultiPageStorage::CSVS),
 
                 Forms\Components\Toggle::make('data.has_header')
                     ->label('CSV has header row (skip first row)'),
@@ -143,7 +160,11 @@ class MultiPageGeneratorPage extends Page implements Forms\Contracts\HasForms
 
     private function csvOptions(): array
     {
+        MultiPageStorage::ensureDirs();
+
         $disk = Storage::disk('local');
+        $disk->makeDirectory(MultiPageStorage::CSVS);
+
         $files = $disk->files(MultiPageStorage::CSVS);
 
         $out = [];
@@ -268,7 +289,13 @@ class MultiPageGeneratorPage extends Page implements Forms\Contracts\HasForms
             return null;
         }
 
-        $path = MultiPageStorage::TRACKERS . '/' . $page->slug . '.json';
+        // Keep consistent with LinksPage fallback logic if slug is empty
+        $trackerKey = (string) ($page->slug ?? '');
+        if (trim($trackerKey) === '') {
+            $trackerKey = 'multipage-' . (int) $page->id;
+        }
+
+        $path = MultiPageStorage::TRACKERS . '/' . $trackerKey . '.json';
 
         if (!Storage::disk('local')->exists($path)) {
             $this->lastMessage = 'Tracker not found. Generate first.';
@@ -277,7 +304,7 @@ class MultiPageGeneratorPage extends Page implements Forms\Contracts\HasForms
 
         return response()->download(
             Storage::disk('local')->path($path),
-            $page->slug . '-tracker.json'
+            $trackerKey . '-tracker.json'
         );
     }
 }

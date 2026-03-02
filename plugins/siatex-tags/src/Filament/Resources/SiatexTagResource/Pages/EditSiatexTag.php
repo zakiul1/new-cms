@@ -104,7 +104,7 @@ class EditSiatexTag extends EditRecord
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
-                                    ->label('H1')
+                                    ->label('Tag Name')
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)

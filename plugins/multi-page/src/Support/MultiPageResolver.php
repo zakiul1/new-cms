@@ -38,12 +38,16 @@ final class MultiPageResolver
             return null;
         }
 
-        // Load page to check if multipage default should redirect
-        $page = Post::query()->where('type', 'page')->where('slug', $baseSlug)->first();
+        // ✅ Load multipage record to check if multipage default should redirect
+        $page = Post::query()
+            ->where('type', 'multipage')
+            ->where('slug', $baseSlug)
+            ->first();
 
         if ($page) {
             $meta = is_array($page->meta_json ?? null) ? $page->meta_json : [];
             $cfg = is_array($meta['multipage'] ?? null) ? $meta['multipage'] : [];
+
             $enabled = (bool) ($cfg['enabled'] ?? false);
 
             if ($enabled) {
@@ -56,7 +60,7 @@ final class MultiPageResolver
                 $gen = new MultiPageGenerator();
                 $defaultUrl = $gen->buildDefaultUrl($urlStructure, $defaultSegments);
 
-                // if request equals default multipage url -> redirect to canonical /{slug}
+                // ✅ if request equals default multipage url -> redirect to canonical /{slug}
                 if ($defaultUrl && rtrim($defaultUrl, '/') === rtrim($path, '/')) {
                     return redirect('/' . ltrim($baseSlug, '/'), 301);
                 }
@@ -64,14 +68,15 @@ final class MultiPageResolver
         }
 
         $segments = $map['replacer'] ?? [];
-        if (!is_array($segments))
+        if (!is_array($segments)) {
             $segments = [];
+        }
 
-        // Make segments available to content filter/shortcodes
+        // ✅ Make segments available to content filter/shortcodes
         $request->attributes->set('multipage_segments', array_values($segments));
         $request->attributes->set('multipage_base_slug', $baseSlug);
 
-        // Render using normal CMS router (page view/theme remains unchanged)
+        // ✅ Render using normal CMS router (template/theme remains unchanged)
         return app(ContentRouterController::class)->show($request, $baseSlug);
     }
 }

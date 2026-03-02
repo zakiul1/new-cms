@@ -69,7 +69,6 @@
             }
 
             try {
-                // ✅ FIX: ShortcodeParser does NOT have parse(); use render()
                 $value = (string) $parser->render($value, $shortcodeCtx);
             } catch (\Throwable $e) {
                 // ignore
@@ -131,6 +130,32 @@
         $subtitle = $renderShortcodeText($subtitleRaw);
 
         // -----------------------------
+        // ✅ NEW: Hero H1 must come from Tag Defaults H1 if not empty
+        // Condition:
+        // - If Tag Defaults H1 is NOT empty -> use it (shortcodes supported)
+        // - Else -> fallback to Edit Siatex Tag H1 (tag title)
+        // -----------------------------
+        // ✅ NEW: Hero H1 must come from Tag Defaults H1 if not empty
+        $heroH1 = $title;
+
+        try {
+            /** @var \App\Cms\Core\Settings $settings */
+            $settings = app(\App\Cms\Core\Settings::class);
+
+            // ✅ Tag Defaults H1 is stored as "default_title"
+            $defaultH1 = trim((string) $settings->get('default_title', '', 'plugins.tag-defaults'));
+
+            if ($defaultH1 !== '') {
+                $heroH1 = $renderShortcodeText($defaultH1);
+                if ($heroH1 === '') {
+                    $heroH1 = $title;
+                }
+            }
+        } catch (\Throwable $e) {
+            $heroH1 = $title;
+        }
+
+        // -----------------------------
         // ✅ Breadcrumb category: Home / Category Name / Tag Title
         // Category name is NOT a link
         // -----------------------------
@@ -166,18 +191,15 @@
 
         $fallbackDescText = trim(strip_tags($removeScriptStyleBlocks((string) $fallbackDescSource)));
 
-        // ✅ SEO Title: use defaults only if tagSeo is empty; and shortcode-render it
         $seoTitleSource = (string) ($seo['title'] ?? ($tagSeo['title'] ?? $titleRaw));
         $seoTitle = $renderShortcodeText($seoTitleSource);
         if ($seoTitle === '') {
             $seoTitle = $title !== '' ? $title : $renderShortcodeText($titleRaw);
         }
 
-        // ✅ SEO Description: shortcode-render to text (already working, keep)
         $seoDescSource = (string) ($seo['description'] ?? ($tagSeo['description'] ?? $fallbackDescText));
         $seoDesc = $renderShortcodeText($seoDescSource);
 
-        // Canonical / Robots / OG
         $seoCanonicalSource = (string) ($seo['canonical'] ?? ($tagSeo['canonical'] ?? ''));
         $seoCanonical = trim($renderShortcodeText($seoCanonicalSource));
         if ($seoCanonical === '') {
@@ -216,25 +238,20 @@
 
         $imageMedia = $allMedia->filter(fn($m) => method_exists($m, 'isImage') ? $m->isImage() : false)->values();
 
-        // 1) Hero image (random)
         $heroMedia = $imageMedia->shuffle()->first();
         $heroId = $heroMedia ? (int) $heroMedia->id : 0;
 
-        // candidate pool excluding hero
         $pool = $allMedia->reject(fn($m) => (int) $m->id === $heroId)->values();
 
-        // 2) Related products: random max 12
         $related = $pool->shuffle()->take(12)->values();
         $relatedIds = $related->pluck('id')->map(fn($v) => (int) $v)->all();
 
-        // 3) Related links: start from remaining pool, exclude related
         $relatedLinks = $pool
             ->reject(fn($m) => in_array((int) $m->id, $relatedIds, true))
             ->shuffle()
             ->take(10)
             ->values();
 
-        // If category is small, refill
         $need = 10 - $relatedLinks->count();
         if ($need > 0) {
             $excludeIds = collect([$heroId])
@@ -256,7 +273,6 @@
             $relatedLinks = $pool->shuffle()->take(10)->values();
         }
 
-        // If no og image set, pick from hero
         if (($seo['og']['image'] ?? '') === '' && $heroMedia) {
             try {
                 if (method_exists($heroMedia, 'url')) {
@@ -281,12 +297,9 @@
         $heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
 
         // Bottom-left content:
-        // ✅ MUST be from Sub title + Sub description
-        // and if empty => Tag Defaults (already applied by do_action persist)
         $bottomTitleRaw = (string) data_get($meta, 'subtitle', '');
         $bottomTitle = $renderShortcodeText($bottomTitleRaw);
         if ($bottomTitle === '') {
-            // final fallback (should rarely happen if defaults are configured)
             $bottomTitle = $title;
         }
 
@@ -300,7 +313,6 @@
         $bottomDescHtml = $removeScriptStyleBlocks((string) $bottomDescHtml);
         $bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
 
-        // "Get Price" payload
         $tagImage = '';
         try {
             if ($heroMedia && method_exists($heroMedia, 'url')) {
@@ -361,7 +373,7 @@
                     </div>
 
                     <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
-                        {{ $title }}
+                        {{ $heroH1 }}
                     </h1>
 
                     @if (trim($heroTextHtml) !== '')

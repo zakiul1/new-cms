@@ -13,6 +13,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -23,6 +24,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use UnitEnum;
 
@@ -60,7 +62,7 @@ class MediaCategoryResource extends Resource
 
         return parent::getEloquentQuery()
             ->where('taxonomy_id', $taxonomyId)
-            // ✅ NEW: preload media count for "Name (25)"
+            // ✅ preload media count for "Name (25)"
             ->withCount([
                 'media as items_count',
             ]);
@@ -131,12 +133,121 @@ class MediaCategoryResource extends Resource
             ]);
     }
 
+    /**
+     * ✅ NEW: Download selected categories as ZIP with category folders.
+     */
+    protected static function downloadSelectedCategoriesZip(Collection $records)
+    {
+        $records = $records->values();
+
+        if ($records->isEmpty()) {
+            return null;
+        }
+
+        if (!class_exists(\ZipArchive::class)) {
+            Notification::make()->title('ZipArchive not available on server')->danger()->send();
+            return null;
+        }
+
+        $disk = config('cms-media.disk', 'public');
+
+        $zipName = 'media-categories-' . now()->format('Ymd-His') . '.zip';
+        $tmpDir = storage_path('app/tmp');
+
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0775, true);
+        }
+
+        $zipPath = $tmpDir . DIRECTORY_SEPARATOR . $zipName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            Notification::make()->title('Could not create zip file')->danger()->send();
+            return null;
+        }
+
+        $taxonomyId = static::mediaCategoryTaxonomyId();
+
+        foreach ($records as $term) {
+            /** @var \App\Models\Term $term */
+
+            // folder name: prefer slug then name
+            $folder = (string) ($term->slug ?: $term->name ?: ('category-' . $term->id));
+            $folder = Str::slug($folder);
+            if ($folder === '') {
+                $folder = 'category-' . $term->id;
+            }
+
+            // Get media IDs for this category via pivot (fast)
+            $mediaIds = DB::table('termables')
+                ->where('term_id', (int) $term->id)
+                ->where('termable_type', Media::class)
+                ->pluck('termable_id')
+                ->map(fn($v) => (int) $v)
+                ->values()
+                ->all();
+
+            if (empty($mediaIds)) {
+                continue;
+            }
+
+            // Load media models (so we can call path()/filename etc)
+            $mediaItems = Media::query()
+                ->whereIn('id', $mediaIds)
+                ->get();
+
+            foreach ($mediaItems as $m) {
+                /** @var \App\Models\Media $m */
+
+                $path = method_exists($m, 'path') ? $m->path() : (string) ($m->path ?? '');
+                $path = trim((string) $path);
+
+                if ($path === '') {
+                    continue;
+                }
+
+                // name inside zip
+                $name = (string) ($m->original_filename ?? $m->filename ?? basename($path));
+                $name = trim($name) !== '' ? $name : ('media-' . $m->id);
+
+                // ensure unique + keep grouped in folder
+                $zipFileName = $folder . '/' . $name;
+
+                // If duplicate name already exists in same category folder, put it under duplicates/<id>/ but keep filename unchanged
+                if ($zip->locateName($zipFileName) !== false) {
+                    $zipFileName = $folder . '/duplicates/' . $m->id . '/' . $name;
+                }
+
+                try {
+                    $abs = Storage::disk($disk)->path($path);
+                    if (is_file($abs)) {
+                        $zip->addFile($abs, $zipFileName);
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                    // ignore and fall back
+                }
+
+                // fallback: read content
+                try {
+                    $content = Storage::disk($disk)->get($path);
+                    $zip->addFromString($zipFileName, $content);
+                } catch (\Throwable $e) {
+                    // skip broken file
+                }
+            }
+        }
+
+        $zip->close();
+
+        return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
             ->defaultSort('name')
             ->columns([
-                // ✅ NEW: ID column
                 TextColumn::make('id')
                     ->label('ID')
                     ->sortable()
@@ -146,7 +257,6 @@ class MediaCategoryResource extends Resource
                     ->label('Name')
                     ->searchable()
                     ->sortable()
-                    // ✅ NEW: "T-shirt (25)"
                     ->formatStateUsing(function (string $state, Term $record): string {
                         $count = (int) ($record->items_count ?? 0);
                         return "{$state} ({$count})";
@@ -171,7 +281,15 @@ class MediaCategoryResource extends Resource
                 DeleteAction::make(),
             ])
             ->bulkActions([
-                // ✅ NEW: Copy media items from selected categories → target category
+                // ✅ NEW: Download selected categories -> zip (category folders)
+                BulkAction::make('download_categories')
+                    ->label('Download')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->action(function (Collection $records) {
+                        return static::downloadSelectedCategoriesZip($records);
+                    }),
+
+                // Copy media items from selected categories → target category
                 BulkAction::make('copyItemsToCategory')
                     ->label('Copy items to…')
                     ->icon('heroicon-o-document-duplicate')
@@ -222,7 +340,7 @@ class MediaCategoryResource extends Resource
                         DB::table('termables')->insertOrIgnore($rows);
                     }),
 
-                // ✅ NEW: Move media items from selected categories → target category
+                // Move media items from selected categories → target category
                 BulkAction::make('moveItemsToCategory')
                     ->label('Move items to…')
                     ->icon('heroicon-o-arrow-right-circle')

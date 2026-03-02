@@ -1,7 +1,7 @@
-// Exports the "silver" theme for usage with module loaders
+// Exports the "visualchars" plugin for usage with module loaders
 // Usage:
 //   CommonJS:
-//     require('tinymce/themes/silver')
+//     require('tinymce/plugins/visualchars')
 //   ES2015:
-//     import 'tinymce/themes/silver'
-require('./theme.js');
+//     import 'tinymce/plugins/visualchars'
+require('./plugin.js');

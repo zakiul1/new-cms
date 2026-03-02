@@ -3,3 +3,6 @@
   margin: auto;
   padding: 0 15px;
 }
+.sc-tag-current { font-weight: 400 !important; }
+.sc-tag-link { font-weight: 400 !important; text-decoration: none; }
+.sc-tag-link:hover { text-decoration: underline; }

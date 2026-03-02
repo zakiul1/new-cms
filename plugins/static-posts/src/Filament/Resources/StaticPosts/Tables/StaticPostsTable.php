@@ -19,6 +19,7 @@ class StaticPostsTable
         return $table
             // ✅ Make the whole <tr> a "group row"
             ->recordClasses(fn() => ['group/row'])
+            ->defaultSort('id', 'desc')
 
             // ✅ Eager-load categories (needed for Category column)
             ->modifyQueryUsing(fn($query) => $query->with(['categories']))

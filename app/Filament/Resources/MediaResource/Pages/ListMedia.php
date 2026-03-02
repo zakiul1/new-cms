@@ -23,6 +23,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 
 class ListMedia extends ListRecords
@@ -159,9 +160,123 @@ class ListMedia extends ListRecords
         return $options;
     }
 
+    /**
+     * ✅ NEW: Download selected media as single file OR zip.
+     */
+    protected function downloadSelectedMedia(Collection $records)
+    {
+        $records = $records->values();
+
+        if ($records->isEmpty()) {
+            return null;
+        }
+
+        $disk = config('cms-media.disk', 'public');
+
+        // ✅ 1 item => direct download
+        if ($records->count() === 1) {
+            /** @var \App\Models\Media $m */
+            $m = $records->first();
+
+            $path = method_exists($m, 'path') ? $m->path() : (string) ($m->path ?? '');
+            $path = trim((string) $path);
+
+            if ($path === '') {
+                Notification::make()->title('File path missing')->danger()->send();
+                return null;
+            }
+
+            $name = (string) ($m->original_filename ?? $m->filename ?? basename($path));
+            $name = trim($name) !== '' ? $name : ('media-' . $m->id);
+
+            try {
+                $abs = Storage::disk($disk)->path($path);
+                if (is_file($abs)) {
+                    return response()->download($abs, $name);
+                }
+            } catch (\Throwable $e) {
+                // ignore and fall back to disk download
+            }
+
+            return Storage::disk($disk)->download($path, $name);
+        }
+
+        // ✅ multiple => zip
+        if (!class_exists(\ZipArchive::class)) {
+            Notification::make()->title('ZipArchive not available on server')->danger()->send();
+            return null;
+        }
+
+        $zipName = 'media-' . now()->format('Ymd-His') . '.zip';
+
+        $tmpDir = storage_path('app/tmp');
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0775, true);
+        }
+
+        $zipPath = $tmpDir . DIRECTORY_SEPARATOR . $zipName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            Notification::make()->title('Could not create zip file')->danger()->send();
+            return null;
+        }
+
+        foreach ($records as $m) {
+            /** @var \App\Models\Media $m */
+            $path = method_exists($m, 'path') ? $m->path() : (string) ($m->path ?? '');
+            $path = trim((string) $path);
+
+            if ($path === '') {
+                continue;
+            }
+
+            $name = (string) ($m->original_filename ?? $m->filename ?? basename($path));
+            $name = trim($name) !== '' ? $name : ('media-' . $m->id);
+
+            // ensure unique inside zip
+            $zipFileName = $name;
+
+            // If duplicate name already exists in zip, put it under duplicates/<id>/ but keep same filename
+            if ($zip->locateName($zipFileName) !== false) {
+                $zipFileName = 'duplicates/' . $m->id . '/' . $name;
+            }
+
+            try {
+                $abs = Storage::disk($disk)->path($path);
+                if (is_file($abs)) {
+                    $zip->addFile($abs, $zipFileName);
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                // ignore
+            }
+
+            // fallback: read content (still OK for public local disk most times)
+            try {
+                $content = Storage::disk($disk)->get($path);
+                $zip->addFromString($zipFileName, $content);
+            } catch (\Throwable $e) {
+                // skip broken file
+            }
+        }
+
+        $zip->close();
+
+        return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
+    }
+
     protected function buildBulkActions(): array
     {
         return [
+            // ✅ NEW: Download bulk action
+            \Filament\Actions\BulkAction::make('download_selected')
+                ->label('Download')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->action(function (Collection $records) {
+                    return $this->downloadSelectedMedia($records);
+                }),
+
             \Filament\Actions\BulkAction::make('copy_to_media_category')
                 ->label('Copy to Category')
                 ->icon('heroicon-o-document-duplicate')
@@ -297,26 +412,14 @@ class ListMedia extends ListRecords
             ->persistFiltersInSession()
             ->paginationPageOptions([24, 36, 48, 72])
             ->defaultPaginationPageOption(36)
-
-            /**
-             * ✅ OPTION A (NO extra UI files):
-             * - Category filter in toolbar row as a "Category" trigger
-             * - Search bar stays in toolbar row
-             * - Auto apply when selecting category (NO Apply button)
-             */
             ->filtersLayout(FiltersLayout::Dropdown)
-            ->deferFilters(false) // ✅ auto apply (no Apply button)
+            ->deferFilters(false)
             ->filtersTriggerAction(function ($action) {
-                // No type-hint to stay compatible with Filament versions where
-                // this is Filament\Actions\Action instead of Filament\Tables\Actions\Action.
                 return $action
                     ->label('Category')
                     ->icon('heroicon-o-tag');
             })
-
-            // enable selection UI (bulk actions)
             ->selectable()
-
             ->filters([
                 SelectFilter::make('category')
                     ->label('Category')

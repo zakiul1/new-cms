@@ -176,10 +176,13 @@ class ContentRouterController extends Controller
 
         $now = now();
 
-        // 1) Pages stay WP-style: only single-segment /{slug}
+        /**
+         * ✅ 1) Pages + MultiPages stay WP-style: only single-segment /{slug}
+         * MultiPage CPT: posts.type = 'multipage'
+         */
         if ($slug !== '' && !str_contains($slug, '/')) {
             $page = Post::query()
-                ->where('type', 'page')
+                ->whereIn('type', ['page', 'multipage'])
                 ->where('slug', $slug)
                 ->where('status', 'published')
                 ->where(function ($q) use ($now) {
@@ -188,12 +191,29 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($page) {
+                // ✅ canonical path - treat multipage same as page
                 $canonicalPath = $permalinks->pagePath($page);
                 if ($this->pathsDiffer($path, $canonicalPath)) {
                     return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                 }
 
                 [$css, $js] = $this->extractPostAssets($page);
+
+                // ✅ admin edit URL: multipage goes to MultiPageResource if available
+                $adminEditUrl = url('/lara-admin');
+
+                if ($page->type === 'page') {
+                    $adminEditUrl = class_exists(FilamentPageResource::class)
+                        ? FilamentPageResource::getUrl('edit', ['record' => $page])
+                        : url('/lara-admin');
+                } elseif ($page->type === 'multipage' && class_exists(\Plugins\MultiPage\Filament\Resources\MultiPageResource::class)) {
+                    $adminEditUrl = \Plugins\MultiPage\Filament\Resources\MultiPageResource::getUrl('edit', ['record' => $page]);
+                } else {
+                    // fallback to page resource if plugin not loaded
+                    $adminEditUrl = class_exists(FilamentPageResource::class)
+                        ? FilamentPageResource::getUrl('edit', ['record' => $page])
+                        : url('/lara-admin');
+                }
 
                 return view($this->resolveFrontendView($page, fallback: 'page'), [
                     'post' => $page,
@@ -202,9 +222,7 @@ class ContentRouterController extends Controller
                     'pageAssetsCss' => $css,
                     'pageAssetsJs' => $js,
 
-                    'adminEditUrl' => class_exists(FilamentPageResource::class)
-                        ? FilamentPageResource::getUrl('edit', ['record' => $page])
-                        : url('/lara-admin'),
+                    'adminEditUrl' => $adminEditUrl,
                 ]);
             }
         }
@@ -270,7 +288,7 @@ class ContentRouterController extends Controller
                     $indexable = $globalIndexable && (bool) $media->attachment_indexable;
 
                     $usedIn = $media->posts()
-                        ->whereIn('type', ['post', 'page'])
+                        ->whereIn('type', ['post', 'page', 'multipage'])
                         ->where('status', 'published')
                         ->where(function ($q) use ($now) {
                             $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
@@ -328,7 +346,7 @@ class ContentRouterController extends Controller
 
         if ($oldSlugCandidate !== null && $oldSlugCandidate !== '') {
             $history = SlugHistory::query()
-                ->whereIn('entity_type', ['post', 'page'])
+                ->whereIn('entity_type', ['post', 'page', 'multipage'])
                 ->where('old_slug', $oldSlugCandidate)
                 ->latest('id')
                 ->first();
@@ -336,7 +354,7 @@ class ContentRouterController extends Controller
             if ($history) {
                 $current = Post::query()->find($history->entity_id);
                 if ($current && $current->status === 'published') {
-                    $to = $current->type === 'page'
+                    $to = in_array($current->type, ['page', 'multipage'], true)
                         ? $permalinks->pagePath($current)
                         : $permalinks->postPath($current);
 
@@ -475,7 +493,8 @@ class ContentRouterController extends Controller
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
         if ($canonical === '') {
-            $canonical = $post->type === 'page'
+            // ✅ multipage behaves like page for canonical
+            $canonical = in_array($post->type, ['page', 'multipage'], true)
                 ? $permalinks->pageUrl($post)
                 : $permalinks->postUrl($post);
         }
@@ -489,6 +508,8 @@ class ContentRouterController extends Controller
         $ogImageRaw = (string) ($seo['og_image'] ?? '');
         $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 
+        $isPageLike = in_array($post->type, ['page', 'multipage'], true);
+
         return [
             'title' => $title,
             'description' => $desc,
@@ -497,7 +518,7 @@ class ContentRouterController extends Controller
             'og' => [
                 'title' => $title,
                 'description' => $desc,
-                'type' => $post->type === 'page' ? 'website' : 'article',
+                'type' => $isPageLike ? 'website' : 'article',
                 'url' => $canonical,
                 'image' => $ogImage,
             ],

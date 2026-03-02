@@ -134,7 +134,7 @@ if (!function_exists('siatex_tags_render_by_slug')) {
                 $defaultSeoTitle = trim($defaultSeoTitle);
 
                 if ($defaultSeoTitle !== '') {
-                    // allow shortcodes like [tag]
+                    // allow shortcodes like [tag] and [tag:4] (but defaults should use [tag])
                     $seo['title'] = $parser->render($defaultSeoTitle, $ctx);
                     $seoTitleFinal = trim((string) $seo['title']);
                 }
@@ -168,73 +168,93 @@ add_action(HookPoints::CMS_BOOTED, function () {
 
     /**
      * [tag]
-     * Prints current tag title.
+     * Prints current tag title (no link).
+     *
+     * [tag:4]
+     * Prints current tag title (no link) + N random tag links,
+     * comma-separated, with "and" before the last.
+     *
+     * Example:
+     * Youth blank t-shirts, Women Sweatshirts, Performance T-shirts, Cartoon T-shirt, and Industrial Work Shirts
      */
-    $shortcodes->register('tag', function (array $attrs, ?string $content, array $ctx): string {
+    $shortcodes->registerWithMeta('tag', function (array $attrs, ?string $content, array $ctx): string {
         $tag = $ctx['siatex_tag'] ?? request()->attributes->get('siatex_tag');
 
-        return $tag instanceof \Plugins\SiatexTags\Models\SiatexTag
-            ? e((string) $tag->title)
-            : '';
-    });
+        if (!$tag instanceof \Plugins\SiatexTags\Models\SiatexTag) {
+            return '';
+        }
 
-    /**
-     * [page-tags number=10 links=true sep=", "]
-     * Prints random tag links excluding current tag.
-     *
-     * NOTE: Links now point to "/{slug}" (no /tag/ prefix).
-     */
-    $shortcodes->registerWithMeta('page-tags', function (array $attrs, ?string $content, array $ctx): string {
-        $limit = (int) ($attrs['number'] ?? 10);
+        $currentTitle = trim((string) $tag->title);
+        if ($currentTitle === '') {
+            return '';
+        }
+
+        // Support both [tag:4] (parser sets attrs[number]) and [tag number=4]
+        $limit = (int) ($attrs['number'] ?? 0);
         if ($limit <= 0) {
-            $limit = 10;
+            // Keep [tag] behavior unchanged (plain text)
+            return e($currentTitle);
         }
         if ($limit > 100) {
             $limit = 100;
         }
 
-        $current = $ctx['siatex_tag'] ?? request()->attributes->get('siatex_tag');
-        $currentId = $current instanceof \Plugins\SiatexTags\Models\SiatexTag ? (int) $current->id : null;
+        $separator = ', ';
 
-        $query = \Plugins\SiatexTags\Models\SiatexTag::query();
-        if ($currentId) {
-            $query->where('id', '!=', $currentId);
-        }
+        $tags = \Plugins\SiatexTags\Models\SiatexTag::query()
+            ->where('id', '!=', (int) $tag->id)
+            ->inRandomOrder()
+            ->limit($limit)
+            ->get(['title', 'slug']);
 
-        $tags = $query->inRandomOrder()->limit($limit)->get(['title', 'slug']);
         if ($tags->isEmpty()) {
-            return '';
+            return e($currentTitle);
         }
 
-        $asLinks = filter_var($attrs['links'] ?? true, FILTER_VALIDATE_BOOLEAN); // default true
-        $separator = (string) ($attrs['sep'] ?? ', '); // default ", "
-
-        $items = [];
+        $linked = [];
         foreach ($tags as $t) {
-            if ($asLinks) {
-                $items[] = '<a href="' . e(url('/' . ltrim((string) $t->slug, '/'))) . '">' . e($t->title) . '</a>';
-            } else {
-                $items[] = e($t->title);
+            $tTitle = trim((string) $t->title);
+            $tSlug = trim((string) $t->slug);
+            if ($tTitle === '' || $tSlug === '') {
+                continue;
             }
+
+            $href = e(url('/' . ltrim($tSlug, '/')));
+            $linked[] = '<a class="sc-tag-link" href="' . $href . '">' . e($tTitle) . '</a>';
         }
 
-        return (string) new \Illuminate\Support\HtmlString(implode($separator, $items));
+        if (empty($linked)) {
+            return e($currentTitle);
+        }
+
+        // ✅ Force "normal" appearance via CSS classes
+        $out = '<span class="sc-tag-current">' . e($currentTitle) . '</span>';
+
+        if (count($linked) === 1) {
+            $out .= $separator . 'and ' . $linked[0];
+        } else {
+            $last = array_pop($linked);
+            $out .= $separator . implode($separator, $linked) . $separator . 'and ' . $last;
+        }
+
+        return (string) new \Illuminate\Support\HtmlString($out);
     }, [
         'group' => 'Tags',
-        'description' => 'Prints random tags (optionally as links), excluding the current tag.',
+        'description' => 'Prints current tag title. With a count, prints current tag title + N random tag links.',
         'params' => [
-            ['name' => 'number', 'type' => 'int', 'default' => 10, 'desc' => 'How many tags to show (1–100).'],
-            ['name' => 'links', 'type' => 'bool', 'default' => true, 'desc' => 'Render as links (true) or plain text (false).'],
-            ['name' => 'sep', 'type' => 'string', 'default' => ', ', 'desc' => 'Separator between items.'],
+            ['name' => 'number', 'type' => 'int', 'default' => 0, 'desc' => 'How many extra random tags to append (1–100).'],
         ],
         'examples' => [
-            '[page-tags]',
-            '[page-tags number=20]',
-            '[page-tags links=false]',
-            '[page-tags sep=" | "]',
-            '[page-tags number=20 links=false sep=" | "]',
+            '[tag]',
+            '[tag:4]',
+            '[tag number=4]',
         ],
     ]);
+
+    // ❌ [page-tags] removed (merged into [tag:NUMBER])
+    // ❌ [page-tags] removed (merged into [tag:NUMBER])
+
+    // ❌ [page-tags] removed (merged into [tag:NUMBER])
 });
 
 // 4) Register Filament resource (NO import submenu, import is modal in list page)

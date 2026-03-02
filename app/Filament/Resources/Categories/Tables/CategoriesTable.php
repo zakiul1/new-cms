@@ -26,7 +26,7 @@ class CategoriesTable
         return $table
             // ✅ Needed for hover UI (group-hover)
             ->recordClasses(fn() => 'group')
-
+            ->defaultSort('id', 'desc')
             ->columns([
                 // ✅ NEW: Category ID column
                 TextColumn::make('id')

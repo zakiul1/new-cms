@@ -11,10 +11,14 @@ require_once __DIR__ . '/src/Support/MultiPageStorage.php';
 require_once __DIR__ . '/src/Support/MultiPageGenerator.php';
 require_once __DIR__ . '/src/Support/MultiPageResolver.php';
 
-// Filament - inject into existing Page Create/Edit right panel
-require_once __DIR__ . '/src/Filament/Injectors/InjectPageMultipagePanel.php';
+// ✅ Settings + Sitemap
+require_once __DIR__ . '/src/Support/MultiPageSettings.php';
+require_once __DIR__ . '/src/Support/MultiPageSitemapGenerator.php';
 
-// Filament - Resource (Multi Page list/create/edit)
+// Filament - Schema (new multipage form, copied from PageForm and trimmed)
+require_once __DIR__ . '/src/Filament/Schemas/MultiPageForm.php';
+
+// Filament - Resource (Multi Pages list/create/edit)
 require_once __DIR__ . '/src/Filament/Resources/MultiPageResource.php';
 require_once __DIR__ . '/src/Filament/Resources/MultiPageResource/Pages/ListMultiPages.php';
 require_once __DIR__ . '/src/Filament/Resources/MultiPageResource/Pages/CreateMultiPage.php';
@@ -23,13 +27,11 @@ require_once __DIR__ . '/src/Filament/Resources/MultiPageResource/Pages/EditMult
 // Filament - Links list page (View List)
 require_once __DIR__ . '/src/Filament/Pages/MultiPageLinksPage.php';
 
-View::addNamespace('multi-page', __DIR__ . '/views');
+// Filament - Submenu pages
+require_once __DIR__ . '/src/Filament/Pages/AddMultiPage.php';
+require_once __DIR__ . '/src/Filament/Pages/SettingsMultiPages.php';
 
-/**
- * Register the right-panel "Multipage Settings" metabox inside Page create/edit.
- * This is what gives you the same UI workflow as your custom CMS screenshot.
- */
-\Plugins\MultiPage\Filament\Injectors\InjectPageMultipagePanel::register();
+View::addNamespace('multi-page', __DIR__ . '/views');
 
 /**
  * 1) Replace {segment-1} tokens in rendered content (like custom CMS).
@@ -61,12 +63,14 @@ add_action(HookPoints::CMS_BOOTED, function () {
 
     $shortcodes->register('segment', function (array $attrs) {
         $n = (int) ($attrs['n'] ?? 1);
-        if ($n <= 0)
+        if ($n <= 0) {
             $n = 1;
+        }
 
         $segments = request()->attributes->get('multipage_segments');
-        if (!is_array($segments))
+        if (!is_array($segments)) {
             return '';
+        }
 
         return e((string) ($segments[$n - 1] ?? ''));
     });
@@ -75,8 +79,9 @@ add_action(HookPoints::CMS_BOOTED, function () {
         $tag = 'segment-' . $i;
         $shortcodes->register($tag, function () use ($i) {
             $segments = request()->attributes->get('multipage_segments');
-            if (!is_array($segments))
+            if (!is_array($segments)) {
                 return '';
+            }
             return e((string) ($segments[$i - 1] ?? ''));
         });
     }
@@ -84,9 +89,10 @@ add_action(HookPoints::CMS_BOOTED, function () {
 
 /**
  * 3) Filament admin panel registration:
- * - Registers MultiPageResource (list/create/edit)
+ * - Registers MultiPageResource (Multi Pages)
+ * - Registers AddMultiPage (submenu)
+ * - Registers SettingsMultiPages (submenu)
  * - Registers MultiPageLinksPage (View List)
- * - Registers a named route for View List button
  */
 add_action(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
 
@@ -95,18 +101,45 @@ add_action(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
     ]);
 
     $panel->pages([
+        \Plugins\MultiPage\Filament\Pages\AddMultiPage::class,
+        \Plugins\MultiPage\Filament\Pages\SettingsMultiPages::class,
         \Plugins\MultiPage\Filament\Pages\MultiPageLinksPage::class,
     ]);
-
 
 }, 10, 1);
 
 /**
- * 4) Frontend resolver route:
- * Only matches MULTI-segment paths (so it won't steal /{slug} pages).
- * Reads file-based mappings from storage/app/multipage/static-links/*.json
+ * 4) Frontend routes:
+ * - multipage sitemap endpoint
+ * - multipage resolver (multi-segment only)
  */
 add_action(HookPoints::CMS_ROUTES, function () {
+
+    // ✅ Public multipage sitemap
+    Route::get('/multipage-sitemap.xml', function () {
+        $settings = \Plugins\MultiPage\Support\MultiPageSettings::load();
+
+        $dir = trim((string) ($settings['sitemaps_dir'] ?? 'sitemaps-multipage'));
+        $name = trim((string) ($settings['file_base_name'] ?? 'multipage-sitemap'));
+
+        if ($dir === '')
+            $dir = 'sitemaps-multipage';
+        if ($name === '')
+            $name = 'multipage-sitemap';
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $path = $dir . '/' . $name . '.xml';
+
+        if (!$disk->exists($path)) {
+            abort(404);
+        }
+
+        $xml = $disk->get($path);
+
+        return response($xml, 200)->header('Content-Type', 'application/xml; charset=UTF-8');
+    });
+
+    // ✅ Multi-segment resolver route
     Route::get('/{path}', function (string $path) {
         if (!str_contains($path, '/')) {
             abort(404);
@@ -122,6 +155,7 @@ add_action(HookPoints::CMS_ROUTES, function () {
         abort(404);
     })->where(
             'path',
-            '^(?!lara-admin(?:/|$)|api(?:/|$)|storage(?:/|$)|sitemap\.xml$|robots\.txt$|customizer(?:/|$)).+/.+$'
+            '^(?!lara-admin(?:/|$)|api(?:/|$)|storage(?:/|$)|sitemap\.xml$|robots\.txt$|customizer(?:/|$)|multipage-sitemap\.xml$).+/.+$'
         );
+
 }, 5, 0);

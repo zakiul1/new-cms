@@ -109,7 +109,12 @@ class CoreShortcodes
         ]);
 
         /**
-         * ✅ [products] (unchanged)
+         * ✅ [products] (UPDATED)
+         *
+         * Behavior:
+         * - Normal (no catid): only PUBLIC categories, uses frontendVisible()
+         * - catid=PUBLIC term: same as before
+         * - catid=PRIVATE term: still render items (attachment_public only), but does NOT affect sitemap/SEO
          */
         $shortcodes->registerWithMeta('products', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
@@ -138,33 +143,66 @@ class CoreShortcodes
                         ->whereRaw("LOWER(terms.name) != 'uncategorized'");
                 };
 
-                $query = Media::query();
-
-                if (method_exists(Media::class, 'scopeFrontendVisible')) {
-                    $query->frontendVisible();
-                }
-
-                $query->whereHas('terms', function ($q) use ($taxonomyId, $excludeUncategorized) {
-                    $q->where('terms.taxonomy_id', $taxonomyId)
-                        ->where('terms.visibility', 'public');
-
-                    $excludeUncategorized($q);
-                });
+                // Determine if catid points to a PRIVATE category (explicit allow)
+                $requestedTerm = null;
+                $isPrivateRequested = false;
 
                 if ($catId > 0) {
-                    $catOk = Term::query()
+                    $requestedTerm = Term::query()
                         ->whereKey($catId)
                         ->where('taxonomy_id', $taxonomyId)
-                        ->where('visibility', 'public')
-                        ->where(function ($q) use ($excludeUncategorized) {
-                            $excludeUncategorized($q);
-                        })
-                        ->exists();
+                        ->first();
 
-                    if ($catOk) {
-                        $query->whereHas('terms', function ($q) use ($catId) {
-                            $q->where('terms.id', $catId);
-                        });
+                    if (!$requestedTerm) {
+                        return ''; // catid invalid / not in media_category
+                    }
+
+                    $isPrivateRequested = strtolower((string) ($requestedTerm->visibility ?? '')) === 'private';
+                }
+
+                $query = Media::query();
+
+                if ($isPrivateRequested) {
+                    // ✅ Allow private category items ONLY when explicitly requested by shortcode
+                    // Keep attachments public, but DO NOT apply frontendVisible() because it blocks private categories.
+                    $query->where('attachment_public', true);
+
+                    $query->whereHas('terms', function ($q) use ($catId) {
+                        $q->where('terms.id', $catId);
+                    });
+                } else {
+                    // Default behavior (public-only browsing)
+                    if (method_exists(Media::class, 'scopeFrontendVisible')) {
+                        $query->frontendVisible();
+                    } else {
+                        $query->where('attachment_public', true);
+                    }
+
+                    // Must belong to public media_category terms (exclude uncategorized)
+                    $query->whereHas('terms', function ($q) use ($taxonomyId, $excludeUncategorized) {
+                        $q->where('terms.taxonomy_id', $taxonomyId)
+                            ->where('terms.visibility', 'public');
+
+                        $excludeUncategorized($q);
+                    });
+
+                    // If specific public catid is requested, filter to it
+                    if ($catId > 0) {
+                        $catVisibility = strtolower((string) ($requestedTerm->visibility ?? ''));
+                        $catSlug = strtolower((string) ($requestedTerm->slug ?? ''));
+                        $catName = strtolower((string) ($requestedTerm->name ?? ''));
+
+                        $catOk = $catVisibility === 'public'
+                            && $catSlug !== 'uncategorized'
+                            && $catName !== 'uncategorized';
+
+                        if ($catOk) {
+                            $query->whereHas('terms', function ($q) use ($catId) {
+                                $q->where('terms.id', $catId);
+                            });
+                        } else {
+                            return ''; // requested cat exists but not allowed under public rules
+                        }
                     }
                 }
 
@@ -209,13 +247,10 @@ class CoreShortcodes
         ]);
 
         /**
-         * ✅ [logo] (Media Category Logos)
+         * ✅ [logo] (Media Category Logos) (UPDATED)
          *
-         * Examples:
-         *  - [logo catid="5"]
-         *  - [logo catid="5" column="6" mobile="2" title style="round" dec load="12" class="mylogos"]
-         *  - [logo catid="5" slider]                 ✅ NEW (flag)
-         *  - [logo catid="5" slider="true"]          ✅ NEW (value)
+         * - If catid is PRIVATE => allow render (attachment_public only), but keep it out of sitemap/SEO by leaving frontendVisible() logic untouched elsewhere.
+         * - If catid is PUBLIC => same as before (uses frontendVisible()).
          */
         $shortcodes->registerWithMeta('logo', function (array $atts = [], ?string $content = null, array $context = []) {
             try {
@@ -298,20 +333,29 @@ class CoreShortcodes
                     $class .= ' ' . $userClass;
                 }
 
-                // validate category exists & is media_category
-                $termOk = Term::query()
+                // validate category exists & is media_category (and detect private/public)
+                $term = Term::query()
                     ->whereKey($catId)
                     ->where('taxonomy_id', $taxonomyId)
-                    ->exists();
+                    ->first();
 
-                if (!$termOk) {
+                if (!$term) {
                     return '<!-- [logo] catid not found -->';
                 }
 
+                $isPrivateCategory = strtolower((string) ($term->visibility ?? '')) === 'private';
+
                 $query = Media::query();
 
-                if (method_exists(Media::class, 'scopeFrontendVisible')) {
-                    $query->frontendVisible();
+                if ($isPrivateCategory) {
+                    // ✅ Allow private category items ONLY when explicitly requested by shortcode
+                    $query->where('attachment_public', true);
+                } else {
+                    if (method_exists(Media::class, 'scopeFrontendVisible')) {
+                        $query->frontendVisible();
+                    } else {
+                        $query->where('attachment_public', true);
+                    }
                 }
 
                 // restrict to category

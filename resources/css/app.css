@@ -29,3 +29,8 @@ html { scroll-behavior: smooth; }
     grid-template-columns: repeat(var(--cols-md, 4), minmax(0, 1fr));
   }
 }
+.page-container{
+  max-width: 1140px;
+  margin: auto;
+  padding: 0 15px;
+}

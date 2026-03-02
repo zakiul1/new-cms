@@ -30,7 +30,7 @@ class PostsTable
         return $table
             // ✅ Needed for hover UI (group-hover)
             ->recordClasses(fn() => 'group')
-
+            ->defaultSort('id', 'desc')
             ->columns([
                 TextColumn::make('title')
                     ->label('Title')

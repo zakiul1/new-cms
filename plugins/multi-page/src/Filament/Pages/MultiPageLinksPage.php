@@ -9,16 +9,20 @@ use Plugins\MultiPage\Support\MultiPageStorage;
 
 class MultiPageLinksPage extends Page
 {
-    // Must match base type
+    /**
+     * Must match base type: route has param.
+     */
     protected static ?string $slug = 'multi-page/links/{pageId}';
 
-    // ✅ IMPORTANT: do not show in sidebar (it needs a parameter)
+    /**
+     * Do not show in sidebar (it needs a parameter).
+     */
     public static function shouldRegisterNavigation(): bool
     {
         return false;
     }
 
-    public string $view = 'multi-page::filament.pages.links-list';
+    protected string $view = 'multi-page::filament.pages.links-list';
     protected static ?string $title = 'Multi Page Links';
 
     public ?int $pageId = null;
@@ -27,17 +31,18 @@ class MultiPageLinksPage extends Page
 
     public function mount(?int $pageId = null): void
     {
-        $this->pageId = $pageId;
+        $this->pageId = $pageId ?: null;
 
-        if (!$this->pageId) {
+        if ($this->pageId === null) {
             $this->page = null;
             $this->links = [];
             return;
         }
 
+        // multipage CPT
         $this->page = Post::query()
             ->whereKey($this->pageId)
-            ->where('type', 'page')
+            ->where('type', 'multipage')
             ->first();
 
         $this->loadLinks();
@@ -53,17 +58,26 @@ class MultiPageLinksPage extends Page
 
         MultiPageStorage::ensureDirs();
 
-        $trackerPath = MultiPageStorage::TRACKERS . '/' . $this->page->slug . '.json';
-        if (!Storage::disk('local')->exists($trackerPath)) {
+        $disk = Storage::disk('local');
+
+        // tracker key must match generator behavior
+        $trackerKey = (string) ($this->page->slug ?? '');
+        if (trim($trackerKey) === '') {
+            $trackerKey = 'multipage-' . (int) $this->page->id;
+        }
+
+        $trackerPath = MultiPageStorage::TRACKERS . '/' . $trackerKey . '.json';
+
+        if (!$disk->exists($trackerPath)) {
             return;
         }
 
-        $json = json_decode((string) Storage::disk('local')->get($trackerPath), true);
-        if (!is_array($json)) {
+        $decoded = json_decode((string) $disk->get($trackerPath), true);
+        if (!is_array($decoded)) {
             return;
         }
 
-        $generated = $json['generated'] ?? [];
+        $generated = $decoded['generated'] ?? [];
         $this->links = is_array($generated) ? array_values($generated) : [];
     }
 }
