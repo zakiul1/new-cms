@@ -1,0 +1,6 @@
+{
+  "name": "Blog Posts",
+  "slug": "blog-posts",
+  "version": "1.0.0",
+  "bootstrap": "bootstrap.php"
+}

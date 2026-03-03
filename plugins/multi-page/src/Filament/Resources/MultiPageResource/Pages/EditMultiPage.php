@@ -3,6 +3,7 @@
 namespace Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages;
 
 use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Storage;
@@ -14,6 +15,54 @@ use Plugins\MultiPage\Support\MultiPageStorage;
 class EditMultiPage extends EditRecord
 {
     protected static string $resource = MultiPageResource::class;
+
+    /** @var int[] */
+    protected array $featuredMediaIds = [];
+
+    /** @var int[] */
+    protected array $productMediaIds = [];
+
+    // ✅ Hide big heading
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
+    }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $record = $this->getRecord();
+
+        if ($record && method_exists($record, 'mediaPivot')) {
+            $data['featured_media_ids'] = $record->mediaPivot()
+                ->wherePivot('role', 'featured')
+                ->orderBy('post_media.sort_order')
+                ->pluck('media.id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            $data['product_media_ids'] = $record->mediaPivot()
+                ->wherePivot('role', 'product')
+                ->orderBy('post_media.sort_order')
+                ->pluck('media.id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+        } else {
+            $data['featured_media_ids'] = [];
+            $data['product_media_ids'] = [];
+        }
+
+        // fallback legacy single featured
+        if (empty($data['featured_media_ids']) && !empty($data['featured_media_id'])) {
+            $data['featured_media_ids'] = [(int) $data['featured_media_id']];
+        }
+
+        return $data;
+    }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
@@ -32,22 +81,85 @@ class EditMultiPage extends EditRecord
         // ✅ normalize enabled
         $data['meta_json']['multipage']['enabled'] = (bool) ($data['meta_json']['multipage']['enabled'] ?? true);
 
+        // ✅ Capture Featured Images
+        $this->featuredMediaIds = is_array($data['featured_media_ids'] ?? null)
+            ? array_values(array_filter(array_map('intval', $data['featured_media_ids'])))
+            : [];
+        unset($data['featured_media_ids']);
+
+        // ✅ Capture Product Images
+        $this->productMediaIds = is_array($data['product_media_ids'] ?? null)
+            ? array_values(array_filter(array_map('intval', $data['product_media_ids'])))
+            : [];
+        unset($data['product_media_ids']);
+
+        // ✅ Keep legacy single featured_media_id synced
+        $data['featured_media_id'] = $this->featuredMediaIds[0] ?? null;
+
         return $data;
     }
 
-    /**
-     * ✅ Remove header actions from edit page (Generate/View List not needed in header)
-     * Keep only the default Filament actions (Save/Delete/etc.)
-     */
-    protected function getHeaderActions(): array
+    protected function afterSave(): void
     {
-        return parent::getHeaderActions();
+        $record = $this->getRecord();
+        if (!$record) {
+            return;
+        }
+
+        if (method_exists($record, 'syncMediaRole')) {
+            $record->syncMediaRole('featured', $this->featuredMediaIds);
+            $record->syncMediaRole('product', $this->productMediaIds);
+        }
+
+        $record->refresh();
     }
 
     /**
-     * ✅ Read generated links from tracker json
-     * Used by the modal (and can also be used by your right panel blade).
+     * ✅ Header buttons
+     * IMPORTANT: use Filament DeleteAction (v5) — DO NOT call $this->delete()
      */
+    protected function getHeaderActions(): array
+    {
+        $record = $this->getRecord();
+
+        $viewUrl = $record
+            ? url('/' . ltrim((string) ($record->slug ?? ''), '/'))
+            : url('/');
+
+        return [
+            Action::make('add_new')
+                ->label('Add Page')
+                ->color('warning')
+                ->icon('heroicon-o-plus')
+                ->url(fn() => MultiPageResource::getUrl('create', panel: 'admin')),
+
+            // ✅ FIX: proper delete action for EditRecord in Filament v5
+            DeleteAction::make()
+                ->label('Delete')
+                ->color('danger')
+                ->icon('heroicon-o-trash')
+                ->requiresConfirmation(),
+
+            Action::make('view')
+                ->label('View')
+                ->color('gray')
+                ->icon('heroicon-o-eye')
+                ->url(fn() => $viewUrl, shouldOpenInNewTab: true),
+
+            Action::make('back')
+                ->label('Back')
+                ->color('gray')
+                ->icon('heroicon-o-arrow-left')
+                ->url(fn() => MultiPageResource::getUrl('index', panel: 'admin')),
+
+            Action::make('save')
+                ->label('Save changes')
+                ->color('primary')
+                ->icon('heroicon-o-check')
+                ->action(fn() => $this->save()),
+        ];
+    }
+
     public function getGeneratedLinksForModal(): array
     {
         $record = $this->getRecord();
@@ -55,17 +167,14 @@ class EditMultiPage extends EditRecord
             return [];
         }
 
-        // make sure folders exist
         if (class_exists(MultiPageStorage::class)) {
             MultiPageStorage::ensureDirs();
         }
 
         $disk = Storage::disk('local');
 
-        // same key logic you use elsewhere (slug preferred)
         $trackerKey = trim((string) ($record->slug ?? '')) ?: 'multipage-' . (int) $record->id;
 
-        // preferred: use MultiPageStorage constant if available
         $trackerPath = class_exists(MultiPageStorage::class)
             ? (MultiPageStorage::TRACKERS . '/' . $trackerKey . '.json')
             : ('app/private/multipage/trackers/' . $trackerKey . '.json');
@@ -80,37 +189,20 @@ class EditMultiPage extends EditRecord
         }
 
         $generated = $decoded['generated'] ?? [];
-
-        // Ensure array of strings
         if (!is_array($generated)) {
             return [];
         }
 
-        // sometimes may be associative; normalize
         return array_values(array_filter($generated, fn($v) => is_string($v) && trim($v) !== ''));
     }
 
-    /**
-     * ✅ Provide the View List action (modal) for your right panel button
-     * This renders ONLY the list — no iframe / no full CMS layout.
-     */
     protected function getFormActions(): array
     {
-        // Keep Filament default form actions (Save/Cancel) + our custom ones if needed.
-        // If you don’t want any custom form actions either, just return parent::getFormActions().
         return parent::getFormActions();
     }
 
-    /**
-     * If your blade uses Filament action mounting, this will work:
-     * wire:click="$dispatch('open-modal', { id: 'mountedActionModal' })"
-     * or simply: wire:click="mountAction('viewList')"
-     */
     protected function getActions(): array
     {
-        // Some Filament versions use getHeaderActions + form actions.
-        // In Filament v3, modal actions can still be mounted even if not in header,
-        // but if your setup needs it, you can expose this action here.
         return [
             Action::make('viewList')
                 ->label('View List')
@@ -133,12 +225,10 @@ class EditMultiPage extends EditRecord
                         ');
                     }
 
-                    // Build list HTML safely
                     $items = '';
                     foreach ($links as $path) {
                         $path = trim($path);
 
-                        // Convert to full URL if it’s a relative path like "/t-shirts..."
                         $href = str_starts_with($path, 'http://') || str_starts_with($path, 'https://')
                             ? $path
                             : url($path);
@@ -192,10 +282,7 @@ class EditMultiPage extends EditRecord
         ];
     }
 
-    /**
-     * Backward compatibility: if your blade still calls wire:click="generateMultipageLinks"
-     * it will still work (but without Filament action loading UI).
-     */
+    // Backward compatibility: if your blade still calls wire:click="generateMultipageLinks"
     public function generateMultipageLinks(): void
     {
         $this->save();

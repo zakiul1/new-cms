@@ -96,11 +96,33 @@ final class MultiPageGenerator
                 continue;
             }
 
+            // ✅ Base slug must exist
+            $baseSlug = (string) ($page->slug ?? '');
+            if ($baseSlug === '') {
+                continue;
+            }
+
             // Write mapping JSON for this generated URL
-            $key = MultiPageStorage::pathKey($url);
+            // ✅ SAFETY: avoid collisions (different URLs producing same pathKey)
+            $keyBase = MultiPageStorage::pathKey($url);
+            $mapPath = MultiPageStorage::LINKS . '/' . $keyBase . '.json';
+
+            $key = $keyBase;
+
+            if ($disk->exists($mapPath)) {
+                // If file exists, check if it's for the same URL; if not, suffix with hash.
+                $existingRaw = $disk->get($mapPath);
+                $existing = json_decode((string) $existingRaw, true);
+
+                $existingUrl = is_array($existing) ? (string) ($existing['url'] ?? '') : '';
+                if ($existingUrl !== '' && rtrim($existingUrl, '/') !== rtrim($url, '/')) {
+                    $key = $keyBase . '_' . substr(sha1($url), 0, 10);
+                    $mapPath = MultiPageStorage::LINKS . '/' . $key . '.json';
+                }
+            }
 
             $map = [
-                'base_slug' => (string) ($page->slug ?? ''),
+                'base_slug' => $baseSlug,
                 'base_page_id' => (int) $page->id,
                 'url' => $url,
                 'replacer' => array_values($segments), // segment-1, segment-2 ...
@@ -108,7 +130,7 @@ final class MultiPageGenerator
             ];
 
             $disk->put(
-                MultiPageStorage::LINKS . '/' . $key . '.json',
+                $mapPath,
                 json_encode($map, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
             );
 

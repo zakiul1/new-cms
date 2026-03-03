@@ -95,6 +95,7 @@ class LinkMateSettings extends Page
      * - auto from posts table (distinct type)
      * - always include post + page
      * - add media
+     * - add siatex_tag (Tag Defaults plugin rendering type)
      */
     private function postTypeOptions(): array
     {
@@ -122,6 +123,9 @@ class LinkMateSettings extends Page
         }
 
         $out['media'] = 'Media';
+
+        // ✅ Added so LinkMate can run on Tag Defaults hook
+        $out['siatex_tag'] = 'Siatex Tag';
 
         return $out;
     }

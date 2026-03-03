@@ -2,23 +2,24 @@
 
 namespace Plugins\MultiPage\Filament\Pages;
 
+use App\Filament\Forms\Components\WpClassicEditor;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
-use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Plugins\MultiPage\Support\MultiPageSettings;
 use Plugins\MultiPage\Support\MultiPageSitemapGenerator;
@@ -42,9 +43,6 @@ class SettingsMultiPages extends Page implements HasForms
     public array $csvPreview = [];
     public ?string $selectedCsv = null;
 
-    public string $randKeys = '';
-    public string $externalLinks = '';
-
     public ?string $lastSitemapUrl = null;
 
     public function mount(): void
@@ -52,12 +50,24 @@ class SettingsMultiPages extends Page implements HasForms
         MultiPageStorage::ensureDirs();
 
         $this->data = MultiPageSettings::load();
-        $this->randKeys = MultiPageSettings::loadRandKeys();
-        $this->externalLinks = MultiPageSettings::loadExternalLinks();
 
         $this->refreshCsvFiles(); // also auto-select first file if available
 
         $this->form->fill($this->data);
+    }
+
+    /**
+     * ✅ Used by "Save" button inside Company Info tab (blade button)
+     */
+    public function saveCompanyInfo(): void
+    {
+        MultiPageSettings::save($this->data ?? []);
+
+        Notification::make()
+            ->success()
+            ->title('Saved')
+            ->body('Company info saved.')
+            ->send();
     }
 
     public function form(Schema $schema): Schema
@@ -69,6 +79,16 @@ class SettingsMultiPages extends Page implements HasForms
                     ->tabs([
                         Tab::make('Generate & Settings')
                             ->schema([
+                                /**
+                                 * ✅ Tab-right actions (View Sitemap) - NOT in page header
+                                 */
+                                ViewField::make('multipage_sitemap_tab_actions')
+                                    ->view('multi-page::filament.components.multipage-sitemap-tab-actions')
+                                    ->viewData(fn() => [
+                                        'url' => $this->lastSitemapUrl ?: ('/' . ($this->data['file_base_name'] ?? 'multipage-sitemap') . '.xml'),
+                                    ])
+                                    ->dehydrated(false),
+
                                 Section::make('Sitemap Settings')
                                     ->schema([
                                         TextInput::make('sitemaps_dir')
@@ -89,12 +109,37 @@ class SettingsMultiPages extends Page implements HasForms
                                         DatePicker::make('modified_date')
                                             ->label('Modified Date')
                                             ->required(),
+
+                                        // ✅ NEW: Change Frequency
+                                        Select::make('changefreq')
+                                            ->label('Change Frequency')
+                                            ->options([
+                                                'always' => 'Always',
+                                                'hourly' => 'Hourly',
+                                                'daily' => 'Daily',
+                                                'weekly' => 'Weekly',
+                                                'monthly' => 'Monthly',
+                                                'yearly' => 'Yearly',
+                                                'never' => 'Never',
+                                            ])
+                                            ->native(false)
+                                            ->required(),
+
+                                        // ✅ NEW: Priority (0.0 - 1.0)
+                                        TextInput::make('priority')
+                                            ->label('Priority')
+                                            ->numeric()
+                                            ->step('0.1')
+                                            ->minValue(0)
+                                            ->maxValue(1)
+                                            ->helperText('Allowed range: 0.0 to 1.0 (example: 0.5)')
+                                            ->required(),
                                     ])
                                     ->columns(2),
 
                                 Section::make('Generate')
                                     ->schema([
-                                        \Filament\Forms\Components\Placeholder::make('sitemap_info')
+                                        Placeholder::make('sitemap_info')
                                             ->label('Sitemap URL')
                                             ->content(fn() => $this->lastSitemapUrl ?: 'Not generated yet')
                                             ->dehydrated(false),
@@ -161,67 +206,30 @@ class SettingsMultiPages extends Page implements HasForms
                                     ]),
                             ]),
 
-                        Tab::make('Rand Key Data')
+                        /**
+                         * ✅ Company Info tab MUST be last + WpClassicEditor + save button at top (header-like)
+                         */
+                        Tab::make('Company Info')
                             ->schema([
-                                Section::make('Keywords')
-                                    ->headerActions([
-                                        Action::make('save_rand_keys')
-                                            ->label('Save Keywords')
-                                            ->color('primary')
-                                            ->action(function () {
-                                                $state = $this->form->getState();
-
-                                                $text = (string) ($state['rand_keys_text'] ?? $this->randKeys ?? '');
-                                                $this->randKeys = $text;
-
-                                                MultiPageSettings::saveRandKeys($text);
-
-                                                Notification::make()
-                                                    ->success()
-                                                    ->title('Saved')
-                                                    ->body('Rand Key Data saved.')
-                                                    ->send();
-                                            }),
-                                    ])
+                                Section::make('Company Info')
                                     ->schema([
-                                        Textarea::make('rand_keys_text')
-                                            ->label('Rand Key Data')
-                                            ->rows(18)
-                                            ->default(fn() => $this->randKeys)
-                                            ->dehydrated(false)
-                                            ->live(),
-                                    ]),
-                            ]),
+                                        // ✅ Save button at top-right (header style)
+                                        ViewField::make('company_info_save_button_top')
+                                            ->view('multi-page::filament.components.company-info-save')
+                                            ->dehydrated(false),
 
-                        Tab::make('External Links')
-                            ->schema([
-                                Section::make('External Links')
-                                    ->headerActions([
-                                        Action::make('save_external_links')
-                                            ->label('Save External Links')
-                                            ->color('primary')
-                                            ->action(function () {
-                                                $state = $this->form->getState();
-
-                                                $text = (string) ($state['external_links_text'] ?? $this->externalLinks ?? '');
-                                                $this->externalLinks = $text;
-
-                                                MultiPageSettings::saveExternalLinks($text);
-
-                                                Notification::make()
-                                                    ->success()
-                                                    ->title('Saved')
-                                                    ->body('External Links saved.')
-                                                    ->send();
-                                            }),
-                                    ])
-                                    ->schema([
-                                        Textarea::make('external_links_text')
-                                            ->label('External Links')
-                                            ->rows(18)
-                                            ->default(fn() => $this->externalLinks)
-                                            ->dehydrated(false)
-                                            ->live(),
+                                        // ✅ Wp Editor (NOT textarea)
+                                        WpClassicEditor::make('company_info')
+                                            ->label('Company Info')
+                                            ->height(260)
+                                            ->columnSpanFull()
+                                            ->helperText('Shown in the right sidebar (4-column) on the MultiPage template. Shortcodes supported.')
+                                            ->formatStateUsing(
+                                                fn($state): string => is_string($state)
+                                                ? $state
+                                                : (is_array($state) ? (string) ($state['html'] ?? '') : '')
+                                            )
+                                            ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
                                     ]),
                             ]),
                     ]),
@@ -229,7 +237,8 @@ class SettingsMultiPages extends Page implements HasForms
     }
 
     /**
-     * ✅ Only keep global actions in header.
+     * ✅ Only keep Save + Generate in header.
+     * ✅ View Sitemap moved into the tab (right side).
      */
     protected function getHeaderActions(): array
     {
@@ -262,10 +271,6 @@ class SettingsMultiPages extends Page implements HasForms
                         ->body('Total links: ' . ($res['count'] ?? 0))
                         ->send();
                 }),
-
-            Action::make('view_sitemap')
-                ->label('View Sitemap')
-                ->url(fn() => $this->lastSitemapUrl ?: '/multipage-sitemap.xml', shouldOpenInNewTab: true),
         ];
     }
 
@@ -300,8 +305,9 @@ class SettingsMultiPages extends Page implements HasForms
     public function deleteCsv(string $file): void
     {
         $file = basename(trim($file));
-        if ($file === '')
+        if ($file === '') {
             return;
+        }
 
         $disk = Storage::disk('local');
         $path = MultiPageStorage::CSVS . '/' . $file;
@@ -328,8 +334,9 @@ class SettingsMultiPages extends Page implements HasForms
     public function downloadCsv(string $file)
     {
         $file = basename(trim($file));
-        if ($file === '')
+        if ($file === '') {
             return null;
+        }
 
         $disk = Storage::disk('local');
         $path = MultiPageStorage::CSVS . '/' . $file;
@@ -352,19 +359,22 @@ class SettingsMultiPages extends Page implements HasForms
         $file = basename(trim($file));
         $this->csvPreview = [];
 
-        if ($file === '')
+        if ($file === '') {
             return;
+        }
 
         $disk = Storage::disk('local');
         $path = MultiPageStorage::CSVS . '/' . $file;
 
-        if (!$disk->exists($path))
+        if (!$disk->exists($path)) {
             return;
+        }
 
         $full = $disk->path($path);
         $fh = fopen($full, 'rb');
-        if (!$fh)
+        if (!$fh) {
             return;
+        }
 
         $rows = [];
         $limit = 50;

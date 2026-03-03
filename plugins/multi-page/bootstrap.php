@@ -88,14 +88,19 @@ add_action(HookPoints::CMS_BOOTED, function () {
 });
 
 /**
- * 3) Filament admin panel registration:
- * - Registers MultiPageResource (Multi Pages)
- * - Registers AddMultiPage (submenu)
- * - Registers SettingsMultiPages (submenu)
- * - Registers MultiPageLinksPage (View List)
+ * ✅ 2.5) Register MultiPage template option for "Template" dropdown
+ */
+add_filter('cms.page_template_options', function (array $options) {
+    if (View::exists('templates.multipage-attachment')) {
+        $options['multipage-attachment'] = 'Multipage (Attachment Style)';
+    }
+    return $options;
+}, 25, 1);
+
+/**
+ * 3) Filament admin panel registration
  */
 add_action(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
-
     $panel->resources([
         \Plugins\MultiPage\Filament\Resources\MultiPageResource::class,
     ]);
@@ -105,13 +110,17 @@ add_action(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
         \Plugins\MultiPage\Filament\Pages\SettingsMultiPages::class,
         \Plugins\MultiPage\Filament\Pages\MultiPageLinksPage::class,
     ]);
-
 }, 10, 1);
 
 /**
  * 4) Frontend routes:
- * - multipage sitemap endpoint
- * - multipage resolver (multi-segment only)
+ * - multipage sitemap endpoint only
+ *
+ * IMPORTANT:
+ * Do NOT register a catch-all frontend route here.
+ * Your CMS already has a router + your ContentRouterController@show()
+ * already calls MultiPageResolver before normal page/post lookup.
+ * A catch-all route here will match most URLs and can cause "white page" (empty 200).
  */
 add_action(HookPoints::CMS_ROUTES, function () {
 
@@ -122,10 +131,12 @@ add_action(HookPoints::CMS_ROUTES, function () {
         $dir = trim((string) ($settings['sitemaps_dir'] ?? 'sitemaps-multipage'));
         $name = trim((string) ($settings['file_base_name'] ?? 'multipage-sitemap'));
 
-        if ($dir === '')
+        if ($dir === '') {
             $dir = 'sitemaps-multipage';
-        if ($name === '')
+        }
+        if ($name === '') {
             $name = 'multipage-sitemap';
+        }
 
         $disk = \Illuminate\Support\Facades\Storage::disk('public');
         $path = $dir . '/' . $name . '.xml';
@@ -138,24 +149,5 @@ add_action(HookPoints::CMS_ROUTES, function () {
 
         return response($xml, 200)->header('Content-Type', 'application/xml; charset=UTF-8');
     });
-
-    // ✅ Multi-segment resolver route
-    Route::get('/{path}', function (string $path) {
-        if (!str_contains($path, '/')) {
-            abort(404);
-        }
-
-        $resolver = new \Plugins\MultiPage\Support\MultiPageResolver();
-        $response = $resolver->handle(request(), $path);
-
-        if ($response !== null) {
-            return $response;
-        }
-
-        abort(404);
-    })->where(
-            'path',
-            '^(?!lara-admin(?:/|$)|api(?:/|$)|storage(?:/|$)|sitemap\.xml$|robots\.txt$|customizer(?:/|$)|multipage-sitemap\.xml$).+/.+$'
-        );
 
 }, 5, 0);

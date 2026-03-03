@@ -26,13 +26,14 @@
         "pestphp/pest-plugin-laravel": "^3.2"
     },
     "autoload": {
-        "psr-4": {
-            "App\\": "app/",
-            "Plugins\\GConsole\\": "plugins/g-console/src/",
-            "Plugins\\StaticPosts\\": "plugins/static-posts/src/",
-            "Database\\Factories\\": "database/factories/",
-            "Database\\Seeders\\": "database/seeders/"
-        },
+   "psr-4": {
+  "App\\": "app/",
+  "Plugins\\GConsole\\": "plugins/g-console/src/",
+  "Plugins\\StaticPosts\\": "plugins/static-posts/src/",
+  "Plugins\\BlogPosts\\": "plugins/blog-posts/src/",
+  "Database\\Factories\\": "database/factories/",
+  "Database\\Seeders\\": "database/seeders/"
+},
         "files": [
             "app/Cms/helpers.php",
             "app/Cms/Hooks/helpers.php",

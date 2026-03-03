@@ -197,6 +197,19 @@ class MultiPageForm
                                         return $current;
                                     }),
 
+                                // ✅ NEW: After Banner (WYSIWYG) - shortcode supported on frontend
+                                WpClassicEditor::make('meta_json.after_banner')
+                                    ->label('After Banner')
+                                    ->height(180)
+                                    ->columnSpanFull()
+                                    ->helperText('Put shortcode here. It will render below the hero section on frontend.')
+                                    ->formatStateUsing(
+                                        fn($state): string => is_string($state)
+                                        ? $state
+                                        : (is_array($state) ? (string) ($state['html'] ?? '') : '')
+                                    )
+                                    ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
+
                                 TextInput::make('meta_json.subtitle')
                                     ->label('Sub Title')
                                     ->maxLength(255)

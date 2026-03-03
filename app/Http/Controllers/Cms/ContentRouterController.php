@@ -37,7 +37,7 @@ class ContentRouterController extends Controller
             if ($post) {
                 [$css, $js] = $this->extractPostAssets($post);
 
-                return view($this->resolveFrontendView($post, fallback: 'post'), [
+                return view($this->resolveFrontendView($post, fallback: 'post', request: $request), [
                     'post' => $post,
                     'seo' => $this->buildSeo($post, $request, $permalinks),
 
@@ -73,7 +73,7 @@ class ContentRouterController extends Controller
             if ($homePage) {
                 [$css, $js] = $this->extractPostAssets($homePage);
 
-                return view($this->resolveFrontendView($homePage, fallback: 'page'), [
+                return view($this->resolveFrontendView($homePage, fallback: 'page', request: $request), [
                     'post' => $homePage,
                     'seo' => $this->buildSeo($homePage, $request, $permalinks),
 
@@ -104,6 +104,32 @@ class ContentRouterController extends Controller
         // ✅ Normalize to "/" if double slash happens
         if ($path === '//' || $path === '') {
             $path = '/';
+        }
+
+        /**
+         * ✅ MultiPage generated link resolver (single OR multi segment)
+         * IMPORTANT:
+         * - Must run BEFORE normal page/post lookup
+         * - Prevent recursion (resolver calls this controller again)
+         * - If resolver can resolve this URL, return its response
+         */
+        if (
+            $slug !== ''
+            && class_exists(\Plugins\MultiPage\Support\MultiPageResolver::class)
+            && !$request->attributes->get('multipage_resolving')
+        ) {
+            try {
+                $request->attributes->set('multipage_resolving', true);
+
+                $resolver = new \Plugins\MultiPage\Support\MultiPageResolver();
+                $resp = $resolver->handle($request, $slug);
+
+                if ($resp !== null) {
+                    return $resp;
+                }
+            } finally {
+                $request->attributes->set('multipage_resolving', false);
+            }
         }
 
         // ✅ Handle category/tag base dynamically (WP-like bases)
@@ -191,10 +217,61 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($page) {
-                // ✅ canonical path - treat multipage same as page
-                $canonicalPath = $permalinks->pagePath($page);
-                if ($this->pathsDiffer($path, $canonicalPath)) {
-                    return $this->redirectPreserveQuery($request, $canonicalPath, 301);
+
+                /**
+                 * ✅ FIX: Do NOT canonical-redirect generated multipage URLs.
+                 * The resolver renders base multipage content (slug) on the generated URL path,
+                 * so we must keep the current URL (like /t-shirts-importers-in-albuquerque).
+                 */
+                $isGeneratedMultipage =
+                    $page->type === 'multipage'
+                    && (bool) $request->attributes->get('multipage_generated', false);
+
+                if (!$isGeneratedMultipage) {
+                    // ✅ canonical path - treat multipage same as page
+                    $canonicalPath = $permalinks->pagePath($page);
+                    if ($this->pathsDiffer($path, $canonicalPath)) {
+                        return $this->redirectPreserveQuery($request, $canonicalPath, 301);
+                    }
+                }
+
+                // ✅ FORCE TEMPLATE FOR SEGMENT REQUESTS (from MultiPageResolver)
+                // ✅ FORCE TEMPLATE FOR SEGMENT REQUESTS (from MultiPageResolver)
+                $forced = trim((string) $request->attributes->get('cms_forced_template', ''));
+                if ($forced !== '') {
+                    $metaJson = $page->meta_json;
+                    $metaJson = is_array($metaJson) ? $metaJson : [];
+                    $metaJson['template'] = $forced;
+                    $page->meta_json = $metaJson;
+                }
+
+                /**
+                 * ✅ FIX: If this is a MultiPage base slug (no generated mapping matched),
+                 * inject default segments so [segment-1], [segment-2] work on base page too.
+                 */
+                if (
+                    $page->type === 'multipage'
+                    && !$request->attributes->has('multipage_segments')
+                ) {
+                    $meta = is_array($page->meta_json ?? null) ? $page->meta_json : [];
+                    $mp = is_array($meta['multipage'] ?? null) ? $meta['multipage'] : [];
+
+                    $raw = '';
+                    foreach (['default_segments', 'default_values', 'defaults'] as $k) {
+                        $candidate = trim((string) ($mp[$k] ?? ''));
+                        if ($candidate !== '') {
+                            $raw = $candidate;
+                            break;
+                        }
+                    }
+
+                    if ($raw !== '') {
+                        $defaults = array_values(array_filter(array_map('trim', explode(',', $raw))));
+                        if (!empty($defaults)) {
+                            $request->attributes->set('multipage_segments', $defaults);
+                            $request->attributes->set('multipage_base_slug', (string) $page->slug);
+                        }
+                    }
                 }
 
                 [$css, $js] = $this->extractPostAssets($page);
@@ -207,15 +284,14 @@ class ContentRouterController extends Controller
                         ? FilamentPageResource::getUrl('edit', ['record' => $page])
                         : url('/lara-admin');
                 } elseif ($page->type === 'multipage' && class_exists(\Plugins\MultiPage\Filament\Resources\MultiPageResource::class)) {
-                    $adminEditUrl = \Plugins\MultiPage\Filament\Resources\MultiPageResource::getUrl('edit', ['record' => $page]);
+                    $adminEditUrl = \Plugins\MultiPage\Filament\Resources\MultiPageResource::getUrl('edit', ['record' => $page], panel: 'admin');
                 } else {
-                    // fallback to page resource if plugin not loaded
                     $adminEditUrl = class_exists(FilamentPageResource::class)
                         ? FilamentPageResource::getUrl('edit', ['record' => $page])
                         : url('/lara-admin');
                 }
 
-                return view($this->resolveFrontendView($page, fallback: 'page'), [
+                return view($this->resolveFrontendView($page, fallback: 'page', request: $request), [
                     'post' => $page,
                     'seo' => $this->buildSeo($page, $request, $permalinks),
 
@@ -250,7 +326,7 @@ class ContentRouterController extends Controller
 
             [$css, $js] = $this->extractPostAssets($post);
 
-            return view($this->resolveFrontendView($post, fallback: 'post'), [
+            return view($this->resolveFrontendView($post, fallback: 'post', request: $request), [
                 'post' => $post,
                 'seo' => $this->buildSeo($post, $request, $permalinks),
 
@@ -300,7 +376,6 @@ class ContentRouterController extends Controller
                     [$css, $js] = $this->extractMediaAssets($media);
 
                     if (function_exists('do_action')) {
-                        // ✅ apply frontend-only defaults in memory
                         do_action('media.attachment.defaults.persist', $media);
                     }
 
@@ -404,10 +479,19 @@ class ContentRouterController extends Controller
         return redirect()->to($to, $status);
     }
 
-    private function resolveFrontendView(Post $post, string $fallback): string
+    /**
+     * ✅ UPDATED: allow forced template from request attribute (segment pages)
+     */
+    private function resolveFrontendView(Post $post, string $fallback, ?Request $request = null): string
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
-        $template = trim((string) ($meta['template'] ?? ''));
+
+        $forced = '';
+        if ($request) {
+            $forced = trim((string) $request->attributes->get('cms_forced_template', ''));
+        }
+
+        $template = $forced !== '' ? $forced : trim((string) ($meta['template'] ?? ''));
 
         if ($template === '') {
             return $fallback;
