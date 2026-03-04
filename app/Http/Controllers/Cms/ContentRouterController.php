@@ -14,6 +14,7 @@ use App\Models\Taxonomy;
 use App\Models\Term;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 // ✅ Correct Filament resources (fixes your admin bar edit URLs)
 use App\Filament\Resources\MediaResource as FilamentMediaResource;
@@ -236,7 +237,6 @@ class ContentRouterController extends Controller
                 }
 
                 // ✅ FORCE TEMPLATE FOR SEGMENT REQUESTS (from MultiPageResolver)
-                // ✅ FORCE TEMPLATE FOR SEGMENT REQUESTS (from MultiPageResolver)
                 $forced = trim((string) $request->attributes->get('cms_forced_template', ''));
                 if ($forced !== '') {
                     $metaJson = $page->meta_json;
@@ -246,8 +246,11 @@ class ContentRouterController extends Controller
                 }
 
                 /**
-                 * ✅ FIX: If this is a MultiPage base slug (no generated mapping matched),
-                 * inject default segments so [segment-1], [segment-2] work on base page too.
+                 * ✅ MultiPage base slug:
+                 * - If no generated mapping matched (so no multipage_segments),
+                 *   then:
+                 *   A) use default segments if provided
+                 *   B) else Option C: use first CSV data row (slugified)
                  */
                 if (
                     $page->type === 'multipage'
@@ -256,6 +259,7 @@ class ContentRouterController extends Controller
                     $meta = is_array($page->meta_json ?? null) ? $page->meta_json : [];
                     $mp = is_array($meta['multipage'] ?? null) ? $meta['multipage'] : [];
 
+                    // A) defaults from field
                     $raw = '';
                     foreach (['default_segments', 'default_values', 'defaults'] as $k) {
                         $candidate = trim((string) ($mp[$k] ?? ''));
@@ -272,6 +276,22 @@ class ContentRouterController extends Controller
                             $request->attributes->set('multipage_base_slug', (string) $page->slug);
                         }
                     }
+
+                    // B) Option C: first CSV row fallback (if still empty)
+                    if (!$request->attributes->has('multipage_segments')) {
+                        $segments = $this->multipageFirstCsvRowSegments($mp);
+
+                        if (!empty($segments)) {
+                            $request->attributes->set('multipage_segments', $segments);
+                            $request->attributes->set('multipage_base_slug', (string) $page->slug);
+                        }
+                    }
+                }
+
+                // ✅ Make {segment-1} {segment-2} {segment-3} work everywhere:
+                // Title + any meta_json string fields + SEO strings (before view renders)
+                if ($page->type === 'multipage') {
+                    $this->applyMultipageTokensToPost($page, $request);
                 }
 
                 [$css, $js] = $this->extractPostAssets($page);
@@ -437,7 +457,7 @@ class ContentRouterController extends Controller
 
                     Redirect::query()->updateOrCreate(
                         ['from_path' => $fromStore],
-                        ['to_path' => $to, 'status_code' => 301]
+                        ['to_path' => $to]
                     );
 
                     return $this->redirectPreserveQuery($request, $to, 301);
@@ -499,6 +519,158 @@ class ContentRouterController extends Controller
 
         $view = 'templates.' . $template;
         return view()->exists($view) ? $view : $fallback;
+    }
+
+    // ------------------- ✅ MultiPage helpers (Option C + global token replacement) -------------------
+
+    /**
+     * Option C:
+     * If defaults are empty, use first CSV data row to create segments.
+     *
+     * Supports common keys saved in meta_json.multipage:
+     * - csv_file / data_file
+     * - has_header (bool)
+     */
+    private function multipageFirstCsvRowSegments(array $mp): array
+    {
+        $csvFile = trim((string) ($mp['csv_file'] ?? $mp['data_file'] ?? $mp['file'] ?? ''));
+        if ($csvFile === '') {
+            return [];
+        }
+
+        $hasHeader = (bool) ($mp['has_header'] ?? $mp['csv_has_header'] ?? $mp['header'] ?? false);
+
+        // Your UI hint says: storage/app/private/...
+        // Use robust candidates so it works even if you moved folders.
+        $candidates = [
+            'private/multipage/csvs/' . $csvFile,
+            'private/multipage/' . $csvFile,
+            'multipage/csvs/' . $csvFile,
+            'multipage/' . $csvFile,
+        ];
+
+        $disk = Storage::disk('local'); // storage/app
+
+        $found = null;
+        foreach ($candidates as $rel) {
+            if ($disk->exists($rel)) {
+                $found = $rel;
+                break;
+            }
+        }
+
+        if ($found === null) {
+            return [];
+        }
+
+        $full = $disk->path($found);
+        $fh = @fopen($full, 'rb');
+        if (!$fh) {
+            return [];
+        }
+
+        try {
+            if ($hasHeader) {
+                @fgetcsv($fh); // skip header
+            }
+
+            $row = @fgetcsv($fh);
+            if (!is_array($row) || $row === []) {
+                return [];
+            }
+
+            $segments = [];
+            foreach ($row as $val) {
+                $slug = $this->multipageSlugify((string) $val);
+                if ($slug !== '') {
+                    $segments[] = $slug;
+                }
+            }
+
+            return array_values($segments);
+        } finally {
+            @fclose($fh);
+        }
+    }
+
+    private function multipageSlugify(string $s): string
+    {
+        $s = trim($s);
+        if ($s === '') {
+            return '';
+        }
+
+        $s = mb_strtolower($s);
+
+        // Replace non letters/numbers with dash
+        $s = preg_replace('/[^\p{L}\p{N}]+/u', '-', $s) ?? $s;
+
+        // Trim and collapse dashes
+        $s = trim($s, '-');
+        $s = preg_replace('/-+/', '-', $s) ?? $s;
+
+        return $s;
+    }
+
+    /**
+     * Replace {segment-N} tokens using request multipage_segments.
+     * (Single brace only: {segment-1}. If you want double braces too, we can add it.)
+     */
+    private function applyMultipageTokens(string $text, Request $request): string
+    {
+        // ✅ Prefer RAW CSV values for display (Inallentown, USA)
+        $segments = $request->attributes->get('multipage_segments_raw');
+
+        // fallback to slugified segments (inallentown, usa)
+        if (!is_array($segments) || empty($segments)) {
+            $segments = $request->attributes->get('multipage_segments');
+        }
+
+        if (!is_array($segments) || empty($segments)) {
+            return $text;
+        }
+
+        foreach ($segments as $i => $val) {
+            $n = $i + 1;
+            $token1 = '{segment-' . $n . '}';
+            $token2 = '{{segment-' . $n . '}}';
+
+            $text = str_replace([$token1, $token2], (string) $val, $text);
+        }
+
+        return $text;
+    }
+
+    /**
+     * Apply {segment-N} replacements to:
+     * - post title
+     * - ALL strings inside meta_json (recursive) so it works "everywhere"
+     */
+    private function applyMultipageTokensToPost(Post $post, Request $request): void
+    {
+        $post->title = $this->applyMultipageTokens((string) $post->title, $request);
+
+        $meta = is_array($post->meta_json ?? null) ? $post->meta_json : [];
+        $meta = $this->replaceTokensRecursive($meta, $request);
+        $post->meta_json = $meta;
+    }
+
+    private function replaceTokensRecursive(mixed $data, Request $request): mixed
+    {
+        if (is_string($data)) {
+            return $this->applyMultipageTokens($data, $request);
+        }
+
+        if (is_array($data)) {
+            $out = [];
+            foreach ($data as $k => $v) {
+                $out[$k] = $this->replaceTokensRecursive($v, $request);
+            }
+            return $out;
+        }
+
+        // objects, bools, ints, null etc.
+        return $data;
     }
 
     // ------------------- Helpers below (unchanged + SEO shortcode helpers) -------------------
@@ -570,10 +742,19 @@ class ContentRouterController extends Controller
         $rawTitle = (string) ($seo['title'] ?? $post->title ?? config('app.name'));
         $rawDesc = (string) ($seo['description'] ?? $post->excerpt ?? '');
 
+        // ✅ Ensure {segment-N} works in SEO fields too
+        if ($post->type === 'multipage') {
+            $rawTitle = $this->applyMultipageTokens($rawTitle, $request);
+            $rawDesc = $this->applyMultipageTokens($rawDesc, $request);
+        }
+
         $title = $this->seoShortcodeText($rawTitle, $ctx);
         $desc = $this->seoShortcodeText($rawDesc, $ctx);
 
         $canonicalRaw = (string) ($seo['canonical'] ?? '');
+        if ($post->type === 'multipage') {
+            $canonicalRaw = $this->applyMultipageTokens($canonicalRaw, $request);
+        }
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
         if ($canonical === '') {
@@ -584,12 +765,18 @@ class ContentRouterController extends Controller
         }
 
         $robotsRaw = (string) ($seo['robots'] ?? '');
+        if ($post->type === 'multipage') {
+            $robotsRaw = $this->applyMultipageTokens($robotsRaw, $request);
+        }
         $robots = $this->seoShortcodeText($robotsRaw, $ctx);
         if ($robots === '') {
             $robots = 'index, follow';
         }
 
         $ogImageRaw = (string) ($seo['og_image'] ?? '');
+        if ($post->type === 'multipage') {
+            $ogImageRaw = $this->applyMultipageTokens($ogImageRaw, $request);
+        }
         $ogImage = $this->seoShortcodeUrl($ogImageRaw, $ctx);
 
         $isPageLike = in_array($post->type, ['page', 'multipage'], true);

@@ -6,7 +6,6 @@ use App\Cms\Content\PermalinkManager;
 use App\Filament\Forms\Components\MediaPicker;
 use App\Filament\Forms\Components\WpClassicEditor;
 use App\Models\Post;
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -26,6 +25,43 @@ use Plugins\MultiPage\Support\MultiPageStorage;
 
 class MultiPageForm
 {
+    /**
+     * Remove dynamic segment tokens from a title before generating a base slug.
+     *
+     * Goal: keep base slug static and clean:
+     * - Remove {segment-N} / {{segment-N}}
+     * - Also remove connector words ONLY when they are directly attached to a segment token
+     *   like "for {segment-1}", "in ({segment-2})", "near {{segment-3}}", etc.
+     */
+    private static function stripSegmentTokens(string $title): string
+    {
+        $t = (string) $title;
+
+        // Remove connector words when they appear right before a segment token (safe + SEO-friendly)
+        // Examples removed:
+        //   "for {segment-1}", "in ({segment-2})", "near {{segment-1}}", "around {segment-3}"
+        $t = preg_replace(
+            '/\b(for|in|at|near|around|within|from|to|across|throughout|inside|outside|by|with|without)\b\s*\(?\s*\{\{?\s*segment-\d+\s*\}?\}\s*\)?/i',
+            '',
+            $t
+        ) ?? $t;
+
+        // Remove remaining {segment-N} or {{segment-N}} anywhere
+        $t = preg_replace('/\{\{?\s*segment-\d+\s*\}?\}/i', '', $t) ?? $t;
+
+        // Remove empty parentheses/brackets left behind
+        $t = preg_replace('/\(\s*\)/', '', $t) ?? $t;
+        $t = preg_replace('/\[\s*\]/', '', $t) ?? $t;
+
+        // If connector word became trailing last word (rare), remove it
+        $t = preg_replace('/\b(for|in|at|near|around|within|from|to|across|throughout|inside|outside|by|with|without)\b\s*$/i', '', $t) ?? $t;
+
+        // Cleanup punctuation / multiple spaces
+        $t = preg_replace('/\s+/', ' ', $t) ?? $t;
+
+        return trim($t);
+    }
+
     public static function configure(Schema $schema): Schema
     {
         $publishSchema = [
@@ -67,12 +103,6 @@ class MultiPageForm
                 ->multiple()
                 ->maxItems(50),
 
-            DateTimePicker::make('published_at')
-                ->label('Publish At')
-                ->seconds(false)
-                ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
-
-            // ✅ Multipage Settings (right bottom)
             Section::make('Multipage Settings')
                 ->schema([
                     Toggle::make('meta_json.multipage.enabled')
@@ -84,7 +114,7 @@ class MultiPageForm
                         ->options(function (): array {
                             MultiPageStorage::ensureDirs();
 
-                            $disk = Storage::disk('local'); // storage/app/private
+                            $disk = Storage::disk('local');
                             $files = $disk->files(MultiPageStorage::CSVS);
 
                             $out = [];
@@ -110,10 +140,6 @@ class MultiPageForm
                         ->placeholder('Bangladesh, Dhaka')
                         ->disabled(fn(Get $get) => !(bool) $get('meta_json.multipage.enabled')),
 
-                    /**
-                     * ✅ Buttons (Generate + View List) rendered via Blade view.
-                     * Now we pass links so the modal can show ONLY list (no iframe).
-                     */
                     ViewField::make('multipage_buttons')
                         ->view('multi-page::filament.components.multipage-buttons')
                         ->viewData(function ($livewire): array {
@@ -146,14 +172,24 @@ class MultiPageForm
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
+                                    ->label('H1')
                                     ->required()
                                     ->maxLength(255)
-                                    ->live(onBlur: true)
+                                    ->live(debounce: 500)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get): void {
-                                        if (!filled($get('slug'))) {
-                                            $set('slug', Str::slug((string) $state));
+                                        $slugManual = (bool) ($get('meta_json._slug_manual') ?? false);
+
+                                        if (!$slugManual) {
+                                            // ✅ Keep base slug STATIC and clean
+                                            $clean = self::stripSegmentTokens((string) $state);
+
+                                            if ($clean !== '') {
+                                                $set('slug', Str::slug($clean));
+                                            }
                                         }
-                                        if (!filled($get('meta_json.seo.title'))) {
+
+                                        $seoManual = (bool) ($get('meta_json._seo_title_manual') ?? false);
+                                        if (!$seoManual) {
                                             $set('meta_json.seo.title', (string) $state);
                                         }
                                     }),
@@ -163,9 +199,13 @@ class MultiPageForm
                                     ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                                    ->live(onBlur: true)
+                                    ->live(debounce: 500)
                                     ->afterStateUpdated(function ($state, Set $set): void {
-                                        $set('slug', filled($state) ? Str::slug((string) $state) : null);
+                                        $value = filled($state) ? Str::slug((string) $state) : null;
+                                        $set('slug', $value);
+
+                                        // ✅ user touched slug -> stop auto updates from title
+                                        $set('meta_json._slug_manual', true);
                                     })
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
                                     ->rule(function (?Post $record) {
@@ -197,7 +237,6 @@ class MultiPageForm
                                         return $current;
                                     }),
 
-                                // ✅ NEW: After Banner (WYSIWYG) - shortcode supported on frontend
                                 WpClassicEditor::make('meta_json.after_banner')
                                     ->label('After Banner')
                                     ->height(180)
@@ -230,9 +269,23 @@ class MultiPageForm
                                     ->collapsible()
                                     ->collapsed()
                                     ->schema([
-                                        TextInput::make('meta_json.seo.title')->label('SEO Title')->maxLength(1000),
-                                        Textarea::make('meta_json.seo.description')->label('Meta Description')->rows(3)->maxLength(1000),
-                                        TextInput::make('meta_json.seo.canonical')->label('Canonical URL (optional)')->maxLength(255),
+                                        TextInput::make('meta_json.seo.title')
+                                            ->label('SEO Title')
+                                            ->maxLength(1000)
+                                            ->live(debounce: 500)
+                                            ->afterStateUpdated(function (Set $set): void {
+                                                $set('meta_json._seo_title_manual', true);
+                                            }),
+
+                                        Textarea::make('meta_json.seo.description')
+                                            ->label('Meta Description')
+                                            ->rows(3)
+                                            ->maxLength(1000),
+
+                                        TextInput::make('meta_json.seo.canonical')
+                                            ->label('Canonical URL (optional)')
+                                            ->maxLength(255),
+
                                         Select::make('meta_json.seo.robots')
                                             ->label('Robots')
                                             ->options([

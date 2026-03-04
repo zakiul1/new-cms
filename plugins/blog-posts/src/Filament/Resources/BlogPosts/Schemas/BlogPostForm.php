@@ -2,261 +2,310 @@
 
 namespace Plugins\BlogPosts\Filament\Resources\BlogPosts\Schemas;
 
-use App\Cms\Content\Slugger;
-use App\Models\Taxonomy;
-use App\Models\Term;
-use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Group;
-use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Section;
+use App\Filament\Forms\Components\MediaPicker;
+use App\Filament\Forms\Components\WpClassicEditor;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Tabs;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\ViewField;
+use Filament\Forms\Components\Textarea;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Arr;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class BlogPostForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema->schema([
-            Grid::make(['default' => 12])
-                ->schema([
+        return $schema
+            ->columns(['default' => 1, 'lg' => 3])
+            ->components([
 
-                    // Main content (left)
-                    Group::make()
-                        ->columnSpan(['default' => 8])
-                        ->schema([
-                            Tabs::make('Content Tabs')
-                                ->tabs([
+                // LEFT: Tabs (2/3)
+                Tabs::make('Editor')
+                    ->columnSpan(['default' => 1, 'lg' => 2])
+                    ->tabs([
 
-                                    // --- Content ---
-                                    Tabs\Tab::make('Content')
-                                        ->schema([
-                                            Section::make()
-                                                ->schema([
-                                                    TextInput::make('title')
-                                                        ->required()
-                                                        ->live(onBlur: true)
-                                                        ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                                            // Auto-generate slug only if slug is empty
-                                                            if (!$get('slug')) {
-                                                                $set('slug', Str::slug($state ?? ''));
-                                                            }
-                                                        }),
+                        // ✅ Content tab (same as Static Posts)
+                        Tab::make('Content')
+                            ->schema([
+                                TextInput::make('title')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        if (!filled($get('slug'))) {
+                                            $set('slug', Str::slug((string) $state));
+                                        }
+                                    }),
 
-                                                    TextInput::make('slug')
-                                                        ->required()
-                                                        ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                                                        ->maxLength(191)
-                                                        ->live(onBlur: true)
-                                                        ->afterStateUpdated(function ($state, callable $set) {
-                                                            $set('slug', Str::slug($state ?? ''));
-                                                        })
-                                                        ->unique(
-                                                            table: 'posts',
-                                                            column: 'slug',
-                                                            ignorable: fn($record) => $record,
-                                                        ),
+                                TextInput::make('slug')
+                                    ->label('Slug (optional)')
+                                    ->maxLength(255)
+                                    ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, Set $set) {
+                                        $set('slug', filled($state) ? Str::slug((string) $state) : null);
+                                    })
+                                    ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                                    ->rule(function ($record) {
+                                        return Rule::unique('posts', 'slug')->ignore($record?->id);
+                                    })
+                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).'),
 
-                                                    ViewField::make('permalink_preview')
-                                                        ->view('filament.components.permalink-preview')
-                                                        ->viewData([
-                                                            'prefix' => url('/blog/'),
-                                                            'field' => 'slug',
-                                                        ]),
+                                Placeholder::make('permalink_preview')
+                                    ->label('Permalink')
+                                    ->content(function ($record, Get $get) {
+                                        $base = rtrim((string) config('app.url'), '/');
+                                        $slug = trim((string) $get('slug'), '/');
 
-                                                    Textarea::make('excerpt')
-                                                        ->rows(3)
-                                                        ->columnSpanFull(),
+                                        if ($slug === '') {
+                                            $slug = Str::slug((string) ($get('title') ?? ''));
+                                        }
 
-                                                    // Editor field stored in content_json['html']
-                                                    Textarea::make('content_json.html')
-                                                        ->label('Content')
-                                                        ->rows(14)
-                                                        ->columnSpanFull(),
+                                        $slug = $slug !== '' ? $slug : '(auto)';
 
-                                                    TextInput::make('meta_json.blog_posts.learn_more_url')
-                                                        ->label('Learn More URL')
-                                                        ->maxLength(255),
-                                                ]),
-                                        ]),
+                                        return "{$base}/blog/{$slug}";
+                                    }),
 
-                                    // --- Custom CSS/JS ---
-                                    Tabs\Tab::make('Custom CSS & JS')
-                                        ->schema([
-                                            Section::make()
-                                                ->schema([
-                                                    Textarea::make('meta_json.assets.css')
-                                                        ->label('Custom CSS')
-                                                        ->rows(10)
-                                                        ->columnSpanFull(),
+                                WpClassicEditor::make('content_json')
+                                    ->label('Content')
+                                    ->height(320)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
 
-                                                    Textarea::make('meta_json.assets.js')
-                                                        ->label('Custom JS')
-                                                        ->rows(10)
-                                                        ->columnSpanFull(),
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state, Get $get): array {
+                                        $current = $get('content_json');
+                                        if (!is_array($current)) {
+                                            $current = [];
+                                        }
 
-                                                    Textarea::make('meta_json.custom_json')
-                                                        ->label('Custom JSON')
-                                                        ->rows(8)
-                                                        ->columnSpanFull()
-                                                        ->helperText('Valid JSON only. Will be stored as decoded array when possible.')
-                                                        ->dehydrateStateUsing(function ($state) {
-                                                            if (is_string($state)) {
-                                                                $decoded = json_decode($state, true);
-                                                                if (json_last_error() === JSON_ERROR_NONE) {
-                                                                    return $decoded;
-                                                                }
-                                                            }
-                                                            return $state;
-                                                        }),
-                                                ]),
-                                        ]),
+                                        $current['html'] = is_string($state) ? $state : '';
 
-                                    // --- Frontend Preview ---
-                                    Tabs\Tab::make('Frontend Preview')
-                                        ->schema([
-                                            Section::make()
-                                                ->schema([
-                                                    ViewField::make('frontend_link')
-                                                        ->view('filament.components.frontend-link')
-                                                        ->viewData([
-                                                            'prefix' => url('/blog/'),
-                                                            'field' => 'slug',
-                                                        ]),
-                                                ]),
-                                        ]),
-                                ]),
-                        ]),
+                                        return $current;
+                                    }),
 
-                    // Sidebar (right)
-                    Group::make()
-                        ->columnSpan(['default' => 4])
-                        ->schema([
+                                /**
+                                 * Used by shortcode when [bp lmbtn] is present (same idea as Static Posts).
+                                 */
+                                TextInput::make('meta_json.blog_posts.learn_more_url')
+                                    ->label('Learnmore button link')
+                                    ->helperText('Optional. If empty, frontend will use "#" for Learn more button.')
+                                    ->maxLength(2000)
+                                    ->nullable()
+                                    ->columnSpanFull(),
 
-                            Section::make('Publish')
-                                ->schema([
-                                    Select::make('status')
-                                        ->options([
-                                            'draft' => 'Draft',
-                                            'published' => 'Published',
-                                            'scheduled' => 'Scheduled',
-                                        ])
-                                        ->default('draft')
-                                        ->required(),
+                                Textarea::make('excerpt')
+                                    ->label('Excerpt')
+                                    ->rows(4)
+                                    ->maxLength(2000)
+                                    ->nullable(),
+                            ]),
 
-                                    Select::make('meta_json.template')
-                                        ->label('Template')
-                                        ->options([
-                                            '' => 'Default',
-                                        ])
-                                        ->helperText('Optional template override used by theme.')
-                                        ->default(''),
+                        // ✅ Custom CSS & JS tab (same as Static Posts)
+                        Tab::make('Custom CSS & JS')
+                            ->schema([
+                                Textarea::make('meta_json.assets.css')
+                                    ->label('Custom CSS (Paste Row CSS Without <style> tags)')
+                                    ->helperText('Applies to this post only. Output inside <head>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                                    ])
+                                    ->live(onBlur: true),
 
-                                    // Category multi-select (taxonomy: blog_category)
-                                    Select::make('blog_category_ids')
-                                        ->label('Blog Categories')
-                                        ->multiple()
-                                        ->searchable()
-                                        ->preload()
-                                        ->options(function () {
-                                            $taxonomy = Taxonomy::query()->where('key', 'blog_category')->first();
-                                            if (!$taxonomy) {
-                                                return [];
-                                            }
+                                Textarea::make('meta_json.assets.js')
+                                    ->label('Custom JS (Paste Script Without <script> tags)')
+                                    ->helperText('Applies to this post only. Output before </body>.')
+                                    ->rows(14)
+                                    ->extraAttributes([
+                                        'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                                    ])
+                                    ->live(onBlur: true),
 
-                                            return Term::query()
-                                                ->where('taxonomy_id', $taxonomy->getKey())
-                                                ->orderBy('name')
-                                                ->pluck('name', 'id')
-                                                ->toArray();
-                                        })
-                                        ->afterStateHydrated(function (Select $component, $state, $record) {
-                                            if (!$record) {
-                                                return;
-                                            }
+                                Textarea::make('meta_json.custom_json')
+                                    ->label('Custom JSON (Paste Valid JSON)')
+                                    ->helperText('Valid JSON only. Saved per post. (Do not include <script> tag)')
+                                    ->rows(18)
+                                    ->nullable()
+                                    ->rules(['json'])
+                                    ->formatStateUsing(function ($state) {
+                                        if (blank($state)) {
+                                            return '';
+                                        }
 
-                                            // Pre-fill selected category IDs from relationship
-                                            $taxonomy = Taxonomy::query()->where('key', 'blog_category')->first();
-                                            if (!$taxonomy) {
-                                                return;
-                                            }
+                                        if (is_array($state)) {
+                                            return json_encode(
+                                                $state,
+                                                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                                            ) ?: '';
+                                        }
 
-                                            $ids = $record->terms()
-                                                ->where('taxonomy_id', $taxonomy->getKey())
-                                                ->pluck('terms.id')
-                                                ->all();
+                                        return (string) $state;
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        if (blank($state)) {
+                                            return null;
+                                        }
 
-                                            $component->state($ids);
-                                        }),
+                                        $decoded = json_decode((string) $state, true);
 
-                                    // Featured Media IDs
-                                    Select::make('featured_media_ids')
-                                        ->label('Featured Images')
-                                        ->multiple()
-                                        ->searchable()
-                                        ->preload()
-                                        ->options(function () {
-                                            return \App\Models\Media::query()
-                                                ->orderByDesc('id')
-                                                ->limit(2000)
-                                                ->pluck('title', 'id')
-                                                ->toArray();
-                                        })
-                                        ->afterStateHydrated(function (Select $component, $state, $record) {
-                                            if (!$record) {
-                                                return;
-                                            }
+                                        return $decoded ?? (string) $state;
+                                    }),
+                            ]),
 
-                                            $ids = \App\Models\PostMedia::query()
-                                                ->where('post_id', $record->getKey())
-                                                ->where('role', 'featured')
-                                                ->orderBy('sort_order')
-                                                ->pluck('media_id')
-                                                ->all();
+                        // ✅ Frontend Preview tab (same as Static Posts)
+                        Tab::make('Frontend Preview')
+                            ->schema([
+                                Placeholder::make('frontend_preview')
+                                    ->label('')
+                                    ->content(function ($record) {
+                                        if (!$record) {
+                                            return new HtmlString(
+                                                '<div class="text-sm text-gray-600">Save the post first to preview the real frontend page.</div>'
+                                            );
+                                        }
 
-                                            $component->state($ids);
-                                        }),
+                                        $url = url('/blog/' . $record->slug);
 
-                                    // Product Media IDs
-                                    Select::make('product_media_ids')
-                                        ->label('Product Images')
-                                        ->multiple()
-                                        ->searchable()
-                                        ->preload()
-                                        ->options(function () {
-                                            return \App\Models\Media::query()
-                                                ->orderByDesc('id')
-                                                ->limit(2000)
-                                                ->pluck('title', 'id')
-                                                ->toArray();
-                                        })
-                                        ->afterStateHydrated(function (Select $component, $state, $record) {
-                                            if (!$record) {
-                                                return;
-                                            }
+                                        return new HtmlString(
+                                            '<a class="text-primary-600 underline" target="_blank" href="' . e($url) . '">' . e($url) . '</a>'
+                                        );
+                                    }),
+                            ]),
+                    ]),
 
-                                            $ids = \App\Models\PostMedia::query()
-                                                ->where('post_id', $record->getKey())
-                                                ->where('role', 'product')
-                                                ->orderBy('sort_order')
-                                                ->pluck('media_id')
-                                                ->all();
+                // RIGHT: Publish panel (1/3)
+                Section::make('Publish')
+                    ->columnSpan(['default' => 1, 'lg' => 1])
+                    ->schema([
 
-                                            $component->state($ids);
-                                        }),
+                        Select::make('status')
+                            ->options([
+                                'draft' => 'Draft',
+                                'published' => 'Published',
+                                'scheduled' => 'Scheduled',
+                            ])
+                            ->default('published')
+                            ->required(),
 
-                                    Textarea::make('meta_json.blog_posts.svg_icon')
-                                        ->label('SVG Icon')
-                                        ->rows(6)
-                                        ->helperText('Paste raw SVG code.'),
-                                ]),
-                        ]),
-                ]),
-        ]);
+                        Select::make('meta_json.template')
+                            ->label('Template')
+                            ->helperText('If selected, frontend will use that template. If empty, theme default view is used.')
+                            ->options([
+                                '' => 'Theme Default (blog-posts/show.blade.php)',
+                                'default' => 'Default',
+                            ])
+                            ->default('')
+                            ->native(false)
+                            ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
+
+                        // ✅ Blog Categories (taxonomy: blog_category) — same sync logic as Static Posts
+                        Select::make('blog_category_term_ids')
+                            ->label('Categories')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->optionsLimit(100)
+                            ->options(function () {
+                                $taxonomy = \App\Models\Taxonomy::query()
+                                    ->where('key', 'blog_category')
+                                    ->first();
+
+                                if (!$taxonomy) {
+                                    return [];
+                                }
+
+                                return \App\Models\Term::query()
+                                    ->where('taxonomy_id', $taxonomy->id)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            })
+                            ->afterStateHydrated(function (Select $component, $record) {
+                                if (!$record) {
+                                    return;
+                                }
+
+                                $termIds = $record->terms()
+                                    ->whereHas('taxonomy', fn($q) => $q->where('key', 'blog_category'))
+                                    ->pluck('terms.id')
+                                    ->all();
+
+                                $component->state($termIds);
+                            })
+                            ->dehydrated(false)
+                            ->saveRelationshipsUsing(function ($record, $state) {
+                                if (!$record) {
+                                    return;
+                                }
+
+                                $taxonomy = \App\Models\Taxonomy::query()
+                                    ->where('key', 'blog_category')
+                                    ->first();
+
+                                if (!$taxonomy) {
+                                    return;
+                                }
+
+                                $ids = collect($state ?? [])
+                                    ->filter(fn($v) => is_numeric($v))
+                                    ->map(fn($v) => (int) $v)
+                                    ->unique()
+                                    ->values()
+                                    ->all();
+
+                                // current attached term ids (all taxonomies)
+                                $current = $record->terms()->pluck('terms.id')->all();
+
+                                // all term ids that belong to blog_category taxonomy
+                                $blogTermIds = \App\Models\Term::query()
+                                    ->where('taxonomy_id', $taxonomy->id)
+                                    ->pluck('id')
+                                    ->all();
+
+                                // keep everything except blog_category terms
+                                $keep = array_values(array_diff($current, $blogTermIds));
+
+                                // final = kept + selected blog_category terms
+                                $final = array_values(array_unique(array_merge($keep, $ids)));
+
+                                $record->terms()->sync($final);
+                            }),
+
+                        // ✅ Same as Static Posts: store ids directly on model fields
+                        MediaPicker::make('featured_media_ids')
+                            ->label('Featured Images')
+                            ->modalHeading('Featured images')
+                            ->multiple()
+                            ->maxItems(20),
+
+                        MediaPicker::make('product_media_ids')
+                            ->label('Product Images')
+                            ->modalHeading('Product images')
+                            ->multiple()
+                            ->maxItems(50),
+
+                        Textarea::make('meta_json.blog_posts.svg_icon')
+                            ->label('SVG Icon (code)')
+                            ->helperText('Paste raw SVG code. Saved in meta_json.blog_posts.svg_icon for frontend.')
+                            ->rows(6)
+                            ->extraAttributes([
+                                'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
+                            ])
+                            ->nullable(),
+                    ]),
+            ]);
     }
 }

@@ -12,16 +12,28 @@ final class MultiPageSettings
     public static function defaults(): array
     {
         return [
-            'sitemaps_dir' => 'sitemaps-multipage',   // public disk folder
+            /**
+             * ✅ If blank => store sitemap at ROOT of public disk
+             *    Example: /static.xml
+             *
+             * If set => store in storage/app/public/<dir> and access via:
+             *    /storage/<dir>/static.xml
+             */
+            'sitemaps_dir' => '',
+
             'max_links_per_file' => 20000,
-            'file_base_name' => 'multipage-sitemap',
+
+            // ✅ boss requested default filename "static"
+            'file_base_name' => 'static',
+
             'modified_date' => now()->toDateString(),
 
             // Sitemap URL tags
             // changefreq: always, hourly, daily, weekly, monthly, yearly, never
             'changefreq' => 'weekly',
-            // priority: 0.0 to 1.0
-            'priority' => '0.5',
+
+            // ✅ boss requested default priority 0.9
+            'priority' => '0.9',
 
             // plugin-specific
             'company_info' => '',
@@ -57,35 +69,39 @@ final class MultiPageSettings
 
         // ---- sanitize inputs
         $sitemapsDir = trim((string) ($settings['sitemaps_dir'] ?? $defaults['sitemaps_dir']));
+        $sitemapsDir = trim($sitemapsDir, '/'); // allow '' (root), remove leading/trailing '/'
+
         $maxLinks = (int) ($settings['max_links_per_file'] ?? $defaults['max_links_per_file']);
+
         $fileBase = trim((string) ($settings['file_base_name'] ?? $defaults['file_base_name']));
         $modified = trim((string) ($settings['modified_date'] ?? $defaults['modified_date']));
 
         $changefreq = trim((string) ($settings['changefreq'] ?? $defaults['changefreq']));
         $priorityRaw = $settings['priority'] ?? $defaults['priority'];
 
-        // ✅ IMPORTANT: define companyInfo BEFORE using it
         $companyInfo = (string) ($settings['company_info'] ?? $defaults['company_info']);
 
         // ---- normalize required
-        if ($sitemapsDir === '') {
-            $sitemapsDir = $defaults['sitemaps_dir'];
-        }
+        // ✅ DO NOT force sitemapsDir when blank (blank means ROOT)
         if ($maxLinks <= 0) {
-            $maxLinks = $defaults['max_links_per_file'];
+            $maxLinks = (int) $defaults['max_links_per_file'];
         }
+
+        // filename base: keep it non-empty
         if ($fileBase === '') {
-            $fileBase = $defaults['file_base_name'];
+            $fileBase = (string) $defaults['file_base_name'];
         }
+
+        // modified date: keep it non-empty
         if ($modified === '') {
-            $modified = $defaults['modified_date'];
+            $modified = (string) $defaults['modified_date'];
         }
 
         // ---- normalize changefreq (must be valid)
         $allowedChangefreq = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'];
         $changefreq = strtolower($changefreq);
         if (!in_array($changefreq, $allowedChangefreq, true)) {
-            $changefreq = $defaults['changefreq'];
+            $changefreq = (string) $defaults['changefreq'];
         }
 
         // ---- normalize priority (0.0 - 1.0)
@@ -105,7 +121,7 @@ final class MultiPageSettings
         }
 
         $clean = [
-            'sitemaps_dir' => $sitemapsDir,
+            'sitemaps_dir' => $sitemapsDir, // '' allowed => root
             'max_links_per_file' => $maxLinks,
             'file_base_name' => $fileBase,
             'modified_date' => $modified,

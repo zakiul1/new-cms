@@ -32,6 +32,10 @@ class EditMultiPage extends EditRecord
     {
         return null;
     }
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
 
     protected function mutateFormDataBeforeFill(array $data): array
     {

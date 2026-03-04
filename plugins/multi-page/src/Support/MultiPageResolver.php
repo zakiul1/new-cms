@@ -83,12 +83,19 @@ final class MultiPageResolver
             }
         }
 
-        // ✅ Segments for shortcode/token replacement
+        // ✅ Segments for shortcode/token replacement (slugified)
         $segments = $map['replacer'] ?? [];
         if (!is_array($segments)) {
             $segments = [];
         }
         $segments = array_values($segments);
+
+        // ✅ RAW segments for pretty display (exact CSV casing)
+        $segmentsRaw = $map['replacer_raw'] ?? [];
+        if (!is_array($segmentsRaw)) {
+            $segmentsRaw = [];
+        }
+        $segmentsRaw = array_values($segmentsRaw);
 
         // ✅ Mark request as generated multipage URL (prevents canonical redirect in controller)
         $request->attributes->set('multipage_generated', true);
@@ -96,7 +103,12 @@ final class MultiPageResolver
         // Optional: store requested path for SEO canonical
         $request->attributes->set('multipage_requested_path', $path);
 
+        // ✅ Store both:
+        // - multipage_segments: slugified (URL-like)
+        // - multipage_segments_raw: original CSV (pretty display)
         $request->attributes->set('multipage_segments', $segments);
+        $request->attributes->set('multipage_segments_raw', $segmentsRaw);
+
         $request->attributes->set('multipage_base_slug', $baseSlug);
 
         // ✅ Force template for generated links

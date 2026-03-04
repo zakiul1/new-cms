@@ -15,7 +15,7 @@ class BlogPost extends Post
         parent::booted();
 
         // Always scope this model to blog posts only
-        static::addGlobalScope('type', function (Builder $builder) {
+        static::addGlobalScope('blog_post_type', function (Builder $builder) {
             $builder->where('type', 'blog_post');
         });
     }
@@ -25,7 +25,7 @@ class BlogPost extends Post
      * Keep polymorphic type same as core Post model,
      * so termables.termable_type remains consistent.
      */
-    public function getMorphClass()
+    public function getMorphClass(): string
     {
         return Post::class;
     }

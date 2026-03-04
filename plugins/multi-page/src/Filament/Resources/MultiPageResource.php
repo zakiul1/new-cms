@@ -3,17 +3,14 @@
 namespace Plugins\MultiPage\Filament\Resources;
 
 use App\Models\Post;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\CreateMultiPage;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\EditMultiPage;
 use Plugins\MultiPage\Filament\Resources\MultiPageResource\Pages\ListMultiPages;
+use Plugins\MultiPage\Filament\Resources\MultiPageResource\Tables\MultiPagesTable;
 use Plugins\MultiPage\Filament\Schemas\MultiPageForm;
 use UnitEnum;
 
@@ -64,52 +61,8 @@ class MultiPageResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table
-            // ✅ Fix row click URL
-            ->recordUrl(fn(Post $record): string => static::getUrl('edit', ['record' => $record], panel: 'admin'))
-
-            ->columns([
-                TextColumn::make('title')
-                    ->label('Title')
-                    ->searchable()
-                    ->sortable()
-                    // ✅ Fix title link (and "Edit" under title)
-                    ->url(fn(Post $record): string => static::getUrl('edit', ['record' => $record], panel: 'admin')),
-
-                TextColumn::make('status')
-                    ->badge()
-                    ->sortable(),
-
-                TextColumn::make('author.name')
-                    ->label('Author')
-                    ->toggleable()
-                    ->sortable(),
-
-                TextColumn::make('published_at')
-                    ->label('Published')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('updated_at')
-                    ->label('Updated')
-                    ->since()
-                    ->sortable(),
-            ])
-
-            // ✅ Filament v5: use recordActions() with Filament\Actions\* classes
-            ->recordActions([
-                EditAction::make()
-                    ->url(fn(Post $record): string => static::getUrl('edit', ['record' => $record], panel: 'admin')),
-
-                ViewAction::make()
-                    ->url(fn(Post $record): string => url('/' . ltrim((string) $record->slug, '/')))
-                    ->openUrlInNewTab(),
-
-                DeleteAction::make(),
-            ])
-
-            ->defaultSort('updated_at', 'desc');
+        // ✅ Match Pages list view: use a dedicated Table config class (copied from PagesTable)
+        return MultiPagesTable::configure($table);
     }
 
     public static function canCreate(): bool

@@ -14,6 +14,27 @@ class EditBlogPost extends EditRecord
 {
     protected static string $resource = BlogPostResource::class;
 
+    /**
+     * Hide the default "Edit {record}" heading like you wanted.
+     */
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Remove breadcrumbs (also removes "Edit {title}" breadcrumb line).
+     */
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         // Force type
@@ -56,7 +77,6 @@ class EditBlogPost extends EditRecord
 
         // Sync categories (taxonomy: blog_category)
         if (is_array($categoryIds)) {
-            // Remove only blog_category terms and sync
             $taxonomy = \App\Models\Taxonomy::query()->where('key', 'blog_category')->first();
             if ($taxonomy) {
                 $existing = $this->record->terms()
@@ -81,13 +101,12 @@ class EditBlogPost extends EditRecord
             $this->record->save();
         }
 
-        // Clear sitemap cache (same behavior as Static Posts)
+        // Clear sitemap cache
         Cache::forget('cms:sitemap:xml:v2');
     }
 
     protected function syncMediaRoles($record, array $featuredMediaIds, array $productMediaIds): void
     {
-        // Remove existing media links for this post
         PostMedia::query()->where('post_id', $record->getKey())->delete();
 
         $sort = 0;
@@ -113,10 +132,31 @@ class EditBlogPost extends EditRecord
         }
     }
 
+    /**
+     * ✅ Header buttons:
+     * - Cancel (go back) on the left
+     * - Update (save) on the right
+     * - Delete (danger) on the right
+     */
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->label('Delete')
+                ->color('danger'),
+            Actions\Action::make('cancel')
+                ->label('Cancel')
+                ->color('gray')
+                ->url($this->getResource()::getUrl('index'))
+                ->icon('heroicon-o-x-mark'),
+
+            Actions\Action::make('update')
+                ->label('Update')
+                ->color('primary')
+                ->action('save')
+                ->icon('heroicon-o-check'),
+
+
         ];
     }
 }

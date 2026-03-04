@@ -49,11 +49,50 @@ class SettingsMultiPages extends Page implements HasForms
     {
         MultiPageStorage::ensureDirs();
 
+        // Load settings (now defaults allow sitemaps_dir = '')
         $this->data = MultiPageSettings::load();
 
-        $this->refreshCsvFiles(); // also auto-select first file if available
+        // Ensure numeric defaults
+        $this->data['max_links_per_file'] = (int) ($this->data['max_links_per_file'] ?? 20000);
+        if ($this->data['max_links_per_file'] <= 0) {
+            $this->data['max_links_per_file'] = 20000;
+        }
 
+        // Ensure file base defaults
+        $this->data['file_base_name'] = trim((string) ($this->data['file_base_name'] ?? 'static')) ?: 'static';
+
+        // Ensure changefreq
+        $this->data['changefreq'] = trim((string) ($this->data['changefreq'] ?? 'weekly')) ?: 'weekly';
+
+        // Ensure priority [0..1]
+        $priority = (string) ($this->data['priority'] ?? '0.9');
+        if ($priority === '' || !is_numeric($priority)) {
+            $priority = '0.9';
+        }
+        $p = (float) $priority;
+        if ($p < 0) {
+            $p = 0;
+        }
+        if ($p > 1) {
+            $p = 1;
+        }
+        $this->data['priority'] = number_format($p, 1, '.', '');
+
+        // Modified date default
+        $this->data['modified_date'] = $this->data['modified_date'] ?? now()->toDateString();
+
+        // IMPORTANT: allow blank sitemaps_dir (root)
+        $this->data['sitemaps_dir'] = trim((string) ($this->data['sitemaps_dir'] ?? ''));
+        $this->data['sitemaps_dir'] = trim($this->data['sitemaps_dir'], '/'); // keep '' allowed
+
+        $this->refreshCsvFiles();
         $this->form->fill($this->data);
+
+        // Preview URL based on root/folder mode
+        $this->lastSitemapUrl = $this->computeSitemapUrl(
+            (string) ($this->data['file_base_name'] ?? 'static'),
+            (string) ($this->data['sitemaps_dir'] ?? '')
+        );
     }
 
     /**
@@ -79,13 +118,13 @@ class SettingsMultiPages extends Page implements HasForms
                     ->tabs([
                         Tab::make('Generate & Settings')
                             ->schema([
-                                /**
-                                 * ✅ Tab-right actions (View Sitemap) - NOT in page header
-                                 */
                                 ViewField::make('multipage_sitemap_tab_actions')
                                     ->view('multi-page::filament.components.multipage-sitemap-tab-actions')
                                     ->viewData(fn() => [
-                                        'url' => $this->lastSitemapUrl ?: ('/' . ($this->data['file_base_name'] ?? 'multipage-sitemap') . '.xml'),
+                                        'url' => $this->lastSitemapUrl ?: $this->computeSitemapUrl(
+                                            (string) ($this->data['file_base_name'] ?? 'static'),
+                                            (string) ($this->data['sitemaps_dir'] ?? '')
+                                        ),
                                     ])
                                     ->dehydrated(false),
 
@@ -93,26 +132,37 @@ class SettingsMultiPages extends Page implements HasForms
                                     ->schema([
                                         TextInput::make('sitemaps_dir')
                                             ->label('Sitemaps Dir (public)')
-                                            ->helperText('Stored in: storage/app/public/<dir>/')
-                                            ->required(),
+                                            ->helperText('Leave blank to store at ROOT (e.g. /static.xml).')
+                                            ->default('')
+                                            ->disabled()      // ✅ blocks typing + editing
+                                            ->dehydrated(true), // ✅ still saved with form (keep it)
 
                                         TextInput::make('max_links_per_file')
                                             ->label('Max Links (per file)')
                                             ->numeric()
+                                            ->default(20000)
                                             ->required(),
 
                                         TextInput::make('file_base_name')
                                             ->label('File Name')
+                                            ->default('static')
                                             ->helperText('Example: multipage-sitemap (will create multipage-sitemap.xml)')
-                                            ->required(),
+                                            ->required()
+                                            ->live(debounce: 400)
+                                            ->afterStateUpdated(function ($state): void {
+                                                $name = trim((string) $state) ?: 'static';
+                                                $dir = trim((string) ($this->data['sitemaps_dir'] ?? ''));
+                                                $this->lastSitemapUrl = $this->computeSitemapUrl($name, $dir);
+                                            }),
 
                                         DatePicker::make('modified_date')
                                             ->label('Modified Date')
+                                            ->default(now()->toDateString())
                                             ->required(),
 
-                                        // ✅ NEW: Change Frequency
                                         Select::make('changefreq')
                                             ->label('Change Frequency')
+                                            ->default('weekly')
                                             ->options([
                                                 'always' => 'Always',
                                                 'hourly' => 'Hourly',
@@ -125,15 +175,20 @@ class SettingsMultiPages extends Page implements HasForms
                                             ->native(false)
                                             ->required(),
 
-                                        // ✅ NEW: Priority (0.0 - 1.0)
                                         TextInput::make('priority')
                                             ->label('Priority')
+                                            ->default('0.9')
                                             ->numeric()
                                             ->step('0.1')
                                             ->minValue(0)
                                             ->maxValue(1)
                                             ->helperText('Allowed range: 0.0 to 1.0 (example: 0.5)')
                                             ->required(),
+
+                                        ViewField::make('sitemap_generate_button')
+                                            ->view('multi-page::filament.components.multipage-sitemap-generate-inline')
+                                            ->viewData(fn() => [])
+                                            ->dehydrated(false),
                                     ])
                                     ->columns(2),
 
@@ -146,15 +201,11 @@ class SettingsMultiPages extends Page implements HasForms
                                     ]),
                             ]),
 
-                        /**
-                         * ✅ DATA TAB (Left: upload + file list, Right: preview)
-                         */
                         Tab::make('Data')
                             ->schema([
                                 Section::make('')
                                     ->columns(2)
                                     ->schema([
-                                        // LEFT PANEL
                                         Section::make('Data Files')
                                             ->columnSpan(1)
                                             ->schema([
@@ -191,7 +242,6 @@ class SettingsMultiPages extends Page implements HasForms
                                                     ->dehydrated(false),
                                             ]),
 
-                                        // RIGHT PANEL
                                         Section::make('Preview')
                                             ->columnSpan(1)
                                             ->schema([
@@ -206,19 +256,14 @@ class SettingsMultiPages extends Page implements HasForms
                                     ]),
                             ]),
 
-                        /**
-                         * ✅ Company Info tab MUST be last + WpClassicEditor + save button at top (header-like)
-                         */
                         Tab::make('Company Info')
                             ->schema([
                                 Section::make('Company Info')
                                     ->schema([
-                                        // ✅ Save button at top-right (header style)
                                         ViewField::make('company_info_save_button_top')
                                             ->view('multi-page::filament.components.company-info-save')
                                             ->dehydrated(false),
 
-                                        // ✅ Wp Editor (NOT textarea)
                                         WpClassicEditor::make('company_info')
                                             ->label('Company Info')
                                             ->height(260)
@@ -236,10 +281,6 @@ class SettingsMultiPages extends Page implements HasForms
             ]);
     }
 
-    /**
-     * ✅ Only keep Save + Generate in header.
-     * ✅ View Sitemap moved into the tab (right side).
-     */
     protected function getHeaderActions(): array
     {
         return [
@@ -253,30 +294,43 @@ class SettingsMultiPages extends Page implements HasForms
                         ->title('Saved')
                         ->body('Multipage settings saved.')
                         ->send();
+
+                    // refresh preview
+                    $name = trim((string) ($this->data['file_base_name'] ?? 'static')) ?: 'static';
+                    $dir = trim((string) ($this->data['sitemaps_dir'] ?? ''));
+                    $this->lastSitemapUrl = $this->computeSitemapUrl($name, $dir);
                 }),
 
             Action::make('generate_sitemap')
                 ->label('Generate Sitemap')
-                ->action(function () {
-                    MultiPageSettings::save($this->data ?? []);
-
-                    $gen = new MultiPageSitemapGenerator();
-                    $res = $gen->generate();
-
-                    $this->lastSitemapUrl = $res['index'] ?? null;
-
-                    Notification::make()
-                        ->success()
-                        ->title('Sitemap Generated')
-                        ->body('Total links: ' . ($res['count'] ?? 0))
-                        ->send();
-                }),
+                ->action(fn() => $this->generateSitemap()),
         ];
     }
 
     /**
-     * ✅ Refresh file list + auto select first file
+     * ✅ Reusable generator (used by header button and inline button)
      */
+    public function generateSitemap(): void
+    {
+        MultiPageSettings::save($this->data ?? []);
+
+        $gen = new MultiPageSitemapGenerator();
+        $res = $gen->generate();
+
+        // Update preview URL based on current settings
+        $name = trim((string) ($this->data['file_base_name'] ?? 'static')) ?: 'static';
+        $dir = trim((string) ($this->data['sitemaps_dir'] ?? ''));
+        $this->lastSitemapUrl = $this->computeSitemapUrl($name, $dir);
+
+        Notification::make()
+            ->success()
+            ->title('Sitemap Generated')
+            ->body('Total links: ' . ($res['count'] ?? 0))
+            ->send();
+
+        $this->dispatch('$refresh');
+    }
+
     public function refreshCsvFiles(): void
     {
         $disk = Storage::disk('local');
@@ -289,7 +343,6 @@ class SettingsMultiPages extends Page implements HasForms
 
         $this->csvFiles = $names;
 
-        // Auto select first file if none selected
         if (!$this->selectedCsv && count($names) > 0) {
             $this->selectCsv($names[0]);
         }
@@ -392,5 +445,23 @@ class SettingsMultiPages extends Page implements HasForms
         fclose($fh);
 
         $this->csvPreview = $rows;
+    }
+
+    /**
+     * Build public URL based on settings:
+     * - root: /static.xml
+     * - folder: /storage/<dir>/static.xml
+     */
+    private function computeSitemapUrl(string $baseName, string $dir): string
+    {
+        $baseName = trim($baseName) ?: 'static';
+        $dir = trim($dir);
+        $dir = trim($dir, '/');
+
+        if ($dir === '') {
+            return '/' . $baseName . '.xml';
+        }
+
+        return '/' . trim('storage/' . $dir . '/' . $baseName . '.xml', '/');
     }
 }

@@ -2,85 +2,78 @@
 
 namespace Plugins\BlogPosts\Filament\Resources\BlogCategories\Schemas;
 
-use App\Models\Taxonomy;
-use App\Models\Term;
-use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 class BlogCategoryForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema->schema([
-            Grid::make(['default' => 12])
-                ->schema([
+        return $schema
+            ->columns(['default' => 1, 'lg' => 3])
+            ->components([
+                \Filament\Schemas\Components\Section::make('Blog Category')
+                    ->columnSpan(['default' => 1, 'lg' => 2])
+                    ->schema([
+                        TextInput::make('name')
+                            ->required()
+                            ->maxLength(255)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                if (!filled($get('slug'))) {
+                                    $set('slug', Str::slug((string) $state));
+                                }
+                                if (!filled($get('product'))) {
+                                    $set('product', (string) $state);
+                                }
+                            }),
 
-                    Section::make()
-                        ->columnSpan(['default' => 12])
-                        ->schema([
+                        TextInput::make('product')
+                            ->label('Product')
+                            ->maxLength(255)
+                            ->nullable(),
 
-                            TextInput::make('name')
-                                ->required()
-                                ->live(onBlur: true)
-                                ->afterStateUpdated(function ($state, callable $set, callable $get) {
-                                    if (!$get('slug')) {
-                                        $set('slug', Str::slug($state ?? ''));
-                                    }
+                        TextInput::make('slug')
+                            ->label('Slug (optional)')
+                            ->maxLength(255)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(fn($state, callable $set) => $set('slug', filled($state) ? Str::slug((string) $state) : null))
+                            ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
+                            ->nullable(),
 
-                                    if (!$get('product')) {
-                                        $set('product', $state ?? '');
-                                    }
-                                }),
+                        Textarea::make('description')
+                            ->rows(4)
+                            ->nullable(),
 
-                            TextInput::make('slug')
-                                ->required()
-                                ->maxLength(191)
-                                ->live(onBlur: true)
-                                ->afterStateUpdated(function ($state, callable $set) {
-                                    $set('slug', Str::slug($state ?? ''));
-                                }),
+                        Select::make('parent_id')
+                            ->label('Parent')
+                            ->searchable()
+                            ->preload()
+                            ->options(
+                                fn() => \App\Models\Term::query()
+                                    ->whereHas('taxonomy', fn(Builder $q) => $q->where('key', 'blog_category'))
+                                    ->pluck('name', 'id')
+                                    ->all()
+                            )
+                            ->nullable(),
+                    ])
+                    ->columns(1),
 
-                            TextInput::make('product')
-                                ->label('Product')
-                                ->maxLength(191),
-
-                            Textarea::make('description')
-                                ->rows(4)
-                                ->columnSpanFull(),
-
-                            Select::make('parent_id')
-                                ->label('Parent Category')
-                                ->searchable()
-                                ->preload()
-                                ->options(function () {
-                                    $taxonomy = Taxonomy::query()->where('key', 'blog_category')->first();
-                                    if (!$taxonomy) {
-                                        return [];
-                                    }
-
-                                    return Term::query()
-                                        ->where('taxonomy_id', $taxonomy->getKey())
-                                        ->orderBy('name')
-                                        ->pluck('name', 'id')
-                                        ->toArray();
-                                })
-                                ->nullable(),
-
-                            Select::make('visibility')
-                                ->label('Visibility')
-                                ->options([
-                                    'public' => 'Public',
-                                    'private' => 'Private',
-                                ])
-                                ->default('public')
-                                ->required(),
-                        ]),
-                ]),
-        ]);
+                \Filament\Schemas\Components\Section::make('Visibility')
+                    ->columnSpan(['default' => 1, 'lg' => 1])
+                    ->schema([
+                        Select::make('visibility')
+                            ->options([
+                                'public' => 'public',
+                                'private' => 'private',
+                            ])
+                            ->default('public')
+                            ->required(),
+                    ]),
+            ]);
     }
 }

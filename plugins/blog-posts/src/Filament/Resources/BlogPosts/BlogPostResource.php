@@ -25,10 +25,7 @@ class BlogPostResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
     protected static ?string $navigationLabel = 'Blog Posts';
 
-    // ✅ show as a separate menu group
     protected static string|\UnitEnum|null $navigationGroup = 'Blog Posts';
-
-    // ✅ ensure Blog Posts group appears before Static Posts
     protected static ?int $navigationSort = 1;
 
     protected static ?string $recordTitleAttribute = 'title';

@@ -7,7 +7,13 @@ use Illuminate\Support\Facades\Storage;
 final class MultiPageSitemapGenerator
 {
     /**
-     * @return array{index:string, parts:array<int,string>, count:int}
+     * @return array{
+     *   index:string,
+     *   parts:array<int,string>,
+     *   count:int,
+     *   root_index?:string,
+     *   root_parts?:array<int,string>
+     * }
      */
     public function generate(): array
     {
@@ -15,36 +21,36 @@ final class MultiPageSitemapGenerator
 
         $settings = MultiPageSettings::load();
 
+        // IMPORTANT: allow blank dir => ROOT
         $sitemapsDir = trim((string) ($settings['sitemaps_dir'] ?? ''));
+        $sitemapsDir = trim($sitemapsDir, '/');
+
         $maxLinks = (int) ($settings['max_links_per_file'] ?? 20000);
         $baseName = trim((string) ($settings['file_base_name'] ?? ''));
         $modified = trim((string) ($settings['modified_date'] ?? ''));
 
-        // ✅ changefreq + priority from settings
+        // changefreq + priority from settings
         $changefreq = strtolower(trim((string) ($settings['changefreq'] ?? 'weekly')));
-        $priorityRaw = $settings['priority'] ?? '0.5';
+        $priorityRaw = $settings['priority'] ?? '0.9';
 
-        if ($sitemapsDir === '') {
-            $sitemapsDir = 'sitemaps-multipage';
-        }
         if ($maxLinks <= 0) {
             $maxLinks = 20000;
         }
         if ($baseName === '') {
-            $baseName = 'multipage-sitemap';
+            $baseName = 'static';
         }
         if ($modified === '') {
             $modified = now()->toDateString();
         }
 
-        // ✅ normalize changefreq
+        // normalize changefreq
         $allowedChangefreq = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'];
         if (!in_array($changefreq, $allowedChangefreq, true)) {
             $changefreq = 'weekly';
         }
 
-        // ✅ normalize priority: 0.0 - 1.0
-        $priority = is_numeric($priorityRaw) ? (float) $priorityRaw : 0.5;
+        // normalize priority: 0.0 - 1.0
+        $priority = is_numeric($priorityRaw) ? (float) $priorityRaw : 0.9;
         if ($priority < 0.0) {
             $priority = 0.0;
         }
@@ -56,7 +62,25 @@ final class MultiPageSitemapGenerator
         $diskLocal = Storage::disk('local');
         $diskPublic = Storage::disk('public');
 
-        $diskPublic->makeDirectory($sitemapsDir);
+        // Only create dir if not root mode
+        if ($sitemapsDir !== '') {
+            $diskPublic->makeDirectory($sitemapsDir);
+        }
+
+        // Helper: where to write on "public" disk
+        $writePath = function (string $filename) use ($sitemapsDir): string {
+            return $sitemapsDir === '' ? $filename : ($sitemapsDir . '/' . $filename);
+        };
+
+        // Helper: public URL that user can open
+        // - root mode => /file.xml
+        // - folder mode => /storage/<dir>/file.xml
+        $publicUrl = function (string $filename) use ($sitemapsDir): string {
+            if ($sitemapsDir === '') {
+                return '/' . ltrim($filename, '/');
+            }
+            return '/' . trim('storage/' . $sitemapsDir . '/' . $filename, '/');
+        };
 
         // Collect all generated URLs from tracker files
         $trackerFiles = $diskLocal->files(MultiPageStorage::TRACKERS);
@@ -89,9 +113,6 @@ final class MultiPageSitemapGenerator
         sort($urls);
 
         $count = count($urls);
-
-        // Build parts
-        $parts = [];
         $chunks = $count > 0 ? array_chunk($urls, $maxLinks) : [];
 
         // Site base (for absolute loc)
@@ -105,41 +126,69 @@ final class MultiPageSitemapGenerator
             }
         }
 
-        // ✅ FORCE www ONLY when missing (if already www -> keep)
+        // FORCE www ONLY when missing (if already www -> keep)
         $siteUrl = $this->forceWwwIfMissing($siteUrl);
 
+        // -------------------------
+        // Single file sitemap
+        // -------------------------
         if (count($chunks) <= 1) {
-            // Single urlset
             $xml = $this->renderUrlset($siteUrl, $urls, $modified, $changefreq, $priority);
 
             $singleName = $baseName . '.xml';
-            $diskPublic->put($sitemapsDir . '/' . $singleName, $xml);
+            $diskPublic->put($writePath($singleName), $xml);
+
+            // This is what your "Visit" button should use
+            $indexUrl = $publicUrl($singleName);
 
             return [
-                'index' => '/' . trim('storage/' . $sitemapsDir . '/' . $singleName, '/'),
+                'index' => $indexUrl,
                 'parts' => [],
                 'count' => $count,
+
+                // optional compatibility fields
+                'root_index' => '/' . $singleName,
+                'root_parts' => [],
             ];
         }
 
-        // Multiple: write parts + index
+        // -------------------------
+        // Multi-part sitemap + index
+        // -------------------------
+        $partsForIndex = [];
+        $partsForReturn = [];
+
         foreach ($chunks as $i => $chunk) {
             $partName = $baseName . '-' . ($i + 1) . '.xml';
             $xml = $this->renderUrlset($siteUrl, $chunk, $modified, $changefreq, $priority);
 
-            $diskPublic->put($sitemapsDir . '/' . $partName, $xml);
-            $parts[] = '/' . trim('storage/' . $sitemapsDir . '/' . $partName, '/');
+            $diskPublic->put($writePath($partName), $xml);
+
+            $partUrl = $publicUrl($partName);
+            $partsForIndex[] = $partUrl;
+            $partsForReturn[] = $partUrl;
         }
 
         $indexName = $baseName . '.xml';
-        $indexXml = $this->renderIndex($siteUrl, $parts, $modified);
+        $indexXml = $this->renderIndex($siteUrl, $partsForIndex, $modified);
 
-        $diskPublic->put($sitemapsDir . '/' . $indexName, $indexXml);
+        $diskPublic->put($writePath($indexName), $indexXml);
+
+        $indexUrl = $publicUrl($indexName);
+
+        // optional root arrays (boss request)
+        $rootParts = [];
+        foreach ($chunks as $i => $_) {
+            $rootParts[] = '/' . $baseName . '-' . ($i + 1) . '.xml';
+        }
 
         return [
-            'index' => '/' . trim('storage/' . $sitemapsDir . '/' . $indexName, '/'),
-            'parts' => $parts,
+            'index' => $indexUrl,
+            'parts' => $partsForReturn,
             'count' => $count,
+
+            'root_index' => '/' . $indexName,
+            'root_parts' => $rootParts,
         ];
     }
 
@@ -173,17 +222,19 @@ final class MultiPageSitemapGenerator
         return implode("\n", $out);
     }
 
+    /**
+     * @param array<int,string> $partUrls site-relative paths like "/static-1.xml" or "/storage/dir/static-1.xml"
+     */
     private function renderIndex(string $siteUrl, array $partUrls, string $modifiedDate): string
     {
         $modifiedDate = $this->safeDate($modifiedDate);
 
         $out = [];
         $out[] = '
-<?xml version="1.0" encoding="UTF-8"?>';
+    <?xml version="1.0" encoding="UTF-8"?>';
         $out[] = '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
 
         foreach ($partUrls as $p) {
-            // $p is already like "/storage/dir/name.xml" (site-relative)
             $loc = $siteUrl . '/' . ltrim((string) $p, '/');
             $loc = htmlspecialchars($loc, ENT_QUOTES);
 
@@ -220,24 +271,20 @@ final class MultiPageSitemapGenerator
 
         $parts = parse_url($siteUrl);
 
-        // If parse_url fails (rare), fallback simple replace for common cases
+        // If parse_url fails, return as-is
         if (!is_array($parts) || empty($parts['host'])) {
-            // Example: "example.com" (no scheme) => can't safely parse
-// return as-is
             return $siteUrl;
         }
 
         $scheme = $parts['scheme'] ?? 'https';
         $host = $parts['host'];
 
-        // keep if already www
         if (substr($host, 0, 4) !== 'www.') {
             $host = 'www.' . $host;
         }
 
         $port = isset($parts['port']) ? ':' . $parts['port'] : '';
 
-        // keep path? usually site_url should be only domain, but we support it safely
         $path = $parts['path'] ?? '';
         $path = $path ? '/' . ltrim($path, '/') : '';
 

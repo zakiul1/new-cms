@@ -78,11 +78,17 @@ final class MultiPageGenerator
             // Build url from {col1}, {col2} ...
             $url = $urlStructure;
 
-            // slugify every col value
+            // slugify every col value for URL, but also keep RAW values for display
             $segments = [];
+            $segmentsRaw = [];
+
             foreach ($row as $idx => $val) {
                 $n = $idx + 1;
-                $clean = $this->slugify((string) $val);
+
+                $raw = trim((string) $val);
+                $segmentsRaw[] = $raw;
+
+                $clean = $this->slugify($raw);
                 $segments[] = $clean;
 
                 $url = str_replace('{col' . $n . '}', $clean, $url);
@@ -125,7 +131,13 @@ final class MultiPageGenerator
                 'base_slug' => $baseSlug,
                 'base_page_id' => (int) $page->id,
                 'url' => $url,
-                'replacer' => array_values($segments), // segment-1, segment-2 ...
+
+                // ✅ slugified segments for matching/URLs
+                'replacer' => array_values($segments),
+
+                // ✅ RAW segments for pretty display (exact CSV casing)
+                'replacer_raw' => array_values($segmentsRaw),
+
                 'created_at' => now()->toISOString(),
             ];
 

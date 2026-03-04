@@ -2,6 +2,10 @@
 
 namespace Plugins\BlogPosts\Filament\Resources\BlogCategories\Tables;
 
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables;
 use Filament\Tables\Table;
 
@@ -10,30 +14,22 @@ class BlogCategoriesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort('id', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('id')
-                    ->label('ID')
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Name')
-                    ->searchable()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('slug')
-                    ->label('Slug')
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('items_count')
-                    ->label('Items')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('id')->sortable(),
+                Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('parent.name')->label('Parent')->toggleable(),
+                Tables\Columns\TextColumn::make('visibility')->badge()->sortable(),
+                Tables\Columns\TextColumn::make('updated_at')->since()->sortable(),
+                Tables\Columns\TextColumn::make('items_count')->label('Items')->sortable(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()->requiresConfirmation(),
+                EditAction::make(),
+                ViewAction::make()->visible(false),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
             ]);
     }
 }
