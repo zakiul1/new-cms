@@ -1,0 +1,6 @@
+{
+    "name": "Links Block",
+    "slug": "links-block",
+    "version": "1.0.0",
+    "bootstrap": "bootstrap.php"
+}
