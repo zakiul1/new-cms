@@ -55,10 +55,18 @@ class CategoriesTable
                         $viewUrl = method_exists($permalinks, 'termUrl')
                             ? $permalinks->termUrl($record)
                             : (function () use ($record) {
-                            // fallback
-                            return function_exists('cms_term_url')
-                                ? cms_term_url($record)
-                                : url('/category/' . ltrim((string) $record->slug, '/'));
+                            // fallback (always trailing slash)
+                            if (function_exists('cms_term_url')) {
+                                return cms_term_url($record);
+                            }
+
+                            if (function_exists('cms_slug_url')) {
+                                // safest generic fallback
+                                return cms_slug_url('category/' . (string) $record->slug);
+                            }
+
+                            // last resort manual (still trailing slash)
+                            return url('/category/' . trim((string) $record->slug, '/') . '/');
                         })();
 
                         return new HtmlString(
@@ -101,7 +109,11 @@ class CategoriesTable
                             return cms_term_url($record);
                         }
 
-                        return url('/category/' . ltrim((string) $record->slug, '/'));
+                        return function_exists('cms_term_url')
+                            ? cms_term_url($record)
+                            : (function_exists('cms_slug_url')
+                                ? cms_slug_url('category/' . $record->slug)
+                                : url('/category/' . trim((string) $record->slug, '/') . '/'));
                     }, true)
                     ->openUrlInNewTab(),
 

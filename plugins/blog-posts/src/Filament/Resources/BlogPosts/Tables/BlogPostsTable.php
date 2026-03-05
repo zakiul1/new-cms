@@ -34,7 +34,9 @@ class BlogPostsTable
                     // ✅ Truncate in table, show full title on hover
                     ->formatStateUsing(function ($state, $record) {
                         $editUrl = \Plugins\BlogPosts\Filament\Resources\BlogPosts\BlogPostResource::getUrl('edit', ['record' => $record]);
-                        $viewUrl = url('/blog/' . ltrim((string) $record->slug, '/'));
+                        $viewUrl = function_exists('cms_slug_url')
+                            ? cms_slug_url('blog/' . (string) $record->slug)
+                            : url('/blog/' . trim((string) $record->slug, '/') . '/');
 
                         $full = (string) $state;
                         $short = mb_strlen($full) > 70 ? (mb_substr($full, 0, 70) . '…') : $full;
@@ -75,7 +77,9 @@ class BlogPostsTable
                 Action::make('view')
                     ->label('View')
                     ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn($record) => url('/blog/' . ltrim((string) $record->slug, '/')))
+                    ->url(fn($record) => function_exists('cms_slug_url')
+                        ? cms_slug_url('blog/' . (string) $record->slug)
+                        : url('/blog/' . trim((string) $record->slug, '/') . '/'))
                     ->openUrlInNewTab(),
 
                 EditAction::make(),

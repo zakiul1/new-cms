@@ -36,12 +36,13 @@ class SitemapGenerator
 
     /**
      * Discover all post types present in DB (public/private will be filtered later by frontendVisible).
+     * Also appends virtual sitemap types (e.g. siatex-tags) if their plugin model exists.
      *
      * @return array<int, string>
      */
     private function discoverPostTypes(): array
     {
-        return Post::query()
+        $types = Post::query()
             ->select('type')
             ->whereNotNull('type')
             ->where('type', '!=', '')
@@ -50,6 +51,13 @@ class SitemapGenerator
             ->filter()
             ->values()
             ->all();
+
+        // ✅ Virtual type: Siatex Tags (plugin)
+        if (class_exists(\Plugins\SiatexTags\Models\SiatexTag::class)) {
+            $types[] = 'siatex-tags';
+        }
+
+        return array_values(array_unique($types));
     }
 
     /**
@@ -66,6 +74,11 @@ class SitemapGenerator
         if (!is_array($selected) || count($selected) === 0) {
             // Default legacy behavior: include page + post when present
             $selected = ['page', 'post'];
+
+            // ✅ Default include virtual type if available
+            if (in_array('siatex-tags', $available, true)) {
+                $selected[] = 'siatex-tags';
+            }
         }
 
         $selected = array_values(array_filter(array_map(function ($v) {
@@ -108,14 +121,16 @@ class SitemapGenerator
         $pagesFreq = (string) $this->settings->get('seo', 'sitemap_pages_changefreq', 'monthly');
         $mediaFreq = (string) $this->settings->get('seo', 'sitemap_media_changefreq', 'monthly');
 
-        // ✅ Dynamic post types
+        // ✅ Dynamic post types (+ virtual types)
         $availableTypes = $this->discoverPostTypes();
         $selectedTypes = $this->selectedPostTypes($availableTypes);
 
         /**
          * For each selected type:
          * - type=page uses pageUrl + homepage special handling
-         * - others use postUrl
+         * - type=post uses postUrl
+         * - type=siatex-tags uses plugin model
+         * - others use Post custom types
          *
          * Output filenames:
          * - page.xml, post.xml, siatex-tags.xml, etc.
@@ -125,6 +140,9 @@ class SitemapGenerator
                 $items = $this->buildPagesUrls($pagesPriority, $pagesFreq);
             } elseif ($type === 'post') {
                 $items = $this->buildPostsUrls($postsPriority, $postsFreq);
+            } elseif ($type === 'siatex-tags') {
+                // ✅ Virtual type sitemap (plugin)
+                $items = $this->buildSiatexTagsUrls($postsPriority, $postsFreq);
             } else {
                 // Custom post type sitemap
                 $items = $this->buildTypeUrls($type, $postsPriority, $postsFreq);
@@ -270,7 +288,7 @@ class SitemapGenerator
             $lastmod = ($p->updated_at ?? $p->published_at ?? now())->toAtomString();
 
             $urls[] = [
-                'loc' => $this->permalinks->pageUrl($p),
+                'loc' => $this->permalinks->pageUrl($p), // now trailing slash via PermalinkManager
                 'lastmod' => $lastmod,
                 'changefreq' => $changefreq,
                 'priority' => $priority,
@@ -307,7 +325,7 @@ class SitemapGenerator
             $lastmod = ($p->updated_at ?? $p->published_at ?? now())->toAtomString();
 
             $urls[] = [
-                'loc' => $this->permalinks->postUrl($p),
+                'loc' => $this->permalinks->postUrl($p), // now trailing slash via PermalinkManager (non-plain)
                 'lastmod' => $lastmod,
                 'changefreq' => $changefreq,
                 'priority' => $priority,
@@ -318,7 +336,7 @@ class SitemapGenerator
     }
 
     /**
-     * Generic sitemap for any Post type (custom types like "siatex-tags").
+     * Generic sitemap for any Post type (custom types).
      *
      * @return array<int, array{loc:string,lastmod:string,changefreq:string,priority:string}>
      */
@@ -345,7 +363,51 @@ class SitemapGenerator
 
             // If your permalink manager uses pageUrl only for type=page, keep postUrl for all others.
             $urls[] = [
-                'loc' => $this->permalinks->postUrl($p),
+                'loc' => $this->permalinks->postUrl($p), // now trailing slash via PermalinkManager (non-plain)
+                'lastmod' => $lastmod,
+                'changefreq' => $changefreq,
+                'priority' => $priority,
+            ];
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Siatex Tags sitemap urls (plugin content).
+     *
+     * IMPORTANT: This assumes the tag has a public URL that matches its "slug" value.
+     * If your tag URLs are under a prefix (e.g. "/tag/{slug}/"), change the loc building below.
+     *
+     * @return array<int, array{loc:string,lastmod:string,changefreq:string,priority:string}>
+     */
+    private function buildSiatexTagsUrls(string $priority, string $changefreq): array
+    {
+        if (!class_exists(\Plugins\SiatexTags\Models\SiatexTag::class)) {
+            return [];
+        }
+
+        $base = $this->baseUrl();
+
+        $rows = \Plugins\SiatexTags\Models\SiatexTag::query()
+            ->whereNotNull('slug')
+            ->where('slug', '!=', '')
+            ->orderByDesc('updated_at')
+            ->get(['slug', 'updated_at', 'created_at']);
+
+        $urls = [];
+
+        foreach ($rows as $tag) {
+            $slug = trim((string) $tag->slug, '/');
+            if ($slug === '') {
+                continue;
+            }
+
+            $lastmod = ($tag->updated_at ?? $tag->created_at ?? now())->toAtomString();
+
+            // ✅ keep consistent trailing slash behavior
+            $urls[] = [
+                'loc' => $base . '/' . $slug . '/',
                 'lastmod' => $lastmod,
                 'changefreq' => $changefreq,
                 'priority' => $priority,
@@ -386,8 +448,9 @@ class SitemapGenerator
 
             $lastmod = ($m->updated_at ?? $m->created_at ?? now())->toAtomString();
 
+            // ✅ trailing slash for media attachment URLs too
             $urls[] = [
-                'loc' => $base . '/' . $slug,
+                'loc' => $base . '/' . $slug . '/',
                 'lastmod' => $lastmod,
                 'changefreq' => $changefreq,
                 'priority' => $priority,

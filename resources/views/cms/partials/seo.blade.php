@@ -106,141 +106,188 @@
         $robots = 'noindex, nofollow';
     }
 
-    // ------------------------------------
-    // Canonical
-    // ------------------------------------
-    $canonical = trim((string) ($seoInput['canonical'] ?? ''));
-    if ($canonical === '') {
-        $canonical = url()->current();
-    }
-    $canonical = rtrim($canonical, '/');
-    if ($canonical === '') {
-        $canonical = url('/');
-    }
-
-    // ------------------------------------
-    // Open Graph
-    // ------------------------------------
-    $og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
-
-    $ogTitle = trim((string) ($og['title'] ?? $title));
-    $ogDesc = trim((string) ($og['description'] ?? $desc));
-    $ogType = trim((string) ($og['type'] ?? 'article'));
-    $ogUrl = rtrim(trim((string) ($og['url'] ?? $canonical)), '/');
-    if ($ogUrl === '') {
-        $ogUrl = url('/');
-    }
-
-    $ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
-
-    // ------------------------------------
-    // Twitter
-    // ------------------------------------
-    $tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
-
-    $twTitle = trim((string) ($tw['title'] ?? $title));
-    $twDesc = trim((string) ($tw['description'] ?? $desc));
-    $twCard = trim((string) ($tw['card'] ?? ''));
-
-    if ($twCard === '') {
-        $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
-    }
-
-    // ------------------------------------
-    // ✅ Apply shortcodes to SEO fields (CMS parser preferred)
-    // ------------------------------------
-    $shortcodeCtx = [
-        'post' => $postObj,
-        'media' => $mediaObj,
-        'siatex_tag' => $tagObj,
-    ];
-
-    $applyShortcodes = function (?string $value) use ($shortcodeCtx): string {
-        $value = (string) $value;
-
-        // Prefer CMS parser (more consistent)
-        try {
-            $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
-            return (string) $parser->render($value, $shortcodeCtx);
-        } catch (\Throwable $e) {
-            // fallback to do_shortcode if available
+    /**
+     * ✅ Trailing slash normalizer for canonical + og:url
+     * - Keeps query + hash
+     * - DOES NOT add trailing slash for "file-like" URLs (contains a dot in last segment)
+     */
+    $ensureTrailingSlashUrl = function (string $url): string {
+        $url = trim($url);
+        if ($url === '') {
+            return $url;
         }
 
-        if (!function_exists('do_shortcode')) {
-            return $value;
+        $hash = '';
+        $query = '';
+
+        // Extract hash first
+        if (str_contains($url, '#')) {
+            [$url, $hash] = explode('#', $url, 2);
+            $hash = '#' . $hash;
         }
 
-        try {
-            return (string) do_shortcode($value, $shortcodeCtx);
-        } catch (\Throwable $e) {
-            return $value;
+        // Then extract query
+        if (str_contains($url, '?')) {
+            [$url, $query] = explode('?', $url, 2);
+            $query = '?' . $query;
         }
-    };
 
-    $title = trim($applyShortcodes($title));
-    $desc = trim($applyShortcodes($desc));
-    $ogTitle = trim($applyShortcodes($ogTitle));
-    $ogDesc = trim($applyShortcodes($ogDesc));
-    $twTitle = trim($applyShortcodes($twTitle));
-    $twDesc = trim($applyShortcodes($twDesc));
-
-    // Extra meta tags
-    $extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
-
-    // ------------------------------------
-    // JSON-LD (unchanged logic)
-    // ------------------------------------
-    $rawJsonLd = '';
-
-    if ($postObj) {
-        $m = is_array($postObj->meta_json ?? null) ? $postObj->meta_json : [];
-        $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
+        $path = parse_url($url, PHP_URL_PATH);
+        if (is_string($path) && $path !== '') {
+            $lastSeg = basename($path);
+            if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
+                // file-like (sitemap.xml, images, css/js) => don't force slash
+            return $url . $query . $hash;
+        }
     }
 
-    if (($rawJsonLd === '' || $rawJsonLd === null) && $mediaObj) {
-        $m2 = is_array($mediaObj->meta ?? null) ? $mediaObj->meta : [];
-        $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+    // normalize "/" and add slash otherwise
+    $url = rtrim($url, '/') . '/';
+
+    return $url . $query . $hash;
+};
+
+// ------------------------------------
+// Canonical
+// ------------------------------------
+$canonical = trim((string) ($seoInput['canonical'] ?? ''));
+if ($canonical === '') {
+    $canonical = url()->current();
+}
+if ($canonical === '') {
+    $canonical = url('/');
+}
+
+// ✅ FIX: Always trailing slash canonical
+$canonical = (string) $ensureTrailingSlashUrl($canonical);
+
+// ------------------------------------
+// Open Graph
+// ------------------------------------
+$og = is_array($seoInput['og'] ?? null) ? $seoInput['og'] : [];
+
+$ogTitle = trim((string) ($og['title'] ?? $title));
+$ogDesc = trim((string) ($og['description'] ?? $desc));
+$ogType = trim((string) ($og['type'] ?? 'article'));
+
+$ogUrl = trim((string) ($og['url'] ?? $canonical));
+if ($ogUrl === '') {
+    $ogUrl = $canonical;
+}
+
+// ✅ FIX: Always trailing slash og:url
+$ogUrl = (string) $ensureTrailingSlashUrl($ogUrl);
+
+$ogImage = trim((string) ($og['image'] ?? ($seoInput['og_image'] ?? '')));
+
+// ------------------------------------
+// Twitter
+// ------------------------------------
+$tw = is_array($seoInput['twitter'] ?? null) ? $seoInput['twitter'] : [];
+
+$twTitle = trim((string) ($tw['title'] ?? $title));
+$twDesc = trim((string) ($tw['description'] ?? $desc));
+$twCard = trim((string) ($tw['card'] ?? ''));
+
+if ($twCard === '') {
+    $twCard = $ogImage !== '' ? 'summary_large_image' : 'summary';
+}
+
+// ------------------------------------
+// ✅ Apply shortcodes to SEO fields (CMS parser preferred)
+// ------------------------------------
+$shortcodeCtx = [
+    'post' => $postObj,
+    'media' => $mediaObj,
+    'siatex_tag' => $tagObj,
+];
+
+$applyShortcodes = function (?string $value) use ($shortcodeCtx): string {
+    $value = (string) $value;
+
+    // Prefer CMS parser (more consistent)
+    try {
+        $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
+        return (string) $parser->render($value, $shortcodeCtx);
+    } catch (\Throwable $e) {
+        // fallback to do_shortcode if available
     }
 
-    if (($rawJsonLd === '' || $rawJsonLd === null) && $tagObj) {
-        $m3 = is_array($tagObj->meta_json ?? null) ? $tagObj->meta_json : [];
-        $rawJsonLd = data_get($m3, 'custom_json', '') ?: data_get($m3, 'seo.custom_json', '');
+    if (!function_exists('do_shortcode')) {
+        return $value;
     }
 
-    $jsonLd = '';
+    try {
+        return (string) do_shortcode($value, $shortcodeCtx);
+    } catch (\Throwable $e) {
+        return $value;
+    }
+};
 
-    if (is_array($rawJsonLd)) {
-        $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
-    } else {
-        $jsonLd = trim((string) $rawJsonLd);
+$title = trim($applyShortcodes($title));
+$desc = trim($applyShortcodes($desc));
+$ogTitle = trim($applyShortcodes($ogTitle));
+$ogDesc = trim($applyShortcodes($ogDesc));
+$twTitle = trim($applyShortcodes($twTitle));
+$twDesc = trim($applyShortcodes($twDesc));
 
-        if ($jsonLd !== '') {
-            $openTag = '<' . 'script';
-            $closeTag = '</' . 'script' . '>';
+// Extra meta tags
+$extraMeta = is_array($seoInput['meta'] ?? null) ? $seoInput['meta'] : [];
 
-            $openPos = stripos($jsonLd, $openTag);
-            if ($openPos !== false) {
-                $gtPos = strpos($jsonLd, '>', $openPos);
-                if ($gtPos !== false) {
-                    $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
-                    if ($endPos !== false) {
-                        $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
-                        $jsonLd = trim((string) $jsonLd);
-                    }
+// ------------------------------------
+// JSON-LD (unchanged logic)
+// ------------------------------------
+$rawJsonLd = '';
+
+if ($postObj) {
+    $m = is_array($postObj->meta_json ?? null) ? $postObj->meta_json : [];
+    $rawJsonLd = data_get($m, 'custom_json', '') ?: data_get($m, 'seo.custom_json', '');
+}
+
+if (($rawJsonLd === '' || $rawJsonLd === null) && $mediaObj) {
+    $m2 = is_array($mediaObj->meta ?? null) ? $mediaObj->meta : [];
+    $rawJsonLd = data_get($m2, 'custom_json', '') ?: data_get($m2, 'frontend.custom_json', '');
+}
+
+if (($rawJsonLd === '' || $rawJsonLd === null) && $tagObj) {
+    $m3 = is_array($tagObj->meta_json ?? null) ? $tagObj->meta_json : [];
+    $rawJsonLd = data_get($m3, 'custom_json', '') ?: data_get($m3, 'seo.custom_json', '');
+}
+
+$jsonLd = '';
+
+if (is_array($rawJsonLd)) {
+    $jsonLd = json_encode($rawJsonLd, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
+} else {
+    $jsonLd = trim((string) $rawJsonLd);
+
+    if ($jsonLd !== '') {
+        $openTag = '<' . 'script';
+        $closeTag = '</' . 'script' . '>';
+
+        $openPos = stripos($jsonLd, $openTag);
+        if ($openPos !== false) {
+            $gtPos = strpos($jsonLd, '>', $openPos);
+            if ($gtPos !== false) {
+                $endPos = stripos($jsonLd, $closeTag, $gtPos + 1);
+                if ($endPos !== false) {
+                    $jsonLd = substr($jsonLd, $gtPos + 1, $endPos - ($gtPos + 1));
+                    $jsonLd = trim((string) $jsonLd);
                 }
             }
         }
     }
+}
 
-    $jsonLdIsValid = false;
+$jsonLdIsValid = false;
 
-    if ($jsonLd !== '') {
-        json_decode($jsonLd, true);
-        $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
+if ($jsonLd !== '') {
+    json_decode($jsonLd, true);
+    $jsonLdIsValid = json_last_error() === JSON_ERROR_NONE;
 
-        if ($jsonLdIsValid) {
-            $closing = '</' . 'script' . '>';
-            $safeClosing = '<' . '\\/' . 'script' . '>';
+    if ($jsonLdIsValid) {
+        $closing = '</' . 'script' . '>';
+        $safeClosing = '<' . '\\/' . 'script' . '>';
             $jsonLd = str_replace($closing, $safeClosing, $jsonLd);
         }
     }

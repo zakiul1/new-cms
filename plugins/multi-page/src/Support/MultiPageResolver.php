@@ -38,16 +38,20 @@ final class MultiPageResolver
         } elseif ($disk->exists($mapPathOld)) {
             $mapPath = $mapPathOld;
         } else {
+            // ✅ IMPORTANT: no mapping => NOT a multipage-generated URL
+            // Let normal CMS routing handle it (post/page/media/tag).
             return null;
         }
 
         $raw = $disk->get($mapPath);
         $map = json_decode((string) $raw, true);
         if (!is_array($map)) {
+            // broken mapping => let normal routing handle (or 404)
             return null;
         }
 
         $baseSlug = (string) ($map['base_slug'] ?? '');
+        $baseSlug = trim($baseSlug, '/');
         if ($baseSlug === '') {
             return null;
         }
@@ -58,6 +62,7 @@ final class MultiPageResolver
             ->first();
 
         if (!$page) {
+            // base multipage deleted/disabled => not resolvable
             return null;
         }
 
@@ -66,7 +71,8 @@ final class MultiPageResolver
         $enabled = (bool) ($cfg['enabled'] ?? false);
 
         /**
-         * ✅ Optional: Redirect "default generated URL" back to canonical /{baseSlug}
+         * ✅ Optional: Redirect "default generated URL" back to canonical /{baseSlug}/
+         * Your CMS standard is trailing slash.
          */
         if ($enabled) {
             $urlStructure = trim((string) ($cfg['url_structure'] ?? ''));
@@ -79,39 +85,33 @@ final class MultiPageResolver
             $defaultUrl = $gen->buildDefaultUrl($urlStructure, $defaultSegments);
 
             if ($defaultUrl && rtrim($defaultUrl, '/') === rtrim($path, '/')) {
-                return redirect('/' . ltrim($baseSlug, '/'), 301);
+                $qs = $request->getQueryString();
+                $to = '/' . $baseSlug . '/' . ($qs ? ('?' . $qs) : '');
+                return redirect()->to($to, 301);
             }
         }
 
         // ✅ Segments for shortcode/token replacement (slugified)
         $segments = $map['replacer'] ?? [];
-        if (!is_array($segments)) {
-            $segments = [];
-        }
-        $segments = array_values($segments);
+        $segments = is_array($segments) ? array_values($segments) : [];
 
         // ✅ RAW segments for pretty display (exact CSV casing)
         $segmentsRaw = $map['replacer_raw'] ?? [];
-        if (!is_array($segmentsRaw)) {
-            $segmentsRaw = [];
-        }
-        $segmentsRaw = array_values($segmentsRaw);
+        $segmentsRaw = is_array($segmentsRaw) ? array_values($segmentsRaw) : [];
 
         // ✅ Mark request as generated multipage URL (prevents canonical redirect in controller)
         $request->attributes->set('multipage_generated', true);
 
-        // Optional: store requested path for SEO canonical
+        // store requested path (for SEO canonical if needed)
         $request->attributes->set('multipage_requested_path', $path);
 
-        // ✅ Store both:
-        // - multipage_segments: slugified (URL-like)
-        // - multipage_segments_raw: original CSV (pretty display)
+        // Store both segment sets
         $request->attributes->set('multipage_segments', $segments);
         $request->attributes->set('multipage_segments_raw', $segmentsRaw);
 
         $request->attributes->set('multipage_base_slug', $baseSlug);
 
-        // ✅ Force template for generated links
+        // ✅ Force template for generated links (optional)
         $template = trim((string) data_get($meta, 'template', ''));
         if ($template !== '') {
             $request->attributes->set('cms_forced_template', $template);

@@ -31,19 +31,21 @@ class BlogPostForm
                     ->columnSpan(['default' => 1, 'lg' => 2])
                     ->tabs([
 
-                        // ✅ Content tab (same as Static Posts)
+                        // ✅ Content tab
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
                                     ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
+                                    // ✅ Keep this for EDIT only; on CREATE we auto-generate in CreateBlogPost page
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                         if (!filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }
                                     }),
 
+                                // ✅ HIDE on CREATE: Slug field removed from create screen
                                 TextInput::make('slug')
                                     ->label('Slug (optional)')
                                     ->maxLength(255)
@@ -56,8 +58,10 @@ class BlogPostForm
                                     ->rule(function ($record) {
                                         return Rule::unique('posts', 'slug')->ignore($record?->id);
                                     })
-                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).'),
+                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
+                                    ->visible(fn($record) => (bool) $record), // ✅ only show on EDIT
 
+                                // ✅ HIDE on CREATE: Permalink preview removed from create screen
                                 Placeholder::make('permalink_preview')
                                     ->label('Permalink')
                                     ->content(function ($record, Get $get) {
@@ -70,8 +74,11 @@ class BlogPostForm
 
                                         $slug = $slug !== '' ? $slug : '(auto)';
 
-                                        return "{$base}/blog/{$slug}";
-                                    }),
+                                        return function_exists('cms_slug_url')
+                                            ? cms_slug_url('blog/' . $slug)
+                                            : "{$base}/blog/{$slug}/";
+                                    })
+                                    ->visible(fn($record) => (bool) $record), // ✅ only show on EDIT
 
                                 WpClassicEditor::make('content_json')
                                     ->label('Content')
@@ -97,7 +104,7 @@ class BlogPostForm
                                     }),
 
                                 /**
-                                 * Used by shortcode when [bp lmbtn] is present (same idea as Static Posts).
+                                 * Used by shortcode when [bp lmbtn] is present.
                                  */
                                 TextInput::make('meta_json.blog_posts.learn_more_url')
                                     ->label('Learnmore button link')
@@ -113,7 +120,7 @@ class BlogPostForm
                                     ->nullable(),
                             ]),
 
-                        // ✅ Custom CSS & JS tab (same as Static Posts)
+                        // ✅ Custom CSS & JS tab
                         Tab::make('Custom CSS & JS')
                             ->schema([
                                 Textarea::make('meta_json.assets.css')
@@ -165,7 +172,7 @@ class BlogPostForm
                                     }),
                             ]),
 
-                        // ✅ Frontend Preview tab (same as Static Posts)
+                        // ✅ Frontend Preview tab
                         Tab::make('Frontend Preview')
                             ->schema([
                                 Placeholder::make('frontend_preview')
@@ -177,7 +184,9 @@ class BlogPostForm
                                             );
                                         }
 
-                                        $url = url('/blog/' . $record->slug);
+                                        $url = function_exists('cms_slug_url')
+                                            ? cms_slug_url('blog/' . (string) $record->slug)
+                                            : url('/blog/' . trim((string) $record->slug, '/') . '/');
 
                                         return new HtmlString(
                                             '<a class="text-primary-600 underline" target="_blank" href="' . e($url) . '">' . e($url) . '</a>'
@@ -211,7 +220,7 @@ class BlogPostForm
                             ->native(false)
                             ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
 
-                        // ✅ Blog Categories (taxonomy: blog_category) — same sync logic as Static Posts
+                        // ✅ Blog Categories (taxonomy: blog_category)
                         Select::make('blog_category_term_ids')
                             ->label('Categories')
                             ->multiple()
@@ -284,7 +293,6 @@ class BlogPostForm
                                 $record->terms()->sync($final);
                             }),
 
-                        // ✅ Same as Static Posts: store ids directly on model fields
                         MediaPicker::make('featured_media_ids')
                             ->label('Featured Images')
                             ->modalHeading('Featured images')

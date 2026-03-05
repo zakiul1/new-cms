@@ -10,6 +10,7 @@ use App\Cms\Content\Shortcodes\ShortcodeRegistry;
 use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Core\SafeMode;
 use App\Cms\Core\Settings;
+use App\Cms\Core\SettingsRepository;
 use App\Cms\Hooks\Hooks;
 use App\Cms\Hooks\HookPoints;
 use App\Cms\Menus\MenuRegistry;
@@ -32,6 +33,8 @@ use App\Cms\Widgets\SidebarRenderer;
 use App\Cms\Widgets\WidgetRegistry;
 use App\Cms\Widgets\Types\MenuWidget;
 use App\Cms\Widgets\Types\TextWidget;
+use App\Cms\Widgets\Types\CategoriesWidget;
+use App\Cms\Widgets\Types\ShortcodeWidget;
 use App\Models\Widget;
 use App\Models\WidgetPlacement;
 use App\Observers\WidgetCacheObserver;
@@ -105,6 +108,11 @@ class CmsServiceProvider extends ServiceProvider
         // Content pipeline (shortcodes)
         $this->registerContentPipeline($hooks);
 
+        // ✅ IMPORTANT: enable shortcodes for widget output (footer builder needs this)
+        $hooks->addFilter('cms.sidebar.widget_html', function ($html, $widget, $ctx) use ($hooks) {
+            return $hooks->applyFilters(HookPoints::CMS_THE_CONTENT, (string) $html, is_array($ctx) ? $ctx : []);
+        }, 20, 3);
+
         // Theme: boot views / publish dist if missing
         $this->app->make(ThemeManager::class)->bootActiveTheme();
 
@@ -147,15 +155,40 @@ class CmsServiceProvider extends ServiceProvider
             app(MenuRegistry::class)->register('footer', 'Footer Menu');
         }, 5, 0);
 
+        /**
+         * ✅ Dynamic Footer Sidebars
+         * footer-1..footer-3/4/5 based on core.footer_columns
+         */
         $hooks->addAction(HookPoints::CMS_REGISTER_SIDEBARS, function () {
             app(SidebarRegistry::class)->register('sidebar-1', 'Main Sidebar');
-            app(SidebarRegistry::class)->register('footer-1', 'Footer Widgets');
+
+            $cols = (int) app(SettingsRepository::class)->get('core', 'footer_columns', 3);
+            $cols = max(3, min(5, $cols));
+
+            for ($i = 1; $i <= $cols; $i++) {
+                app(SidebarRegistry::class)->register("footer-{$i}", "Footer Column {$i}");
+            }
         }, 5, 0);
 
+        /**
+         * ✅ Register Core Widget Types
+         * - Text (existing)
+         * - Menu (existing)
+         * - Categories (new)
+         * - Shortcode (optional)
+         */
         $hooks->addAction(HookPoints::CMS_REGISTER_WIDGETS, function () {
             $reg = app(WidgetRegistry::class);
+
             $reg->register(TextWidget::class);
             $reg->register(MenuWidget::class);
+
+            $reg->register(CategoriesWidget::class);
+
+            // If you created ShortcodeWidget, register it too
+            if (class_exists(ShortcodeWidget::class)) {
+                $reg->register(ShortcodeWidget::class);
+            }
         }, 5, 0);
     }
 

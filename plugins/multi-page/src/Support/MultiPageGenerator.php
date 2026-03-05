@@ -94,8 +94,11 @@ final class MultiPageGenerator
                 $url = str_replace('{col' . $n . '}', $clean, $url);
             }
 
-            // Normalize url
+            // Normalize url (✅ ALWAYS TRAILING SLASH except "/")
             $url = '/' . trim($url, '/');
+            if ($url !== '/') {
+                $url .= '/';
+            }
 
             // If url still contains unresolved {colN}, skip row
             if (preg_match('/\{col\d+\}/', $url)) {
@@ -204,7 +207,9 @@ final class MultiPageGenerator
             return null;
         }
 
-        return '/' . trim($url, '/');
+        // ✅ ALWAYS trailing slash except "/"
+        $url = '/' . trim($url, '/');
+        return $url !== '/' ? $url . '/' : '/';
     }
 
     private function slugify(string $s): string

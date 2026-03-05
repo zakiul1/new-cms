@@ -231,7 +231,9 @@ class EditMedia extends EditRecord
                                         }
                                         $slug = $slug !== '' ? $slug : '(auto)';
 
-                                        return $base . '/' . ltrim($slug, '/');
+                                        return function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $slug)
+                                            : ($base . '/' . trim((string) $slug, '/') . '/');
                                     }),
 
                                 WpClassicEditor::make('description')
@@ -433,7 +435,9 @@ class EditMedia extends EditRecord
                                             return new \Illuminate\Support\HtmlString('');
                                         }
 
-                                        $url = url('/' . ltrim($record->slug, '/'));
+                                        $url = function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $record->slug)
+                                            : url('/' . trim((string) $record->slug, '/') . '/');
 
                                         return new \Illuminate\Support\HtmlString(
                                             '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'
@@ -620,7 +624,9 @@ class EditMedia extends EditRecord
                                             return '';
                                         }
 
-                                        return url('/' . ltrim($slug, '/'));
+                                        return function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $slug)
+                                            : url('/' . trim((string) $slug, '/') . '/');
                                     })
                                     ->helperText('This is the public attachment page URL (if enabled + public).'),
                             ])
@@ -783,7 +789,9 @@ class EditMedia extends EditRecord
 
                     return null;
                 })
-                ->url(fn(Media $record): string => url('/' . ltrim((string) $record->slug, '/')))
+                ->url(fn(Media $record): string => function_exists('cms_slug_url')
+                    ? cms_slug_url((string) $record->slug)
+                    : url('/' . trim((string) $record->slug, '/') . '/'))
                 ->openUrlInNewTab(),
 
             Action::make('back')

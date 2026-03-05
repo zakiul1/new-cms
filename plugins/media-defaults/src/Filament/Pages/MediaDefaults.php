@@ -540,8 +540,11 @@ class MediaDefaults extends Page implements HasForms
                                                     return new HtmlString('<div class="text-sm text-slate-500">Preview media not found or missing slug.</div>');
                                                 }
 
-                                                $url = url('/' . ltrim((string) $media->slug, '/'))
-                                                    . '?md_preview=1&_ts=' . urlencode($this->previewNonce);
+                                                $baseUrl = function_exists('cms_slug_url')
+                                                    ? cms_slug_url((string) $media->slug)
+                                                    : url('/' . trim((string) $media->slug, '/') . '/');
+
+                                                $url = $baseUrl . '?md_preview=1&_ts=' . urlencode($this->previewNonce);
 
                                                 return new HtmlString(
                                                     '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'

@@ -7,6 +7,47 @@ use App\Models\Post;
 class Seo
 {
     /**
+     * Ensure a trailing slash on non-file URLs (keeps query + hash).
+     * Does NOT add slash to "file-like" URLs (e.g. .xml, .png, .css, .js).
+     */
+    protected static function ensureTrailingSlash(string $url): string
+    {
+        $url = trim($url);
+
+        if ($url === '') {
+            return $url;
+        }
+
+        $hash = '';
+        $query = '';
+
+        // Extract hash first
+        if (str_contains($url, '#')) {
+            [$url, $hash] = explode('#', $url, 2);
+            $hash = '#' . $hash;
+        }
+
+        // Then extract query
+        if (str_contains($url, '?')) {
+            [$url, $query] = explode('?', $url, 2);
+            $query = '?' . $query;
+        }
+
+        // If it looks like a file path, don't force trailing slash
+        $path = parse_url($url, PHP_URL_PATH);
+        if (is_string($path) && $path !== '') {
+            $lastSeg = basename($path);
+            if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
+                return $url . $query . $hash;
+            }
+        }
+
+        $url = rtrim($url, '/') . '/';
+
+        return $url . $query . $hash;
+    }
+
+    /**
      * Build <title> + meta tags for a post/page.
      * Call in theme <head>.
      */
@@ -17,6 +58,7 @@ class Seo
 
         $siteName = (string) ($ctx['site_name'] ?? config('app.name'));
         $url = (string) ($ctx['url'] ?? self::permalink($post));
+        $url = self::ensureTrailingSlash($url);
 
         // ✅ Use your Filament keys
         $title = trim((string) ($seo['title'] ?? ''));
@@ -39,6 +81,7 @@ class Seo
         if ($canonical === '') {
             $canonical = $url;
         }
+        $canonical = self::ensureTrailingSlash($canonical);
 
         // ✅ Robots: single string from your Select (or default)
         $robots = trim((string) ($seo['robots'] ?? ''));
@@ -66,9 +109,9 @@ class Seo
         $out .= '<link rel="canonical" href="' . e($canonical) . '">' . PHP_EOL;
         $out .= '<meta name="robots" content="' . e($robots) . '">' . PHP_EOL;
 
-        // OpenGraph
+        // OpenGraph (✅ og:url should match canonical)
         $out .= '<meta property="og:type" content="' . e($type) . '">' . PHP_EOL;
-        $out .= '<meta property="og:url" content="' . e($url) . '">' . PHP_EOL;
+        $out .= '<meta property="og:url" content="' . e($canonical) . '">' . PHP_EOL;
         $out .= '<meta property="og:title" content="' . e($ogTitle) . '">' . PHP_EOL;
 
         if ($ogDesc !== '') {
@@ -98,18 +141,18 @@ class Seo
     /**
      * Adjust permalink rules to match your routing.
      * Current default:
-     * - page => /{slug}
-     * - post => /blog/{slug}
+     * - page => /{slug}/
+     * - post => /blog/{slug}/
      */
     public static function permalink(Post $post): string
     {
         $base = rtrim((string) config('app.url'), '/');
-        $slug = ltrim((string) ($post->slug ?? ''), '/');
+        $slug = trim((string) ($post->slug ?? ''), '/');
 
         if ($post->type === 'page') {
-            return $slug === '' ? $base . '/' : $base . '/' . $slug;
+            return $slug === '' ? ($base . '/') : ($base . '/' . $slug . '/');
         }
 
-        return $base . '/blog/' . $slug;
+        return $base . '/blog/' . $slug . '/';
     }
 }

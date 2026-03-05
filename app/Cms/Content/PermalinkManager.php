@@ -27,6 +27,7 @@ class PermalinkManager
             $base = (string) config('app.url');
         }
 
+        // Always store base without trailing slash; paths include leading slash.
         return rtrim($base, '/');
     }
 
@@ -65,10 +66,43 @@ class PermalinkManager
         return trim($base, '/');
     }
 
+    /**
+     * Generic "slug/path" builder for ANY frontend page.
+     * This is the missing piece you need for:
+     * - custom post types
+     * - plugin-generated pages
+     * - multipage generated links (where you only have a slug/path string)
+     *
+     * Examples:
+     *  slugPath('about')        => '/about/'
+     *  slugPath('/about')       => '/about/'
+     *  slugPath('category/x')   => '/category/x/'
+     *  slugPath('/')            => '/'
+     */
+    public function slugPath(string $slugOrPath): string
+    {
+        $slugOrPath = trim($slugOrPath);
+
+        if ($slugOrPath === '' || $slugOrPath === '/') {
+            return '/';
+        }
+
+        return $this->normalizePath('/' . trim($slugOrPath, '/'));
+    }
+
+    /**
+     * Absolute URL builder for any slug/path (uses core.site_url).
+     */
+    public function slugUrl(string $slugOrPath): string
+    {
+        return $this->baseUrl() . $this->slugPath($slugOrPath);
+    }
+
     public function postPath(Post $post, ?string $overrideSlug = null): string
     {
         $structure = $this->postStructure();
 
+        // Plain permalinks stay query-based (no trailing-slash rule needed)
         if ($structure === 'plain') {
             return '/?p=' . $post->id;
         }
@@ -93,7 +127,7 @@ class PermalinkManager
     /**
      * WP-like behavior:
      * - If this page is selected as "Homepage" (core.homepage_page_id),
-     *   then its canonical path is "/" (not "/home").
+     *   then its canonical path is "/" (not "/home/").
      */
     public function pagePath(Post $page, ?string $overrideSlug = null): string
     {
@@ -106,7 +140,7 @@ class PermalinkManager
 
         $slug = trim((string) ($overrideSlug ?? $page->slug), '/');
 
-        return $slug === '' ? '/' : '/' . $slug;
+        return $this->normalizePath($slug === '' ? '/' : '/' . $slug);
     }
 
     public function termPath(Term $term): string
@@ -123,7 +157,7 @@ class PermalinkManager
     }
 
     /**
-     * Absolute URL builders (now driven by core.site_url, WP-style).
+     * Absolute URL builders (driven by core.site_url, WP-style).
      */
     public function postUrl(Post $post): string
     {
@@ -154,6 +188,7 @@ class PermalinkManager
             return null;
         }
 
+        // Accept both with/without trailing slash (middleware may normalize, but this is safe)
         $path = trim($path, '/');
         $structure = trim($structure, '/');
 
@@ -207,7 +242,7 @@ class PermalinkManager
     {
         $path = '/' . ltrim(trim($path), '/');
 
-        // Your CMS standard is: no trailing slash except '/'
-        return $path !== '/' ? rtrim($path, '/') : '/';
+        // New CMS standard: ALWAYS trailing slash, except root "/"
+        return $path !== '/' ? rtrim($path, '/') . '/' : '/';
     }
 }

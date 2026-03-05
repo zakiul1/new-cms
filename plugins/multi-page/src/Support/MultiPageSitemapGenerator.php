@@ -87,24 +87,43 @@ final class MultiPageSitemapGenerator
 
         $urls = [];
         foreach ($trackerFiles as $tf) {
-            $raw = $diskLocal->get($tf);
-            $json = json_decode((string) $raw, true);
+            try {
+                $raw = $diskLocal->get($tf);
+                $json = json_decode((string) $raw, true);
 
-            if (!is_array($json)) {
-                continue;
-            }
-
-            $generated = $json['generated'] ?? [];
-            if (!is_array($generated)) {
-                continue;
-            }
-
-            foreach ($generated as $u) {
-                $u = trim((string) $u);
-                if ($u === '') {
+                if (!is_array($json)) {
                     continue;
                 }
-                $urls[] = $u;
+
+                $generated = $json['generated'] ?? [];
+                if (!is_array($generated)) {
+                    continue;
+                }
+
+                foreach ($generated as $u) {
+                    $u = trim((string) $u);
+                    if ($u === '') {
+                        continue;
+                    }
+
+                    // normalize to "/path" without trailing slash for key lookup
+                    $path = '/' . ltrim($u, '/');
+                    $path = preg_replace('#/+#', '/', $path) ?? $path;
+                    $path = rtrim($path, '/');
+
+                    if ($path === '' || $path === '/') {
+                        continue;
+                    }
+
+                    // ✅ IMPORTANT FIX:
+                    // Only include URLs that have a corresponding mapping file in static-links/.
+                    // This prevents dead links from entering sitemap (and later being shown by LinksBlock).
+                    if ($this->mappingExistsForPath($diskLocal, $path)) {
+                        $urls[] = $path;
+                    }
+                }
+            } catch (\Throwable $e) {
+                continue;
             }
         }
 
@@ -126,8 +145,10 @@ final class MultiPageSitemapGenerator
             }
         }
 
-        // FORCE www ONLY when missing (if already www -> keep)
-        $siteUrl = $this->forceWwwIfMissing($siteUrl);
+        // ⚠️ IMPORTANT:
+        // DO NOT force www here. It breaks local/dev and can create unreachable URLs.
+        // Keep whatever core.site_url says. (If you want www, set it in core.site_url.)
+        // $siteUrl = $this->forceWwwIfMissing($siteUrl);
 
         // -------------------------
         // Single file sitemap
@@ -192,6 +213,29 @@ final class MultiPageSitemapGenerator
         ];
     }
 
+    /**
+     * ✅ Checks if a MultiPage mapping file exists for a given generated URL path.
+     * Mapping files are stored in: storage/app/{MultiPageStorage::LINKS}/{pathKey}.json
+     */
+    private function mappingExistsForPath($diskLocal, string $path): bool
+    {
+        // Primary key used by MultiPageStorage
+        $key = MultiPageStorage::pathKey($path);
+        $map = MultiPageStorage::LINKS . '/' . $key . '.json';
+        if ($diskLocal->exists($map)) {
+            return true;
+        }
+
+        // Backward compatibility: older key formats (if you ever used them)
+        $oldKey = str_replace('/', '_', trim($path, '/'));
+        if ($oldKey === '') {
+            $oldKey = 'home';
+        }
+        $mapOld = MultiPageStorage::LINKS . '/' . $oldKey . '.json';
+
+        return $diskLocal->exists($mapOld);
+    }
+
     private function renderUrlset(
         string $siteUrl,
         array $urls,
@@ -206,7 +250,8 @@ final class MultiPageSitemapGenerator
         $out[] = '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
 
         foreach ($urls as $u) {
-            $loc = $siteUrl . '/' . ltrim((string) $u, '/');
+            // ✅ Ensure sitemap loc URLs end with trailing slash (non-file paths)
+            $loc = rtrim($siteUrl, '/') . '/' . ltrim((string) $u, '/') . '/';
             $loc = htmlspecialchars($loc, ENT_QUOTES);
 
             $out[] = ' <url>';
@@ -235,7 +280,7 @@ final class MultiPageSitemapGenerator
         $out[] = '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
 
         foreach ($partUrls as $p) {
-            $loc = $siteUrl . '/' . ltrim((string) $p, '/');
+            $loc = rtrim($siteUrl, '/') . '/' . ltrim((string) $p, '/');
             $loc = htmlspecialchars($loc, ENT_QUOTES);
 
             $out[] = ' <sitemap>';
@@ -261,6 +306,8 @@ final class MultiPageSitemapGenerator
     /**
      * If site url already has www -> keep.
      * If not -> force www.
+     *
+     * (Kept for backward compatibility, but NOT used in generate() anymore.)
      */
     private function forceWwwIfMissing(string $siteUrl): string
     {

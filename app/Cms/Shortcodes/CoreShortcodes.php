@@ -632,7 +632,9 @@ class CoreShortcodes
 
             $url = function_exists('cms_post_url')
                 ? cms_post_url($post)
-                : url('/' . ltrim((string) ($post->slug ?? ''), '/'));
+                : (function_exists('cms_slug_url')
+                    ? cms_slug_url((string) ($post->slug ?? ''))
+                    : url('/' . trim((string) ($post->slug ?? ''), '/') . '/'));
 
             $html .= '<a class="block text-center" href="' . e($url) . '">';
             $html .= '<div class="aspect-square rounded-xl bg-slate-100"></div>';

@@ -136,7 +136,9 @@ class EditSiatexTag extends EditRecord
                                         $slug = $record?->slug ?: (string) $get('slug');
                                         $slug = trim($slug) !== '' ? $slug : '(save to preview)';
                                         // ✅ no /tag/ prefix
-                                        return url('/' . ltrim($slug, '/'));
+                                        return function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $slug)
+                                            : url('/' . trim((string) $slug, '/') . '/');
                                     }),
 
                                 WpClassicEditor::make('content_json')
@@ -268,7 +270,9 @@ class EditSiatexTag extends EditRecord
                                         }
 
                                         // ✅ no /tag/ prefix
-                                        $url = url('/' . ltrim((string) $record->slug, '/'));
+                                        $url = function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $record->slug)
+                                            : url('/' . trim((string) $record->slug, '/') . '/');
 
                                         return new \Illuminate\Support\HtmlString(
                                             '<iframe src="' . e($url) . '" class="w-full rounded-xl border" style="height: 70vh;"></iframe>'
@@ -303,7 +307,9 @@ class EditSiatexTag extends EditRecord
                 ->label('Visit')
                 ->icon('heroicon-o-arrow-top-right-on-square')
                 // ✅ no /tag/ prefix
-                ->url(fn() => url('/' . ltrim((string) $record->slug, '/')))
+                ->url(fn() => function_exists('cms_slug_url')
+                    ? cms_slug_url((string) $record->slug)
+                    : url('/' . trim((string) $record->slug, '/') . '/'))
                 ->openUrlInNewTab(),
 
             // ✅ overwrite existing slug using template

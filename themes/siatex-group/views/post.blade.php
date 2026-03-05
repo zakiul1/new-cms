@@ -101,7 +101,7 @@
         $heroHtml = trim($rawHtml) !== '' ? strip_tags($rawHtml, $allowedHtml) : '';
 
         // ✅ Cart/Add-to-cart payload (for ContactForm cart.js)
-        $productUrl = url('/' . ltrim((string) ($post->slug ?? ''), '/'));
+       $productUrl = cms_post_url($post);
         $productImage = '';
 
         try {
@@ -283,7 +283,7 @@
                 $permalinks = app(\App\Cms\Content\PermalinkManager::class);
                 return $permalinks->postUrl($p);
             } catch (\Throwable $e) {
-                return url('/' . ltrim((string) ($p->slug ?? ''), '/'));
+              return cms_post_url($p);
             }
         };
 

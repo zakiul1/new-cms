@@ -9,6 +9,7 @@ class SeoRenderer
 {
     /**
      * Ensure a trailing slash on URLs (keeps query + hash).
+     * Does NOT modify file-like URLs (e.g. .xml, .png, .css, .js) to avoid breaking assets.
      */
     protected function ensureTrailingSlash(string $url): string
     {
@@ -21,16 +22,28 @@ class SeoRenderer
         $hash = '';
         $query = '';
 
+        // Extract hash first
         if (str_contains($url, '#')) {
             [$url, $hash] = explode('#', $url, 2);
             $hash = '#' . $hash;
         }
 
+        // Then extract query
         if (str_contains($url, '?')) {
             [$url, $query] = explode('?', $url, 2);
             $query = '?' . $query;
         }
 
+        // If it looks like a file path, don't force trailing slash
+        $path = parse_url($url, PHP_URL_PATH);
+        if (is_string($path) && $path !== '') {
+            $lastSeg = basename($path);
+            if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
+                return $url . $query . $hash;
+            }
+        }
+
+        // Root-only URLs should stay as "/"
         $url = rtrim($url, '/') . '/';
 
         return $url . $query . $hash;
@@ -38,7 +51,13 @@ class SeoRenderer
 
     public function meta(?Post $post = null): string
     {
-        $base = rtrim((string) config('app.url'), '/');
+        // Prefer core.site_url (your CMS canonical base), fallback app.url
+        $base = (string) config('app.url');
+        $base = trim($base);
+        if ($base === '') {
+            $base = (string) config('app.url');
+        }
+        $base = rtrim($base, '/');
 
         // Defaults
         $title = (string) config('app.name', 'CMS');
@@ -63,6 +82,7 @@ class SeoRenderer
 
             $slug = trim((string) ($post->slug ?? ''), '/');
 
+            // If user set canonical manually, respect it but normalize trailing slash (unless file-like)
             $canonical = trim((string) ($seo['canonical'] ?? '')) !== ''
                 ? (string) $seo['canonical']
                 : ($slug === '' ? $base . '/' : $base . '/' . $slug . '/');
@@ -104,7 +124,12 @@ class SeoRenderer
 
     public function jsonLd(?Post $post = null): string
     {
-        $base = rtrim((string) config('app.url'), '/');
+        $base = (string) config('app.url');
+        $base = trim($base);
+        if ($base === '') {
+            $base = (string) config('app.url');
+        }
+        $base = rtrim($base, '/');
 
         // Website JSON-LD for home / generic pages
         if (!$post) {

@@ -61,6 +61,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Themes::class,
                 \App\Filament\Pages\Appearance\Menus::class,
                 \App\Filament\Pages\Appearance\Widgets::class,
+                \App\Filament\Pages\FooterBuilder::class, // ✅ Footer Builder added
 
                 // CMS
                 \App\Filament\Pages\Cms\Plugins::class,

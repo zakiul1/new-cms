@@ -94,7 +94,9 @@
         };
 
         // URL (no /tag/)
-        $tagUrl = url('/' . ltrim((string) $tag->slug, '/'));
+        $tagUrl = function_exists('cms_slug_url')
+            ? cms_slug_url((string) $tag->slug)
+            : url('/' . trim((string) $tag->slug, '/') . '/');
 
         // -----------------------------
         // ✅ Apply tag defaults on frontend (preview + normal)
@@ -428,7 +430,11 @@
                                         : $r->original_filename ?? ''));
                                 $rTitle = trim($rTitle) !== '' ? trim($rTitle) : 'Attachment';
 
-                                $rUrl = filled($r->slug) ? url('/' . ltrim((string) $r->slug, '/')) : $r->url();
+                                $rUrl = filled($r->slug)
+                                    ? (function_exists('cms_slug_url')
+                                        ? cms_slug_url((string) $r->slug)
+                                        : url('/' . trim((string) $r->slug, '/') . '/'))
+                                    : $r->url();
 
                                 $rImage = '';
                                 try {
@@ -524,7 +530,9 @@
                                             $qTitle = trim($qTitle) !== '' ? trim($qTitle) : 'Attachment';
 
                                             $qUrl = filled($q->slug)
-                                                ? url('/' . ltrim((string) $q->slug, '/'))
+                                                ? (function_exists('cms_slug_url')
+                                                    ? cms_slug_url((string) $q->slug)
+                                                    : url('/' . trim((string) $q->slug, '/') . '/'))
                                                 : $q->url();
                                         @endphp
 

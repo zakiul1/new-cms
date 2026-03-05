@@ -72,8 +72,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    {{-- ✅ IMPORTANT FIX: pass $seo explicitly --}}
-    @include('cms.partials.seo', ['seo' => $seo ?? [], 'tag' => $tag ?? null])
+    {{-- ✅ IMPORTANT: pass all context vars so seo partial can build correct canonical/og/url --}}
+    @include('cms.partials.seo', [
+        'seo' => $seo ?? [],
+        'post' => $post ?? null,
+        'media' => $media ?? null,
+        'tag' => $tag ?? null,
+    ])
 
     {{-- ✅ Favicon --}}
     @if ($faviconUrl)

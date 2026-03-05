@@ -49,7 +49,9 @@ class MultiPagesTable
                     // ✅ same hover actions: Edit | View
                     ->description(function (Post $record, PermalinkManager $permalinks): HtmlString {
                         $editUrl = MultiPageResource::getUrl('edit', ['record' => $record], panel: 'admin');
-                        $viewUrl = url('/' . ltrim((string) $record->slug, '/'));
+                        $viewUrl = function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $record->slug)
+                            : url('/' . trim((string) $record->slug, '/') . '/');
 
                         return new HtmlString(
                             '<div class="mt-1 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">' .
@@ -63,10 +65,22 @@ class MultiPagesTable
                 // ✅ URL column (toggle hidden by default)
                 TextColumn::make('url')
                     ->label('URL')
-                    ->state(fn(Post $record) => url('/' . ltrim((string) $record->slug, '/')))
-                    ->url(fn(Post $record) => url('/' . ltrim((string) $record->slug, '/')), true)
+                    ->state(fn(Post $record, PermalinkManager $permalinks) => method_exists($permalinks, 'slugUrl')
+                        ? $permalinks->slugUrl((string) $record->slug)
+                        : (function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $record->slug)
+                            : url('/' . trim((string) $record->slug, '/') . '/')))
+                    ->url(fn(Post $record, PermalinkManager $permalinks) => method_exists($permalinks, 'slugUrl')
+                        ? $permalinks->slugUrl((string) $record->slug)
+                        : (function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $record->slug)
+                            : url('/' . trim((string) $record->slug, '/') . '/')), true)
                     ->limit(60)
-                    ->tooltip(fn(Post $record) => url('/' . ltrim((string) $record->slug, '/')))
+                    ->tooltip(fn(Post $record, PermalinkManager $permalinks) => method_exists($permalinks, 'slugUrl')
+                        ? $permalinks->slugUrl((string) $record->slug)
+                        : (function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $record->slug)
+                            : url('/' . trim((string) $record->slug, '/') . '/')))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 // ✅ Keep Slug hidden by default if you still want it
@@ -94,7 +108,9 @@ class MultiPagesTable
                 Action::make('view')
                     ->label('View')
                     ->icon('heroicon-o-eye')
-                    ->url(fn(Post $record) => url('/' . ltrim((string) $record->slug, '/')), true)
+                    ->url(fn(Post $record) => function_exists('cms_slug_url')
+                        ? cms_slug_url((string) $record->slug)
+                        : url('/' . trim((string) $record->slug, '/') . '/'), true)
                     ->openUrlInNewTab(),
 
                 DeleteAction::make()

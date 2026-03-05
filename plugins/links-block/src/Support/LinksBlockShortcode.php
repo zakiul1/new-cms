@@ -12,8 +12,10 @@ final class LinksBlockShortcode
         $int = function ($key, int $min, int $max, int $fallback) use ($atts, $defaults): int {
             $v = $atts[$key] ?? $defaults[$key] ?? $fallback;
             $n = (int) $v;
-            if ($n < $min) return $fallback;
-            if ($n > $max) return $max;
+            if ($n < $min)
+                return $fallback;
+            if ($n > $max)
+                return $max;
             return $n;
         };
 
@@ -56,7 +58,8 @@ final class LinksBlockShortcode
         if ($row > 0) {
             for ($i = 0; $i < $col; $i++) {
                 $chunk = array_slice($links, $i * $row, $row);
-                if ($chunk === []) break;
+                if ($chunk === [])
+                    break;
                 $columns[] = $chunk;
             }
         } else {
@@ -73,6 +76,7 @@ final class LinksBlockShortcode
             'mcol' => $mcol,
             'tcol' => $tcol,
             'col' => $col,
+            'row' => $row, // ✅ ADD THIS LINE
             'hide' => $hide === 'yes',
             'newWindow' => $newWindow,
             'singleLine' => $singleLine,
@@ -82,7 +86,8 @@ final class LinksBlockShortcode
     public static function titleFromUrl(string $url): string
     {
         $u = trim($url);
-        if ($u === '') return 'Link';
+        if ($u === '')
+            return 'Link';
 
         // mimic WP plugin style
         $path = parse_url($u, PHP_URL_PATH);

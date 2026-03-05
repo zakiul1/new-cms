@@ -35,12 +35,13 @@ class SitemapGenerator extends Page
 
     /**
      * Get all content types (post types) found in DB.
+     * Also appends virtual sitemap types (e.g. siatex-tags) if their plugin model exists.
      *
      * @return array<int, string>
      */
     private function discoverContentTypes(): array
     {
-        return Post::query()
+        $types = Post::query()
             ->select('type')
             ->whereNotNull('type')
             ->where('type', '!=', '')
@@ -49,6 +50,13 @@ class SitemapGenerator extends Page
             ->filter()
             ->values()
             ->all();
+
+        // ✅ Virtual type: Siatex Tags (plugin)
+        if (class_exists(\Plugins\SiatexTags\Models\SiatexTag::class)) {
+            $types[] = 'siatex-tags';
+        }
+
+        return array_values(array_unique($types));
     }
 
     /**
@@ -66,6 +74,9 @@ class SitemapGenerator extends Page
         if ($type === 'post') {
             return 'Posts';
         }
+        if ($type === 'siatex-tags') {
+            return 'Siatex Tags';
+        }
 
         return ucwords($t);
     }
@@ -78,14 +89,21 @@ class SitemapGenerator extends Page
 
         // New dynamic selection (fallback to legacy)
         $selectedTypes = $settings->get('seo', 'sitemap_include_types', null);
+
         if (!is_array($selectedTypes) || count($selectedTypes) === 0) {
             // fallback to old toggles
             $selectedTypes = [];
+
             if ((bool) $settings->get('seo', 'sitemap_include_pages', true)) {
                 $selectedTypes[] = 'page';
             }
             if ((bool) $settings->get('seo', 'sitemap_include_posts', true)) {
                 $selectedTypes[] = 'post';
+            }
+
+            // ✅ Default include virtual type if available (and no saved selection exists yet)
+            if (in_array('siatex-tags', $availableTypes, true)) {
+                $selectedTypes[] = 'siatex-tags';
             }
         }
 
@@ -359,6 +377,11 @@ class SitemapGenerator extends Page
         }
         if (str_starts_with($name, 'media')) {
             return 3;
+        }
+
+        // Put siatex-tags near posts
+        if (str_starts_with($name, 'siatex-tags')) {
+            return 4;
         }
 
         return 9;

@@ -9,7 +9,9 @@
                 $title = trim((string) ($post->title ?? '')) ?: 'Untitled';
                 $url = function_exists('cms_post_url')
                     ? cms_post_url($post)
-                    : url('/' . ltrim((string) ($post->slug ?? ''), '/'));
+                    : (function_exists('cms_slug_url')
+                        ? cms_slug_url((string) ($post->slug ?? ''))
+                        : url('/' . trim((string) ($post->slug ?? ''), '/') . '/'));
             @endphp
 
             <a href="{{ $url }}" class="group block text-center">

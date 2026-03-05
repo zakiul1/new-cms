@@ -64,7 +64,9 @@ class MediaForm
                                     return '';
                                 }
 
-                                return url('/' . $slug);
+                                return function_exists('cms_slug_url')
+                                    ? cms_slug_url((string) $slug)
+                                    : url('/' . trim((string) $slug, '/') . '/');
                             })
                             ->helperText('This is what the public URL will be (if enabled + public).'),
                     ])

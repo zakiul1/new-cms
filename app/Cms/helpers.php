@@ -36,7 +36,22 @@ if (!function_exists('cms_sidebar')) {
     }
 }
 
-// ✅ New URL helpers (WP-like)
+/**
+ * =========================================================
+ * URL helpers (WP-like)
+ * =========================================================
+ *
+ * These helpers are meant for FRONTEND/public links and will
+ * follow your CMS standard (PermalinkManager::normalizePath),
+ * which ALWAYS adds trailing "/" except root "/".
+ *
+ * Use:
+ * - cms_post_url($post)
+ * - cms_page_url($page)
+ * - cms_term_url($term)
+ * - cms_slug_url('any/custom/path')  <-- for plugins/multipage/custom types
+ */
+
 if (!function_exists('cms_post_url')) {
     function cms_post_url(Post $post): string
     {
@@ -55,5 +70,25 @@ if (!function_exists('cms_term_url')) {
     function cms_term_url(Term $term): string
     {
         return app(PermalinkManager::class)->termUrl($term);
+    }
+}
+
+/**
+ * Generic helper for anything that is NOT a Post/Page/Term model:
+ * - custom post types where you only have a slug
+ * - plugin-generated pages
+ * - multipage generated links (stored as "/posts-1", etc.)
+ *
+ * Examples:
+ *  cms_slug_url('about')          => http://cms.test/about/
+ *  cms_slug_url('/about')         => http://cms.test/about/
+ *  cms_slug_url('category/x')     => http://cms.test/category/x/
+ *  cms_slug_url('/posts-1')       => http://cms.test/posts-1/
+ *  cms_slug_url('/')              => http://cms.test/
+ */
+if (!function_exists('cms_slug_url')) {
+    function cms_slug_url(string $slugOrPath): string
+    {
+        return app(PermalinkManager::class)->slugUrl($slugOrPath);
     }
 }

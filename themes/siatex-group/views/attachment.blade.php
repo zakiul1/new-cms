@@ -259,7 +259,7 @@
         }
 
         // ✅ Cart/Add-to-cart payload (for ContactForm cart.js)
-        $productUrl = filled($media->slug) ? url('/' . ltrim((string) $media->slug, '/')) : url()->current();
+        $productUrl = filled($media->slug) ? cms_slug_url((string) $media->slug) : url()->current();
         $productImage = '';
 
         try {
@@ -529,7 +529,7 @@
                                         : $r->original_filename ?? ''));
                                 $rTitle = trim($rTitle) !== '' ? trim($rTitle) : 'Attachment';
 
-                                $rUrl = filled($r->slug) ? url('/' . ltrim((string) $r->slug, '/')) : $r->url();
+                                $rUrl = filled($r->slug) ? cms_slug_url((string) $r->slug) : $r->url();
                             @endphp
 
                             <div class="group text-center">
@@ -629,9 +629,7 @@
                                                     : $q->original_filename ?? ''));
                                             $qTitle = trim($qTitle) !== '' ? trim($qTitle) : 'Attachment';
 
-                                            $qUrl = filled($q->slug)
-                                                ? url('/' . ltrim((string) $q->slug, '/'))
-                                                : $q->url();
+                                            $qUrl = filled($q->slug) ? cms_slug_url((string) $q->slug) : $q->url();
                                         @endphp
 
                                         <li

@@ -32,6 +32,7 @@ class EditMultiPage extends EditRecord
     {
         return null;
     }
+
     public function getBreadcrumbs(): array
     {
         return [];
@@ -127,7 +128,9 @@ class EditMultiPage extends EditRecord
         $record = $this->getRecord();
 
         $viewUrl = $record
-            ? url('/' . ltrim((string) ($record->slug ?? ''), '/'))
+            ? (function_exists('cms_slug_url')
+                ? cms_slug_url((string) ($record->slug ?? ''))
+                : url('/' . trim((string) ($record->slug ?? ''), '/') . '/'))
             : url('/');
 
         return [
@@ -137,7 +140,6 @@ class EditMultiPage extends EditRecord
                 ->icon('heroicon-o-plus')
                 ->url(fn() => MultiPageResource::getUrl('create', panel: 'admin')),
 
-            // ✅ FIX: proper delete action for EditRecord in Filament v5
             DeleteAction::make()
                 ->label('Delete')
                 ->color('danger')
@@ -231,15 +233,23 @@ class EditMultiPage extends EditRecord
 
                     $items = '';
                     foreach ($links as $path) {
-                        $path = trim($path);
+                        $path = trim((string) $path);
 
-                        $href = str_starts_with($path, 'http://') || str_starts_with($path, 'https://')
+                        // ✅ Display should also show trailing slash for internal links
+                        $showText = (str_starts_with($path, 'http://') || str_starts_with($path, 'https://'))
                             ? $path
-                            : url($path);
+                            : ('/' . trim($path, '/') . '/');
+
+                        // ✅ href should also be trailing-slash for internal links
+                        $href = (str_starts_with($path, 'http://') || str_starts_with($path, 'https://'))
+                            ? $path
+                            : (function_exists('cms_slug_url')
+                                ? cms_slug_url($path)
+                                : url('/' . trim($path, '/') . '/'));
 
                         $items .= '<li class="py-1">
                             <a class="text-primary-600 hover:underline" target="_blank" rel="noopener noreferrer"
-                               href="' . e($href) . '">' . e($path) . '</a>
+                               href="' . e($href) . '">' . e($showText) . '</a>
                         </li>';
                     }
 

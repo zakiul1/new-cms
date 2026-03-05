@@ -134,29 +134,7 @@ class MenuRenderer
         $label = (string) ($item->label ?? '');
         $url = (string) ($item->url ?? '#');
 
-        // ✅ Normalize HOME link
-        // Handles: "home", "/home", "http://cms.test/home", "https://cms.test/home"
-        $url = trim($url);
-
-        if ($url !== '' && $url !== '#') {
-            $parsed = parse_url($url);
-
-            // If it's a relative URL, treat it as path
-            $path = $parsed['path'] ?? null;
-
-            if ($path === null) {
-                // maybe "home" without slash
-                $path = $url;
-            }
-
-            $path = '/' . ltrim((string) $path, '/');
-
-            if ($path === '/home') {
-                // Keep query if exists (rare)
-                $query = isset($parsed['query']) && $parsed['query'] !== '' ? ('?' . $parsed['query']) : '';
-                $url = url('/') . $query;
-            }
-        }
+        $url = $this->normalizeMenuUrl($url);
 
         $target = (string) ($data['target'] ?? '');
         $relParts = [];
@@ -177,6 +155,109 @@ class MenuRenderer
         return '<a class="cms-menu__link" href="' . e($url) . '"' . $targetAttr . $relAttr . '>' . e($label) . '</a>';
     }
 
+    /**
+     * Normalize menu item URLs to match CMS trailing-slash standard.
+     * - Keeps external URLs untouched
+     * - Keeps mailto/tel/javascript untouched
+     * - Preserves query + fragment
+     * - Converts "/home" -> site root
+     * - Adds trailing slash for internal/relative paths (excluding file-like paths)
+     */
+    protected function normalizeMenuUrl(string $url): string
+    {
+        $url = trim($url);
+
+        if ($url === '' || $url === '#') {
+            return $url;
+        }
+
+        // leave special schemes untouched
+        if (preg_match('#^(mailto:|tel:|javascript:)#i', $url)) {
+            return $url;
+        }
+
+        $parsed = parse_url($url);
+
+        // If parse_url fails, treat it as a relative path string
+        if ($parsed === false) {
+            $parsed = ['path' => $url];
+        }
+
+        $scheme = $parsed['scheme'] ?? null;
+        $host = $parsed['host'] ?? null;
+
+        $path = $parsed['path'] ?? '';
+        if ($path === '' && !isset($scheme) && !isset($host)) {
+            // e.g. "home" without slash
+            $path = $url;
+        }
+
+        $path = '/' . ltrim((string) $path, '/');
+
+        // normalize HOME -> root
+        if ($path === '/home') {
+            $out = url('/');
+            if (!empty($parsed['query'])) {
+                $out .= '?' . $parsed['query'];
+            }
+            if (!empty($parsed['fragment'])) {
+                $out .= '#' . $parsed['fragment'];
+            }
+            return $out;
+        }
+
+        // Determine if it's an internal URL:
+        // - relative (no scheme/host)
+        // - OR absolute with same host as app.url (common when stored as full URL)
+        $isRelative = !isset($scheme) && !isset($host);
+
+        $isSameHost = false;
+        if (isset($host)) {
+            $appHost = parse_url((string) url('/'), PHP_URL_HOST);
+            if (is_string($appHost) && $appHost !== '' && strcasecmp($host, $appHost) === 0) {
+                $isSameHost = true;
+            }
+        }
+
+        // Only normalize trailing slash for internal URLs
+        if ($isRelative || $isSameHost) {
+            // skip file-like paths (sitemap.xml, .css, images, etc.)
+            $lastSeg = basename($path);
+            if (!str_contains($lastSeg, '.')) {
+                $path = rtrim($path, '/') . '/';
+            }
+        }
+
+        // Rebuild URL
+        if ($isRelative) {
+            $out = $path;
+        } else {
+            $out = '';
+            $out .= $scheme ? ($scheme . '://') : '';
+            // user:pass@
+            if (!empty($parsed['user'])) {
+                $out .= $parsed['user'];
+                if (!empty($parsed['pass'])) {
+                    $out .= ':' . $parsed['pass'];
+                }
+                $out .= '@';
+            }
+            $out .= $host ?? '';
+            if (!empty($parsed['port'])) {
+                $out .= ':' . $parsed['port'];
+            }
+            $out .= $path;
+        }
+
+        if (!empty($parsed['query'])) {
+            $out .= '?' . $parsed['query'];
+        }
+        if (!empty($parsed['fragment'])) {
+            $out .= '#' . $parsed['fragment'];
+        }
+
+        return $out;
+    }
 
     protected function passesVisibility(?array $rules, array $ctx): bool
     {

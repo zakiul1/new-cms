@@ -29,7 +29,7 @@ class TermArchiveController extends Controller
             ->where(function ($q) use ($now) {
                 $q->whereNull('published_at')->orWhere('published_at', '<=', $now);
             })
-            ->whereHas('categories', fn ($q) => $q->whereKey($term->id))
+            ->whereHas('categories', fn($q) => $q->whereKey($term->id))
             ->with([
                 'featuredMedia.variantRecords', // for srcset
             ])
@@ -37,7 +37,8 @@ class TermArchiveController extends Controller
             ->paginate(12)
             ->withQueryString();
 
-        $canonical = url('/products/' . $term->slug);
+        // ✅ trailing slash canonical
+        $canonical = url('/products/' . trim($term->slug, '/') . '/');
 
         $seo = [
             'title' => $term->name . ' - Products',

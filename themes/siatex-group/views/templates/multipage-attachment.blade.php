@@ -180,8 +180,7 @@
                     <a href="#"
                         class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
                         data-item-id="{{ (int) $post->id }}" data-item-type="multipage"
-                        data-item-title="{{ e($title) }}"
-                        data-item-url="{{ e(url('/' . ltrim((string) $post->slug, '/'))) }}"
+                        data-item-title="{{ e($title) }}" data-item-url="{{ e(cms_slug_url((string) $post->slug)) }}"
                         data-item-image="{{ $productImage ? e((string) $productImage->url('medium')) : '' }}">
                         Get Price
                     </a>

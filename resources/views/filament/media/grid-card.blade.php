@@ -18,7 +18,11 @@
 
     // ✅ Edit + frontend view
     $editUrl = \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $record]);
-    $viewUrl = filled($record->slug) ? url('/' . ltrim((string) $record->slug, '/')) : $record->url();
+    $viewUrl = filled($record->slug)
+        ? (function_exists('cms_slug_url')
+            ? cms_slug_url((string) $record->slug)
+            : url('/' . trim((string) $record->slug, '/') . '/'))
+        : $record->url();
 @endphp
 
 @once

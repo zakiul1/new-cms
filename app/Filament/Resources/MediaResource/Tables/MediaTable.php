@@ -37,7 +37,9 @@ class MediaTable
                         $editUrl = MediaResource::getUrl('edit', ['record' => $record]);
 
                         $viewUrl = filled($record->slug)
-                            ? url('/' . ltrim((string) $record->slug, '/'))
+                            ? (function_exists('cms_slug_url')
+                                ? cms_slug_url((string) $record->slug)
+                                : url('/' . trim((string) $record->slug, '/') . '/'))
                             : $record->url();
 
                         $fileLine = $fileName !== ''

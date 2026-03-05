@@ -17,7 +17,11 @@
             @foreach ($items as $media)
                 @php
                     $title = (string) ($media->title ?? ($media->slug ?? 'Product'));
-                    $url = filled($media->slug) ? url('/' . ltrim((string) $media->slug, '/')) : '#';
+                    $url = filled($media->slug)
+                        ? (function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $media->slug)
+                            : url('/' . trim((string) $media->slug, '/') . '/'))
+                        : '#';
 
                     $productImage = '';
                     try {

@@ -219,8 +219,11 @@ add_action(HookPoints::CMS_BOOTED, function () {
                 continue;
             }
 
-            $href = e(url('/' . ltrim($tSlug, '/')));
-            $linked[] = '<a class="sc-tag-link" href="' . $href . '">' . e($tTitle) . '</a>';
+            $href = function_exists('cms_slug_url')
+                ? cms_slug_url($tSlug)
+                : url('/' . trim($tSlug, '/') . '/');
+
+            $linked[] = '<a class="sc-tag-link" href="' . e($href) . '">' . e($tTitle) . '</a>';
         }
 
         if (empty($linked)) {
@@ -271,7 +274,8 @@ add_action(HookPoints::CMS_ROUTES, function () {
      * Backward compatible route: /tag/{slug} -> 301 redirect to /{slug}
      */
     Route::get('/tag/{slug}', function (string $slug) {
-        return redirect('/' . ltrim($slug, '/'), 301);
+        $to = function_exists('cms_slug_url') ? cms_slug_url($slug) : url('/' . trim($slug, '/') . '/');
+        return redirect()->to($to, 301);
     });
 
     /**

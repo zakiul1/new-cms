@@ -48,7 +48,9 @@ class SiatexTagResource extends Resource
                         $editUrl = static::getUrl('edit', ['record' => $record]);
 
                         // ✅ no /tag/ prefix
-                        $viewUrl = url('/' . ltrim((string) $record->slug, '/'));
+                        $viewUrl = function_exists('cms_slug_url')
+                            ? cms_slug_url((string) $record->slug)
+                            : url('/' . trim((string) $record->slug, '/') . '/');
 
                         return new HtmlString(
                             '<div class="mt-1 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition">' .
@@ -86,7 +88,9 @@ class SiatexTagResource extends Resource
                     ->icon('heroicon-o-eye')
 
                     // ✅ no /tag/ prefix
-                    ->url(fn(SiatexTag $record) => url('/' . ltrim((string) $record->slug, '/')))
+                    ->url(fn(SiatexTag $record) => function_exists('cms_slug_url')
+                        ? cms_slug_url((string) $record->slug)
+                        : url('/' . trim((string) $record->slug, '/') . '/'))
                     ->openUrlInNewTab(),
 
                 DeleteAction::make()

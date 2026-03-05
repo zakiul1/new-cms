@@ -187,8 +187,8 @@ class ContentRouterController extends Controller
                     $seo['title'] = $tag->title;
                 }
 
-                // Optional canonical enforcement: remove trailing slash differences
-                $canonicalPath = '/' . trim((string) $tag->slug, '/');
+                // ✅ Canonical enforcement MUST use trailing slash standard
+                $canonicalPath = '/' . trim((string) $tag->slug, '/') . '/';
                 if ($this->pathsDiffer($path, $canonicalPath)) {
                     return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                 }
@@ -221,15 +221,12 @@ class ContentRouterController extends Controller
 
                 /**
                  * ✅ FIX: Do NOT canonical-redirect generated multipage URLs.
-                 * The resolver renders base multipage content (slug) on the generated URL path,
-                 * so we must keep the current URL (like /t-shirts-importers-in-albuquerque).
                  */
                 $isGeneratedMultipage =
                     $page->type === 'multipage'
                     && (bool) $request->attributes->get('multipage_generated', false);
 
                 if (!$isGeneratedMultipage) {
-                    // ✅ canonical path - treat multipage same as page
                     $canonicalPath = $permalinks->pagePath($page);
                     if ($this->pathsDiffer($path, $canonicalPath)) {
                         return $this->redirectPreserveQuery($request, $canonicalPath, 301);
@@ -245,13 +242,6 @@ class ContentRouterController extends Controller
                     $page->meta_json = $metaJson;
                 }
 
-                /**
-                 * ✅ MultiPage base slug:
-                 * - If no generated mapping matched (so no multipage_segments),
-                 *   then:
-                 *   A) use default segments if provided
-                 *   B) else Option C: use first CSV data row (slugified)
-                 */
                 if (
                     $page->type === 'multipage'
                     && !$request->attributes->has('multipage_segments')
@@ -259,7 +249,6 @@ class ContentRouterController extends Controller
                     $meta = is_array($page->meta_json ?? null) ? $page->meta_json : [];
                     $mp = is_array($meta['multipage'] ?? null) ? $meta['multipage'] : [];
 
-                    // A) defaults from field
                     $raw = '';
                     foreach (['default_segments', 'default_values', 'defaults'] as $k) {
                         $candidate = trim((string) ($mp[$k] ?? ''));
@@ -277,7 +266,6 @@ class ContentRouterController extends Controller
                         }
                     }
 
-                    // B) Option C: first CSV row fallback (if still empty)
                     if (!$request->attributes->has('multipage_segments')) {
                         $segments = $this->multipageFirstCsvRowSegments($mp);
 
@@ -288,15 +276,12 @@ class ContentRouterController extends Controller
                     }
                 }
 
-                // ✅ Make {segment-1} {segment-2} {segment-3} work everywhere:
-                // Title + any meta_json string fields + SEO strings (before view renders)
                 if ($page->type === 'multipage') {
                     $this->applyMultipageTokensToPost($page, $request);
                 }
 
                 [$css, $js] = $this->extractPostAssets($page);
 
-                // ✅ admin edit URL: multipage goes to MultiPageResource if available
                 $adminEditUrl = url('/lara-admin');
 
                 if ($page->type === 'page') {
@@ -374,8 +359,8 @@ class ContentRouterController extends Controller
                         return redirect()->to('/lara-admin?private=1&from=' . urlencode($path));
                     }
 
-                    // ✅ Attachment canonical should also follow trailing-slash standard
-                    $canonicalPath = '/' . trim((string) $media->slug, '/');
+                    // ✅ Attachment canonical MUST include trailing slash
+                    $canonicalPath = '/' . trim((string) $media->slug, '/') . '/';
                     if ($this->pathsDiffer($path, $canonicalPath)) {
                         return $this->redirectPreserveQuery($request, $canonicalPath, 301);
                     }
@@ -473,22 +458,113 @@ class ContentRouterController extends Controller
         return $this->normalizeForLookup($a) !== $this->normalizeForLookup($b);
     }
 
+    /**
+     * ✅ normalize path to your standard:
+     * - always leading slash
+     * - always trailing slash EXCEPT root "/"
+     * - DO NOT touch file-like paths
+     */
     private function normalizeForLookup(string $path): string
     {
         $path = '/' . ltrim($path, '/');
-        if ($path === '//') {
-            $path = '/';
+        if ($path === '//' || $path === '') {
+            return '/';
         }
-        if ($path !== '/') {
-            $path = rtrim($path, '/');
+
+        if ($path === '/') {
+            return '/';
         }
-        return $path;
+
+        $lastSeg = basename($path);
+        if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
+            return $path;
+        }
+
+        return rtrim($path, '/') . '/';
+    }
+
+    /**
+     * ✅ NEW: safe trailing slash normalization for either:
+     * - absolute URL (http/https)
+     * - relative path (/slug or slug)
+     */
+    private function ensureTrailingSlashUrlOrPath(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return $value;
+        }
+
+        // Absolute URL?
+        if (preg_match('#^https?://#i', $value)) {
+            $parts = parse_url($value);
+            if ($parts === false) {
+                return rtrim($value, '/') . '/';
+            }
+
+            $path = $parts['path'] ?? '/';
+
+            // don't touch file-like paths
+            $lastSeg = basename((string) $path);
+            if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
+                return $value;
+            }
+
+            $path = ($path === '' || $path === '/') ? '/' : (rtrim($path, '/') . '/');
+
+            $out = '';
+            if (!empty($parts['scheme'])) {
+                $out .= $parts['scheme'] . '://';
+            } else {
+                $out .= 'http://';
+            }
+
+            if (!empty($parts['user'])) {
+                $out .= $parts['user'];
+                if (!empty($parts['pass'])) {
+                    $out .= ':' . $parts['pass'];
+                }
+                $out .= '@';
+            }
+
+            $out .= $parts['host'] ?? '';
+
+            if (!empty($parts['port'])) {
+                $out .= ':' . $parts['port'];
+            }
+
+            $out .= $path;
+
+            if (!empty($parts['query'])) {
+                $out .= '?' . $parts['query'];
+            }
+            if (!empty($parts['fragment'])) {
+                $out .= '#' . $parts['fragment'];
+            }
+
+            return $out;
+        }
+
+        // Relative path
+        return $this->normalizeForLookup($value);
     }
 
     private function redirectPreserveQuery(Request $request, string $to, int $status = 301)
     {
+        $to = trim((string) $to);
+
+        if ($to === '') {
+            $to = '/';
+        }
+
+        // If it's a relative path, ensure it starts with "/"
         if ($to !== '' && $to[0] !== '/' && !str_starts_with($to, 'http')) {
             $to = '/' . $to;
+        }
+
+        // Enforce trailing slash for relative paths (except "/" and file-like)
+        if (!str_starts_with($to, 'http')) {
+            $to = $this->normalizeForLookup($to);
         }
 
         $qs = $request->getQueryString();
@@ -523,14 +599,6 @@ class ContentRouterController extends Controller
 
     // ------------------- ✅ MultiPage helpers (Option C + global token replacement) -------------------
 
-    /**
-     * Option C:
-     * If defaults are empty, use first CSV data row to create segments.
-     *
-     * Supports common keys saved in meta_json.multipage:
-     * - csv_file / data_file
-     * - has_header (bool)
-     */
     private function multipageFirstCsvRowSegments(array $mp): array
     {
         $csvFile = trim((string) ($mp['csv_file'] ?? $mp['data_file'] ?? $mp['file'] ?? ''));
@@ -540,8 +608,6 @@ class ContentRouterController extends Controller
 
         $hasHeader = (bool) ($mp['has_header'] ?? $mp['csv_has_header'] ?? $mp['header'] ?? false);
 
-        // Your UI hint says: storage/app/private/...
-        // Use robust candidates so it works even if you moved folders.
         $candidates = [
             'private/multipage/csvs/' . $csvFile,
             'private/multipage/' . $csvFile,
@@ -602,26 +668,18 @@ class ContentRouterController extends Controller
 
         $s = mb_strtolower($s);
 
-        // Replace non letters/numbers with dash
         $s = preg_replace('/[^\p{L}\p{N}]+/u', '-', $s) ?? $s;
 
-        // Trim and collapse dashes
         $s = trim($s, '-');
         $s = preg_replace('/-+/', '-', $s) ?? $s;
 
         return $s;
     }
 
-    /**
-     * Replace {segment-N} tokens using request multipage_segments.
-     * (Single brace only: {segment-1}. If you want double braces too, we can add it.)
-     */
     private function applyMultipageTokens(string $text, Request $request): string
     {
-        // ✅ Prefer RAW CSV values for display (Inallentown, USA)
         $segments = $request->attributes->get('multipage_segments_raw');
 
-        // fallback to slugified segments (inallentown, usa)
         if (!is_array($segments) || empty($segments)) {
             $segments = $request->attributes->get('multipage_segments');
         }
@@ -641,11 +699,6 @@ class ContentRouterController extends Controller
         return $text;
     }
 
-    /**
-     * Apply {segment-N} replacements to:
-     * - post title
-     * - ALL strings inside meta_json (recursive) so it works "everywhere"
-     */
     private function applyMultipageTokensToPost(Post $post, Request $request): void
     {
         $post->title = $this->applyMultipageTokens((string) $post->title, $request);
@@ -669,7 +722,6 @@ class ContentRouterController extends Controller
             return $out;
         }
 
-        // objects, bools, ints, null etc.
         return $data;
     }
 
@@ -742,7 +794,6 @@ class ContentRouterController extends Controller
         $rawTitle = (string) ($seo['title'] ?? $post->title ?? config('app.name'));
         $rawDesc = (string) ($seo['description'] ?? $post->excerpt ?? '');
 
-        // ✅ Ensure {segment-N} works in SEO fields too
         if ($post->type === 'multipage') {
             $rawTitle = $this->applyMultipageTokens($rawTitle, $request);
             $rawDesc = $this->applyMultipageTokens($rawDesc, $request);
@@ -758,11 +809,13 @@ class ContentRouterController extends Controller
         $canonical = $this->seoShortcodeUrl($canonicalRaw, $ctx);
 
         if ($canonical === '') {
-            // ✅ multipage behaves like page for canonical
             $canonical = in_array($post->type, ['page', 'multipage'], true)
                 ? $permalinks->pageUrl($post)
                 : $permalinks->postUrl($post);
         }
+
+        // ✅ FIX: safe trailing slash for absolute URL or relative path
+        $canonical = $this->ensureTrailingSlashUrlOrPath($canonical);
 
         $robotsRaw = (string) ($seo['robots'] ?? '');
         if ($post->type === 'multipage') {
@@ -844,6 +897,9 @@ class ContentRouterController extends Controller
 
             $canonical = $base . '/' . trim((string) $media->slug, '/');
         }
+
+        // ✅ FIX: safe trailing slash for absolute URL or relative path
+        $canonical = $this->ensureTrailingSlashUrlOrPath($canonical);
 
         $robotsRaw = (string) ($seo['robots'] ?? '');
         $robots = $this->seoShortcodeText($robotsRaw, $ctx);
