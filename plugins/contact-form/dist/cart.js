@@ -92,6 +92,29 @@
         setTimeout(() => el.classList.remove("cf-show"), 1800);
     }
 
+    function getButtonDefaultLabel(btn) {
+        const saved = btn.getAttribute("data-default-label");
+        if (saved && saved.trim() !== "") {
+            return saved;
+        }
+
+        const current = (btn.innerHTML || "").trim();
+        if (current !== "") {
+            btn.setAttribute("data-default-label", current);
+            return current;
+        }
+
+        return btn.dataset.defaultLabel || "Custom Quote";
+    }
+
+    function setButtonDefaultLabel(btn) {
+        btn.innerHTML = getButtonDefaultLabel(btn);
+    }
+
+    function setButtonAddedLabel(btn) {
+        btn.textContent = "Added";
+    }
+
     // --------------------------------
     // Read item payload from button
     // Supports BOTH:
@@ -138,7 +161,6 @@
             link.id = cssId;
             link.rel = "stylesheet";
 
-            // Use injected config if present; fallback to old path
             link.href =
                 (window.ContactFormCart && window.ContactFormCart.cssUrl) ||
                 "/_contact/cart.css";
@@ -283,7 +305,6 @@
       </div>
     `;
 
-        // ✅ Close when clicking backdrop OR the close button OR the X span inside it
         overlay.addEventListener("click", function (e) {
             const closeEl =
                 e.target && e.target.closest
@@ -294,7 +315,6 @@
 
         document.body.appendChild(overlay);
 
-        // ✅ Extra safety: bind close directly too
         overlay
             .querySelector(".cf-cart-modal__close")
             ?.addEventListener("click", closeCartModal);
@@ -483,11 +503,11 @@
             if (inCart) {
                 btn.classList.add("cf-added");
                 btn.setAttribute("data-added", "1");
-                btn.textContent = "Added";
+                setButtonAddedLabel(btn);
             } else {
                 btn.classList.remove("cf-added");
                 btn.removeAttribute("data-added");
-                btn.textContent = "Custom Quote";
+                setButtonDefaultLabel(btn);
             }
         });
     }
@@ -500,6 +520,14 @@
         buttons.forEach((btn) => {
             if (btn.getAttribute("data-cf-bound") === "1") return;
             btn.setAttribute("data-cf-bound", "1");
+
+            // store original Blade-rendered label once
+            if (!btn.getAttribute("data-default-label")) {
+                const initialLabel = (btn.innerHTML || "").trim();
+                if (initialLabel !== "") {
+                    btn.setAttribute("data-default-label", initialLabel);
+                }
+            }
 
             btn.addEventListener("click", function (e) {
                 e.preventDefault();
@@ -529,10 +557,9 @@
         ensureCartIcon();
         ensureFloatingPill();
         updateBadges();
-        updateButtonsState();
         bindAddButtons(document);
+        updateButtonsState();
 
-        // Safe MutationObserver (no infinite loops)
         let syncing = false;
         let scheduled = false;
 
@@ -572,7 +599,9 @@
         });
     }
 
-    if (document.readyState === "loading")
+    if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", init);
-    else init();
+    } else {
+        init();
+    }
 })();

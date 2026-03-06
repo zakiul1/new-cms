@@ -7,6 +7,29 @@
         /** @var \Illuminate\Support\Collection|\App\Models\Media[] $mediaItems */
 
         // -----------------------------
+        // CMS settings
+        // -----------------------------
+        $settingsRepo = app(\App\Cms\Core\SettingsRepository::class);
+
+        $sloganTag = trim((string) $settingsRepo->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+        if ($sloganTag === '') {
+            $sloganTag = 'Your Tech-pack, Our production';
+        }
+
+        $productStylePrefix = trim((string) $settingsRepo->get('core', 'product_style_prefix', 'Art:SC'));
+        if ($productStylePrefix === '') {
+            $productStylePrefix = 'Art:SC';
+        }
+
+        $quoteButtonText = trim((string) $settingsRepo->get('core', 'quote_button_text', 'Custom Quote'));
+        if ($quoteButtonText === '') {
+            $quoteButtonText = 'Custom Quote';
+        }
+
+        // Save like: Get|Custom Quote
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
+
+        // -----------------------------
         // Helpers (same style as attachment)
         // -----------------------------
         $allowedHtml =
@@ -76,7 +99,6 @@
 
             $value = $removeScriptStyleBlocks($value);
 
-            // Text output only (SEO/title/subtitle)
             return trim(strip_tags($value));
         };
 
@@ -127,24 +149,18 @@
             $contentHtmlRaw = (string) $tag->content_json;
         }
 
-        // ✅ Render shortcodes for title/subtitle (text)
         $title = $renderShortcodeText($titleRaw);
         $subtitle = $renderShortcodeText($subtitleRaw);
 
         // -----------------------------
-        // ✅ NEW: Hero H1 must come from Tag Defaults H1 if not empty
-        // Condition:
-        // - If Tag Defaults H1 is NOT empty -> use it (shortcodes supported)
-        // - Else -> fallback to Edit Siatex Tag H1 (tag title)
+        // ✅ Hero H1
         // -----------------------------
-        // ✅ NEW: Hero H1 must come from Tag Defaults H1 if not empty
         $heroH1 = $title;
 
         try {
             /** @var \App\Cms\Core\Settings $settings */
             $settings = app(\App\Cms\Core\Settings::class);
 
-            // ✅ Tag Defaults H1 is stored as "default_title"
             $defaultH1 = trim((string) $settings->get('default_title', '', 'plugins.tag-defaults'));
 
             if ($defaultH1 !== '') {
@@ -158,8 +174,7 @@
         }
 
         // -----------------------------
-        // ✅ Breadcrumb category: Home / Category Name / Tag Title
-        // Category name is NOT a link
+        // Breadcrumb category
         // -----------------------------
         $categoryName = '';
         try {
@@ -175,7 +190,7 @@
         }
 
         // -----------------------------
-        // SEO (keep your existing behavior, but use parser consistently)
+        // SEO
         // -----------------------------
         if (!isset($seo) || !is_array($seo)) {
             $seo = [];
@@ -232,7 +247,7 @@
         ]);
 
         // -----------------------------
-        // ✅ Media selection (same as your current code)
+        // Media selection
         // -----------------------------
         $allMedia = collect($mediaItems ?? [])
             ->filter(fn($m) => $m instanceof \App\Models\Media)
@@ -286,7 +301,7 @@
         }
 
         // -----------------------------
-        // Hero text: use Tag CONTENT (shortcode-rendered + sanitized)
+        // Hero text
         // -----------------------------
         $heroTextHtml = '';
         if (trim($contentHtmlRaw) !== '') {
@@ -298,7 +313,7 @@
         $heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
         $heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
 
-        // Bottom-left content:
+        // Bottom-left content
         $bottomTitleRaw = (string) data_get($meta, 'subtitle', '');
         $bottomTitle = $renderShortcodeText($bottomTitleRaw);
         if ($bottomTitle === '') {
@@ -371,7 +386,7 @@
                     <div class="h-1 w-20 bg-red-500"></div>
 
                     <div class="mt-4 text-sm font-semibold text-slate-700">
-                        Your Tech-pack, Our production
+                        {{ $sloganTag }}
                     </div>
 
                     <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
@@ -383,12 +398,12 @@
                             {!! $heroTextHtml !!}
                         </div>
                     @endif
-
                     <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                         data-item-id="{{ (int) $tag->id }}" data-item-type="tag" data-item-title="{{ e($title) }}"
                         data-item-url="{{ e($tagUrl) }}" data-item-image="{{ e($tagImage) }}">
-                        Get Price
+                        {!! $quoteButtonHtml !!}
                     </a>
                 </div>
 
@@ -464,18 +479,23 @@
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <h3 class="text-sm font-semibold leading-snug line-clamp-2">
+                                        <div class="text-sm font-medium leading-snug text-slate-500">
+                                            {{ $productStylePrefix }}{{ (int) $r->id }}
+                                        </div>
+
+                                        <h3 class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
                                             {{ $rTitle }}
                                         </h3>
                                     </div>
                                 </a>
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                                    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
                                     data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
                                     data-item-image="{{ e($rImage) }}">
-                                    Get Price
+                                    {!! $quoteButtonHtml !!}
                                 </button>
                             </div>
                         @endforeach

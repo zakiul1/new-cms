@@ -58,21 +58,87 @@
                         @foreach ($links as $path)
                             @php
                                 $path = trim((string) $path);
+                                if ($path === '') {
+                                    continue;
+                                }
 
-                                $href =
-                                    str_starts_with($path, 'http://') || str_starts_with($path, 'https://')
-                                        ? $path
-                                        : url($path);
+                                // Helper: force trailing slash (safe with query/hash)
+                                $forceTrailingSlash = function (string $u): string {
+                                    $u = trim($u);
+                                    if ($u === '') {
+                                        return $u;
+                                    }
+
+                                    $parts = parse_url($u);
+                                    if (!is_array($parts)) {
+                                        return rtrim($u, '/') . '/';
+                                    }
+
+                                    $scheme = $parts['scheme'] ?? null;
+                                    $host = $parts['host'] ?? null;
+
+                                    // If parse_url doesn't detect scheme/host, treat as path
+    if (!$scheme || !$host) {
+        $p = $parts['path'] ?? $u;
+        $p = $p === '/' ? '/' : rtrim($p, '/') . '/';
+        return $p;
+    }
+
+    $user = $parts['user'] ?? null;
+    $pass = $parts['pass'] ?? null;
+    $port = $parts['port'] ?? null;
+
+    $pathPart = $parts['path'] ?? '/';
+    $pathPart = $pathPart === '/' ? '/' : rtrim($pathPart, '/') . '/';
+
+    $query = $parts['query'] ?? null;
+    $fragment = $parts['fragment'] ?? null;
+
+    $auth = '';
+    if ($user) {
+        $auth = $user;
+        if ($pass) {
+            $auth .= ':' . $pass;
+        }
+        $auth .= '@';
+    }
+
+    $base = $scheme . '://' . $auth . $host;
+    if ($port) {
+        $base .= ':' . $port;
+    }
+
+    $out = $base . $pathPart;
+    if ($query !== null && $query !== '') {
+        $out .= '?' . $query;
+    }
+    if ($fragment !== null && $fragment !== '') {
+        $out .= '#' . $fragment;
+    }
+
+    return $out;
+};
+
+// Build FULL URL + trailing slash for internal links
+if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+    $href = $forceTrailingSlash($path);
+} else {
+    $relative = '/' . trim($path, '/') . '/';
+                                    $href = $forceTrailingSlash(url($relative)); // url() may remove slash, so force it back
+                                }
+
+                                // Show full URL in UI
+                                $label = $href;
                             @endphp
 
-                            @if ($path !== '')
-                                <li class="py-1">
-                                    <a class="text-primary-600 hover:underline" target="_blank"
-                                        rel="noopener noreferrer" href="{{ $href }}">
-                                        {{ $path }}
-                                    </a>
-                                </li>
-                            @endif
+                            <li class="py-1">
+                                <a target="_blank" rel="noopener noreferrer" href="{{ $href }}"
+                                    style="color:#2563eb; text-decoration:none;"
+                                    onmouseover="this.style.textDecoration='underline'"
+                                    onmouseout="this.style.textDecoration='none'">
+                                    {{ $label }}
+                                </a>
+                            </li>
                         @endforeach
                     </ul>
                 @endif

@@ -20,38 +20,34 @@ final class MultiPageResolver
 
         $disk = Storage::disk('local');
 
-        // ✅ New key format (hashed)
+        // New key format
         $keyNew = MultiPageStorage::pathKey($path);
         $mapPathNew = MultiPageStorage::LINKS . '/' . $keyNew . '.json';
 
-        // ✅ Backward compatible: old key format (replace "/" with "_")
+        // Backward compatible old key format
         $oldKey = str_replace('/', '_', trim($path, '/'));
         if ($oldKey === '') {
             $oldKey = 'home';
         }
         $mapPathOld = MultiPageStorage::LINKS . '/' . $oldKey . '.json';
 
-        // Choose whichever exists
         $mapPath = null;
         if ($disk->exists($mapPathNew)) {
             $mapPath = $mapPathNew;
         } elseif ($disk->exists($mapPathOld)) {
             $mapPath = $mapPathOld;
         } else {
-            // ✅ IMPORTANT: no mapping => NOT a multipage-generated URL
-            // Let normal CMS routing handle it (post/page/media/tag).
+            // no mapping => let normal CMS routing handle it
             return null;
         }
 
         $raw = $disk->get($mapPath);
         $map = json_decode((string) $raw, true);
         if (!is_array($map)) {
-            // broken mapping => let normal routing handle (or 404)
             return null;
         }
 
-        $baseSlug = (string) ($map['base_slug'] ?? '');
-        $baseSlug = trim($baseSlug, '/');
+        $baseSlug = trim((string) ($map['base_slug'] ?? ''), '/');
         if ($baseSlug === '') {
             return null;
         }
@@ -62,7 +58,6 @@ final class MultiPageResolver
             ->first();
 
         if (!$page) {
-            // base multipage deleted/disabled => not resolvable
             return null;
         }
 
@@ -71,53 +66,59 @@ final class MultiPageResolver
         $enabled = (bool) ($cfg['enabled'] ?? false);
 
         /**
-         * ✅ Optional: Redirect "default generated URL" back to canonical /{baseSlug}/
-         * Your CMS standard is trailing slash.
+         * Redirect "default generated URL" back to canonical /{baseSlug}/
+         * but never redirect to the same URL again.
          */
         if ($enabled) {
             $urlStructure = trim((string) ($cfg['url_structure'] ?? ''));
             $defaultSegmentsRaw = trim((string) ($cfg['default_segments'] ?? ''));
             $defaultSegments = $defaultSegmentsRaw === ''
                 ? []
-                : array_values(array_filter(array_map('trim', explode(',', $defaultSegmentsRaw)), fn($v) => $v !== ''));
+                : array_values(array_filter(
+                    array_map('trim', explode(',', $defaultSegmentsRaw)),
+                    fn($v) => $v !== ''
+                ));
 
             $gen = new MultiPageGenerator();
             $defaultUrl = $gen->buildDefaultUrl($urlStructure, $defaultSegments);
 
-            if ($defaultUrl && rtrim($defaultUrl, '/') === rtrim($path, '/')) {
-                $qs = $request->getQueryString();
-                $to = '/' . $baseSlug . '/' . ($qs ? ('?' . $qs) : '');
-                return redirect()->to($to, 301);
+            if ($defaultUrl) {
+                $normalizedCurrent = '/' . trim($path, '/') . '/';
+                $normalizedDefault = '/' . trim((string) parse_url($defaultUrl, PHP_URL_PATH), '/') . '/';
+                $target = '/' . trim($baseSlug, '/') . '/';
+
+                // redirect only if current path matches the default generated URL
+                // AND the target is different from current path
+                if ($normalizedDefault === $normalizedCurrent && $target !== $normalizedCurrent) {
+                    $qs = $request->getQueryString();
+                    return redirect()->to($target . ($qs ? ('?' . $qs) : ''), 301);
+                }
             }
         }
 
-        // ✅ Segments for shortcode/token replacement (slugified)
+        // Segments for shortcode/token replacement (slugified)
         $segments = $map['replacer'] ?? [];
         $segments = is_array($segments) ? array_values($segments) : [];
 
-        // ✅ RAW segments for pretty display (exact CSV casing)
+        // RAW segments for pretty display (exact CSV casing)
         $segmentsRaw = $map['replacer_raw'] ?? [];
         $segmentsRaw = is_array($segmentsRaw) ? array_values($segmentsRaw) : [];
 
-        // ✅ Mark request as generated multipage URL (prevents canonical redirect in controller)
+        // mark request as generated multipage URL
         $request->attributes->set('multipage_generated', true);
 
-        // store requested path (for SEO canonical if needed)
+        // store requested path
         $request->attributes->set('multipage_requested_path', $path);
 
-        // Store both segment sets
         $request->attributes->set('multipage_segments', $segments);
         $request->attributes->set('multipage_segments_raw', $segmentsRaw);
-
         $request->attributes->set('multipage_base_slug', $baseSlug);
 
-        // ✅ Force template for generated links (optional)
         $template = trim((string) data_get($meta, 'template', ''));
         if ($template !== '') {
             $request->attributes->set('cms_forced_template', $template);
         }
 
-        // ✅ Call controller through container so DI works
         $controller = app(ContentRouterController::class);
 
         return app()->call([$controller, 'show'], [

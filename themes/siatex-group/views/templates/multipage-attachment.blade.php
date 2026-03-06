@@ -7,6 +7,22 @@
 
         $hooks = app(\App\Cms\Hooks\Hooks::class);
 
+        // ✅ CMS settings
+        $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+        $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+        if ($sloganTag === '') {
+            $sloganTag = 'Your Tech-pack, Our production';
+        }
+
+        $quoteButtonText = trim((string) $settings->get('core', 'quote_button_text', 'Custom Quote'));
+        if ($quoteButtonText === '') {
+            $quoteButtonText = 'Custom Quote';
+        }
+
+        // Save like: Get|Custom Quote
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
+
         // Admin edit url (multipage)
         if (!isset($adminEditUrl)) {
             if (class_exists(\Plugins\MultiPage\Filament\Resources\MultiPageResource::class)) {
@@ -164,7 +180,7 @@
                     <div class="h-1 w-20 bg-red-500"></div>
 
                     <div class="mt-4 text-sm font-semibold text-slate-700">
-                        Your Tech-pack, Our production
+                        {{ $sloganTag }}
                     </div>
 
                     <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
@@ -178,11 +194,12 @@
                     @endif
 
                     <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                         data-item-id="{{ (int) $post->id }}" data-item-type="multipage"
                         data-item-title="{{ e($title) }}" data-item-url="{{ e(cms_slug_url((string) $post->slug)) }}"
                         data-item-image="{{ $productImage ? e((string) $productImage->url('medium')) : '' }}">
-                        Get Price
+                        {!! $quoteButtonHtml !!}
                     </a>
                 </div>
             </div>
@@ -200,7 +217,7 @@
 
     {{-- 8 / 4 section --}}
     <section class="mt-8 bg-white">
-        <div class="cms-container mx-auto px-4 py-8">
+        <div class="page-container mx-auto px-4 py-8">
             <div class="grid gap-8 lg:grid-cols-12 lg:items-start">
 
                 {{-- LEFT (8) --}}

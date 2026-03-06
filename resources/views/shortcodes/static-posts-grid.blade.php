@@ -26,6 +26,14 @@
     $mobile = (int) ($mobile ?? 1);
     $img = filter_var($img ?? false, FILTER_VALIDATE_BOOL);
 
+    // ✅ CMS settings
+    $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+    $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+    if ($sloganTag === '') {
+        $sloganTag = 'Your Tech-pack, Our production';
+    }
+
     // wrapper class from shortcode (can contain multiple classes)
     $class = trim((string) ($class ?? 'static_posts'));
     $class = $class !== '' ? $class : 'static_posts';
@@ -84,7 +92,7 @@
                         <div class="sp-top-hybrid__grid">
                             {{-- LEFT --}}
                             <div class="sp-top-hybrid__left">
-                                <div class="sp-top-hybrid__label">Your Tech-pack, Our production</div>
+                                <div class="sp-top-hybrid__label">{{ $sloganTag }}</div>
 
                                 @if ($topTitle !== '')
                                     <h2 class="sp-top-hybrid__title">{{ $topTitle }}</h2>
@@ -190,14 +198,11 @@
                                             [
                                                 'alt' => e($title),
                                                 'class' => 'w-full h-full object-cover',
-                                                // responsive sizing similar to attachment usage
                                                 'sizes' => '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw',
                                                 'loading' => 'lazy',
                                                 'decoding' => 'async',
                                             ],
-                                            // prefer a bigger base for good quality
                                             'large',
-                                            // allow srcset variants
                                             ['medium', 'medium_large', 'large'],
                                         ) !!}
                                     @else

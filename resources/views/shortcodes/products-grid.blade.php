@@ -8,7 +8,22 @@
     // allow any number safely
     $columns = max(1, min(12, $columns));
     $mobileColumns = max(1, min(6, $mobileColumns));
+
+    $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+    $productStylePrefix = trim((string) $settings->get('core', 'product_style_prefix', 'Art:SC'));
+    if ($productStylePrefix === '') {
+        $productStylePrefix = 'Art:SC';
+    }
+
+    $quoteButtonText = trim((string) $settings->get('core', 'quote_button_text', 'Custom Quote'));
+    if ($quoteButtonText === '') {
+        $quoteButtonText = 'Custom Quote';
+    }
+
+    $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 @endphp
+
 <div class="page-container">
     <div class="my-6">
         {{-- ✅ No script. Use CSS variables. --}}
@@ -55,7 +70,11 @@
                         </div>
 
                         <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                            <h3 class="text-sm font-semibold leading-snug line-clamp-2">
+                            <div class="text-sm font-medium leading-snug text-slate-500">
+                                {{ $productStylePrefix }}{{ (int) $media->id }}
+                            </div>
+
+                            <h3 class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
                                 {{ $title }}
                             </h3>
                         </div>
@@ -63,11 +82,12 @@
 
                     @if (!empty($showPriceBtn))
                         <button type="button"
-                            class="cf-get-price cursor-pointer mt-3 inline-flex items-center justify-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                            class="cf-get-price cursor-pointer mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                            data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                             data-item-id="{{ (int) $media->id }}" data-item-type="media"
                             data-item-title="{{ e($title) }}" data-item-url="{{ e($url) }}"
                             data-item-image="{{ e($productImage) }}">
-                            Custom Quote
+                            {!! $quoteButtonHtml !!}
                         </button>
                     @endif
                 </div>

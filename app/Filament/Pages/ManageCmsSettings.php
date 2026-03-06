@@ -48,7 +48,6 @@ class ManageCmsSettings extends Page
             return rtrim((string) config('app.url'), '/');
         }
 
-        // If user typed only domain, prepend https://
         if (!preg_match('#^https?://#i', $input)) {
             $input = 'https://' . $input;
         }
@@ -64,17 +63,14 @@ class ManageCmsSettings extends Page
 
         $lowerHost = strtolower($host);
 
-        // Skip forcing www for IP/localhost/dev domains
         $isIp = filter_var($host, FILTER_VALIDATE_IP) !== false;
         $isLocalhost = in_array($lowerHost, ['localhost', '127.0.0.1'], true);
 
-        // Common dev TLDs / local domains
         $isDevTld =
             str_ends_with($lowerHost, '.test') ||
             str_ends_with($lowerHost, '.local') ||
             str_ends_with($lowerHost, '.localhost');
 
-        // Add www only for real public domains
         if (
             !$isIp &&
             !$isLocalhost &&
@@ -91,7 +87,6 @@ class ManageCmsSettings extends Page
 
     public function mount(SettingsRepository $settings, ThemeManager $themes): void
     {
-        // ✅ Source of truth is ThemeManager (it reads from settings + ensures valid)
         $activeTheme = $themes->activeSlug();
 
         $homepageId = $settings->get('core', 'homepage_page_id', null);
@@ -110,25 +105,28 @@ class ManageCmsSettings extends Page
             'timezone' => $settings->get('core', 'timezone', config('app.timezone')),
             'active_theme' => $activeTheme,
 
-            // Global Contact (Siatex header)
+            // Global Contact / CMS Display
             'status' => $settings->get('core', 'status', ''),
+            'slogan_tag' => $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'),
+            'product_style_prefix' => $settings->get('core', 'product_style_prefix', 'Art:SC'),
+            'quote_button_text' => $settings->get('core', 'quote_button_text', 'Custom Quote'),
             'contact_phone' => $settings->get('core', 'contact_phone', ''),
             'contact_email' => $settings->get('core', 'contact_email', ''),
 
             // Homepage
             'homepage_page_id' => $homepageId,
 
-            // ✅ Permalinks
+            // Permalinks
             'permalink_mode' => $settings->get('core', 'permalink_mode', 'post_name'),
             'permalink_custom_structure' => $settings->get('core', 'permalink_custom_structure', '/%postname%'),
             'category_base' => $settings->get('core', 'category_base', 'category'),
             'tag_base' => $settings->get('core', 'tag_base', 'tag'),
 
-            // ✅ Attachment pages (global)
+            // Attachment pages
             'attachment_pages_enabled' => (bool) $settings->get('core', 'attachment_pages_enabled', false),
             'attachment_pages_indexable' => (bool) $settings->get('core', 'attachment_pages_indexable', true),
 
-            // ✅ SEO
+            // SEO
             'search_engine_block' => (bool) $settings->get('seo', 'search_engine_block', false),
         ]);
     }
@@ -188,19 +186,37 @@ class ManageCmsSettings extends Page
         return $schema
             ->components([
                 Form::make([
-                    TextInput::make('site_name')->required()->maxLength(120),
+                    TextInput::make('site_name')
+                        ->required()
+                        ->maxLength(120),
 
-                    // ✅ Allow domain-only input; normalize on save (WP-like)
                     TextInput::make('site_url')
                         ->required()
                         ->maxLength(255)
                         ->helperText('Example: cms.test OR siatexglobal.com OR https://www.siatexglobal.com'),
 
-                    TextInput::make('timezone')->required()->maxLength(64),
+                    TextInput::make('timezone')
+                        ->required()
+                        ->maxLength(64),
 
                     TextInput::make('status')
                         ->label('Status')
                         ->maxLength(120),
+
+                    TextInput::make('slogan_tag')
+                        ->label('Slogan Tag')
+                        ->maxLength(255)
+                        ->helperText('Example: Your Tech-pack, Our production'),
+
+                    TextInput::make('product_style_prefix')
+                        ->label('Product Style Prefix')
+                        ->maxLength(120)
+                        ->helperText('Example: Art:SC'),
+
+                    TextInput::make('quote_button_text')
+                        ->label('Quote Button Text')
+                        ->maxLength(255)
+                        ->helperText('Leave empty to use default: Custom Quote. For 2 lines later, you can save like: Get|Custom Quote'),
 
                     TextInput::make('contact_phone')
                         ->label('Contact Phone')
@@ -236,7 +252,6 @@ class ManageCmsSettings extends Page
                         ->required()
                         ->reactive(),
 
-                    // ✅ SEO (WP-like)
                     Section::make('SEO')
                         ->description('Control search engine indexing (WordPress-like).')
                         ->collapsible()
@@ -248,7 +263,6 @@ class ManageCmsSettings extends Page
                                 ->default(false),
                         ]),
 
-                    // ✅ Attachment Pages (global) (collapsible)
                     Section::make('Attachment Pages')
                         ->description('Public attachment pages for media at /{media-slug}.')
                         ->collapsible()
@@ -265,7 +279,6 @@ class ManageCmsSettings extends Page
                                 ->default(true),
                         ]),
 
-                    // ✅ Permalink Settings (collapsible)
                     Section::make('Permalink Settings')
                         ->description('These rules apply to POSTS. Pages remain /{slug} (WP-style).')
                         ->collapsible()
@@ -324,28 +337,25 @@ class ManageCmsSettings extends Page
     ): void {
         $data = $this->form->getState();
 
-        // Snapshot current permalink settings (for cache bump decision)
         $currentPermalinkMode = (string) $settings->get('core', 'permalink_mode', 'post_name');
         $currentPermalinkCustom = (string) $settings->get('core', 'permalink_custom_structure', '/%postname%');
         $currentCategoryBase = (string) $settings->get('core', 'category_base', 'category');
         $currentTagBase = (string) $settings->get('core', 'tag_base', 'tag');
 
-        // Snapshot current attachment settings (for cache bump decision)
         $currentAttachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
         $currentAttachmentsIndexable = (bool) $settings->get('core', 'attachment_pages_indexable', true);
 
-        // ✅ Snapshot current SEO search engine block (for cache bump decision)
         $currentSearchEngineBlock = (bool) $settings->get('seo', 'search_engine_block', false);
 
-        // ✅ Snapshot current site_url for cache bump decision
         $currentSiteUrl = $this->normalizeSiteUrl(
             (string) $settings->get('core', 'site_url', rtrim((string) config('app.url'), '/'))
         );
 
-        // ✅ Snapshot current status (header/topbar uses it)
         $currentStatus = (string) $settings->get('core', 'status', '');
+        $currentSloganTag = (string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production');
+        $currentProductStylePrefix = (string) $settings->get('core', 'product_style_prefix', 'Art:SC');
+        $currentQuoteButtonText = (string) $settings->get('core', 'quote_button_text', 'Custom Quote');
 
-        // ✅ Normalize site url (WP-like, dev-safe)
         $siteUrl = $this->normalizeSiteUrl((string) ($data['site_url'] ?? ''));
 
         // Core
@@ -353,9 +363,28 @@ class ManageCmsSettings extends Page
         $settings->set('core', 'site_url', $siteUrl);
         $settings->set('core', 'timezone', (string) ($data['timezone'] ?? ''));
 
-        // Contact
-        $status = (string) ($data['status'] ?? '');
+        // Contact / CMS display settings
+        $status = trim((string) ($data['status'] ?? ''));
+        $sloganTag = trim((string) ($data['slogan_tag'] ?? ''));
+        $productStylePrefix = trim((string) ($data['product_style_prefix'] ?? ''));
+        $quoteButtonText = trim((string) ($data['quote_button_text'] ?? ''));
+
+        if ($sloganTag === '') {
+            $sloganTag = 'Your Tech-pack, Our production';
+        }
+
+        if ($productStylePrefix === '') {
+            $productStylePrefix = 'Art:SC';
+        }
+
+        if ($quoteButtonText === '') {
+            $quoteButtonText = 'Custom Quote';
+        }
+
         $settings->set('core', 'status', $status);
+        $settings->set('core', 'slogan_tag', $sloganTag);
+        $settings->set('core', 'product_style_prefix', $productStylePrefix);
+        $settings->set('core', 'quote_button_text', $quoteButtonText);
         $settings->set('core', 'contact_phone', (string) ($data['contact_phone'] ?? ''));
         $settings->set('core', 'contact_email', (string) ($data['contact_email'] ?? ''));
 
@@ -367,17 +396,17 @@ class ManageCmsSettings extends Page
         }
         $settings->set('core', 'homepage_page_id', $homepageId);
 
-        // ✅ SEO (WP-like)
+        // SEO
         $searchEngineBlock = (bool) ($data['search_engine_block'] ?? false);
         $settings->set('seo', 'search_engine_block', $searchEngineBlock);
 
-        // ✅ Attachment pages (global)
+        // Attachment pages
         $attachmentsEnabled = (bool) ($data['attachment_pages_enabled'] ?? false);
         $attachmentsIndexable = (bool) ($data['attachment_pages_indexable'] ?? true);
         $settings->set('core', 'attachment_pages_enabled', $attachmentsEnabled);
         $settings->set('core', 'attachment_pages_indexable', $attachmentsIndexable);
 
-        // ✅ Permalinks (normalize)
+        // Permalinks
         $permalinkMode = (string) ($data['permalink_mode'] ?? 'post_name');
         $customStructure = trim((string) ($data['permalink_custom_structure'] ?? '/%postname%'));
         if ($customStructure === '') {
@@ -404,22 +433,30 @@ class ManageCmsSettings extends Page
         $renderChanged = false;
         $errors = [];
 
-        // ✅ If site_url changed, bump render cache (sitemap/canonicals/menus may include full URLs)
         if (rtrim($siteUrl, '/') !== rtrim($currentSiteUrl, '/')) {
             $renderChanged = true;
         }
 
-        // ✅ If status changed, bump render cache (header/topbar/footer may include it)
         if ($status !== $currentStatus) {
             $renderChanged = true;
         }
 
-        // ✅ If SEO block changed, bump render cache (robots meta + sitemap behavior + canonicals)
+        if ($sloganTag !== $currentSloganTag) {
+            $renderChanged = true;
+        }
+
+        if ($productStylePrefix !== $currentProductStylePrefix) {
+            $renderChanged = true;
+        }
+
+        if ($quoteButtonText !== $currentQuoteButtonText) {
+            $renderChanged = true;
+        }
+
         if ($searchEngineBlock !== $currentSearchEngineBlock) {
             $renderChanged = true;
         }
 
-        // If permalink settings changed, bump render cache (menus/SEO/canonicals)
         if (
             $permalinkMode !== $currentPermalinkMode ||
             $customStructure !== $currentPermalinkCustom ||
@@ -429,7 +466,6 @@ class ManageCmsSettings extends Page
             $renderChanged = true;
         }
 
-        // If attachment settings changed, bump render cache (SEO/sitemap/canonicals)
         if (
             $attachmentsEnabled !== $currentAttachmentsEnabled ||
             $attachmentsIndexable !== $currentAttachmentsIndexable
@@ -437,7 +473,6 @@ class ManageCmsSettings extends Page
             $renderChanged = true;
         }
 
-        // Theme change
         $currentTheme = $themes->activeSlug();
         $newTheme = (string) ($data['active_theme'] ?? $currentTheme);
 
@@ -469,11 +504,13 @@ class ManageCmsSettings extends Page
             ->title('Saved')
             ->send();
 
-        // Refresh form state (keep UI consistent)
         $this->form->fill([
             ...$data,
-            'site_url' => $siteUrl, // ✅ show normalized value back to admin
+            'site_url' => $siteUrl,
             'active_theme' => $themes->activeSlug(),
+            'slogan_tag' => $sloganTag,
+            'product_style_prefix' => $productStylePrefix,
+            'quote_button_text' => $quoteButtonText,
             'permalink_custom_structure' => $customStructure,
             'category_base' => $categoryBase,
             'tag_base' => $tagBase,

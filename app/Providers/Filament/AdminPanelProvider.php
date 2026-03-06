@@ -61,7 +61,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Themes::class,
                 \App\Filament\Pages\Appearance\Menus::class,
                 \App\Filament\Pages\Appearance\Widgets::class,
-                \App\Filament\Pages\FooterBuilder::class, // ✅ Footer Builder added
+                \App\Filament\Pages\FooterBuilder::class,
 
                 // CMS
                 \App\Filament\Pages\Cms\Plugins::class,
@@ -69,6 +69,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Cms\PluginEditor::class,
                 \App\Filament\Pages\Cms\Search::class,
                 \App\Filament\Pages\Cms\Backups::class,
+                \App\Filament\Pages\Cms\MediaSettings::class,
 
                 // Settings
                 \App\Filament\Pages\ManageCmsSettings::class,
@@ -99,9 +100,6 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('Siatex CMS')
             ->homeUrl($frontendHomeUrl);
 
-        /**
-         * ✅ Custom brand link (LEFT) - always opens in new tab
-         */
         $panel->renderHook(PanelsRenderHook::TOPBAR_START, function () use ($frontendHomeUrl): string {
             $u = e($frontendHomeUrl);
 
@@ -118,19 +116,14 @@ class AdminPanelProvider extends PanelProvider
 HTML;
         });
 
-        /**
-         * ✅ Hide Filament default topbar brand/logo (RIGHT) + disable click
-         */
         $panel->renderHook(PanelsRenderHook::HEAD_END, function (): string {
             return <<<HTML
 <style>
-/* Hide Filament default brand/logo ONLY in the TOPBAR (right-side one) */
 .fi-topbar .fi-logo,
 .fi-topbar .fi-brand {
     display: none !important;
 }
 
-/* Safety: if any remaining anchor exists, make it non-clickable */
 .fi-topbar .fi-logo a,
 .fi-topbar .fi-brand a,
 .fi-topbar a.fi-logo {
@@ -140,9 +133,6 @@ HTML;
 HTML;
         });
 
-        /**
-         * ✅ Your existing no-refresh toggle
-         */
         $panel->renderHook(PanelsRenderHook::GLOBAL_SEARCH_BEFORE, function (): string {
             return Blade::render('
         <div class="flex items-center gap-2">

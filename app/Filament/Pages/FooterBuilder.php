@@ -4,12 +4,13 @@ namespace App\Filament\Pages;
 
 use App\Cms\Core\CmsCacheVersions;
 use App\Cms\Core\SettingsRepository;
+use App\Filament\Forms\Components\WpClassicEditor;
+use App\Models\Menu;
 use App\Models\Widget;
 use App\Models\WidgetPlacement;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -39,16 +40,15 @@ class FooterBuilder extends Page
         $cols = max(3, min(5, $cols));
 
         $layout = $settings->get('core', 'footer_builder_layout', null);
+        $bottomFooterContent = (string) $settings->get('core', 'footer_bottom_content', '');
 
         $decoded = null;
         if (is_string($layout) && trim($layout) !== '') {
             $decoded = json_decode($layout, true);
         }
 
-        // If no saved layout, build from current DB placements (footer-1..footer-N)
         $columns = is_array($decoded) ? $decoded : $this->buildFromDb($cols);
 
-        // Ensure exactly $cols columns
         $columns = array_values(is_array($columns) ? $columns : []);
         while (count($columns) < $cols) {
             $columns[] = ['blocks' => []];
@@ -60,6 +60,7 @@ class FooterBuilder extends Page
         $this->form->fill([
             'footer_columns' => $cols,
             'columns' => $columns,
+            'bottom_footer_content' => $bottomFooterContent,
         ]);
     }
 
@@ -69,6 +70,7 @@ class FooterBuilder extends Page
             Action::make('saveFooter')
                 ->label('Save Footer')
                 ->icon('heroicon-o-check')
+                ->color('warning')
                 ->keyBindings(['mod+s'])
                 ->action(function (SettingsRepository $settings, CmsCacheVersions $versions) {
                     $this->save($settings, $versions);
@@ -86,9 +88,13 @@ class FooterBuilder extends Page
                     for ($i = 1; $i <= $cols; $i++) {
                         $versions->bump('widget_area', "footer-{$i}");
                     }
+
                     $versions->bumpRender();
 
-                    Notification::make()->success()->title('Footer cache cleared')->send();
+                    Notification::make()
+                        ->success()
+                        ->title('Footer cache cleared')
+                        ->send();
                 }),
         ];
     }
@@ -98,17 +104,19 @@ class FooterBuilder extends Page
         return $schema
             ->components([
                 Section::make('Footer Layout')
-                    ->description('Build footer columns and blocks (widgets).')
+                    ->description('Create a clean footer using columns and content blocks.')
                     ->schema([
                         Select::make('footer_columns')
-                            ->label('Columns')
+                            ->label('Footer Columns')
                             ->options([
                                 3 => '3 Columns',
                                 4 => '4 Columns',
                                 5 => '5 Columns',
                             ])
                             ->required()
-                            ->live() // v5 uses live() instead of reactive()
+                            ->native(false)
+                            ->live()
+                            ->helperText('Choose how many columns you want to show in the footer.')
                             ->afterStateUpdated(function ($state, callable $set, callable $get) {
                                 $cols = max(3, min(5, (int) $state));
 
@@ -116,11 +124,13 @@ class FooterBuilder extends Page
                                 if (!is_array($columns)) {
                                     $columns = [];
                                 }
+
                                 $columns = array_values($columns);
 
                                 while (count($columns) < $cols) {
                                     $columns[] = ['blocks' => []];
                                 }
+
                                 if (count($columns) > $cols) {
                                     $columns = array_slice($columns, 0, $cols);
                                 }
@@ -129,88 +139,140 @@ class FooterBuilder extends Page
                             }),
 
                         Repeater::make('columns')
-                            ->label('Columns')
+                            ->label('Footer Columns')
                             ->minItems(3)
                             ->maxItems(5)
                             ->defaultItems(3)
+                            ->reorderable(false)
+                            ->collapsible()
+                            ->collapsed()
+                            ->addActionLabel('Add Column')
+                            ->itemLabel(function (array $state, Get $get, $component): string {
+                                static $i = 0;
+                                $i++;
+                                return 'Column ' . $i;
+                            })
                             ->schema([
                                 Repeater::make('blocks')
                                     ->label('Blocks')
+                                    ->default([])
                                     ->reorderable()
+                                    ->collapsible()
+                                    ->cloneable()
+                                    ->addActionLabel('Add Block')
+                                    ->itemLabel(function (array $state): string {
+                                        $type = (string) ($state['type'] ?? 'block');
+                                        $title = trim((string) ($state['title'] ?? ''));
+
+                                        $typeLabel = match ($type) {
+                                            'text' => 'Text',
+                                            'menu' => 'Menu',
+                                            'categories' => 'Categories',
+                                            'shortcode' => 'Shortcode',
+                                            default => 'Block',
+                                        };
+
+                                        return $title !== ''
+                                            ? "{$typeLabel}: {$title}"
+                                            : $typeLabel;
+                                    })
                                     ->schema([
-                                        Select::make('type')
-                                            ->label('Block type')
-                                            ->options([
-                                                'text' => 'Text / HTML',
-                                                'menu' => 'Menu',
-                                                'categories' => 'Categories',
-                                                'shortcode' => 'Shortcode',
-                                            ])
-                                            ->required()
-                                            ->live(),
-
-                                        TextInput::make('title')
-                                            ->label('Title (optional)')
-                                            ->maxLength(120),
-
-                                        Toggle::make('enabled')
-                                            ->label('Enabled')
-                                            ->default(true),
-
-                                        // TEXT block settings
-                                        Section::make('Text')
-                                            ->collapsed(fn(Get $get) => $get('type') !== 'text')
+                                        Section::make()
                                             ->schema([
-                                                RichEditor::make('settings.content')
+                                                Select::make('type')
+                                                    ->label('Block Type')
+                                                    ->options([
+                                                        'text' => 'Text / HTML',
+                                                        'menu' => 'Menu',
+                                                        'categories' => 'Categories',
+                                                        'shortcode' => 'Shortcode',
+                                                    ])
+                                                    ->required()
+                                                    ->native(false)
+                                                    ->live()
+                                                    ->default('text')
+                                                    ->helperText('Choose what kind of content this block will display.'),
+
+                                                TextInput::make('title')
+                                                    ->label('Block Title')
+                                                    ->maxLength(120)
+                                                    ->placeholder('Example: Quick Links, Contact, Categories')
+                                                    ->helperText('Optional heading shown above the block.'),
+
+                                                Toggle::make('enabled')
+                                                    ->label('Enabled')
+                                                    ->default(true)
+                                                    ->inline(false),
+                                            ])
+                                            ->columns(3),
+
+                                        Section::make('Text Content')
+                                            ->description('Use this editor for footer text, HTML, and shortcode content.')
+                                            ->visible(fn(Get $get) => $get('type') === 'text')
+                                            ->schema([
+                                                WpClassicEditor::make('settings.content')
                                                     ->label('Content')
+                                                    ->height(300)
                                                     ->columnSpanFull(),
                                             ]),
 
-                                        // MENU block settings
-                                        Section::make('Menu')
-                                            ->collapsed(fn(Get $get) => $get('type') !== 'menu')
+                                        Section::make('Menu Settings')
+                                            ->description('Show one existing menu inside this footer block.')
+                                            ->visible(fn(Get $get) => $get('type') === 'menu')
                                             ->schema([
                                                 Select::make('settings.menu_id')
                                                     ->label('Menu')
-                                                    ->options(fn() => \App\Models\Menu::query()->orderBy('name')->pluck('name', 'id')->all())
+                                                    ->options(fn() => Menu::query()->orderBy('name')->pluck('name', 'id')->all())
                                                     ->searchable()
-                                                    ->required(fn(Get $get) => $get('type') === 'menu'),
+                                                    ->native(false)
+                                                    ->required(fn(Get $get) => $get('type') === 'menu')
+                                                    ->placeholder('Select a menu'),
                                             ]),
 
-                                        // CATEGORIES block settings
-                                        Section::make('Categories')
-                                            ->collapsed(fn(Get $get) => $get('type') !== 'categories')
+                                        Section::make('Categories Settings')
+                                            ->description('Display a list of categories in the footer.')
+                                            ->visible(fn(Get $get) => $get('type') === 'categories')
                                             ->schema([
                                                 TextInput::make('settings.limit')
-                                                    ->label('Max categories')
+                                                    ->label('Max Categories')
                                                     ->numeric()
                                                     ->default(10)
                                                     ->minValue(1)
-                                                    ->maxValue(100),
+                                                    ->maxValue(100)
+                                                    ->placeholder('10'),
 
                                                 Toggle::make('settings.show_count')
-                                                    ->label('Show post count')
-                                                    ->default(false),
-                                            ]),
+                                                    ->label('Show Post Count')
+                                                    ->default(false)
+                                                    ->inline(false),
+                                            ])
+                                            ->columns(2),
 
-                                        // SHORTCODE block settings
-                                        Section::make('Shortcode')
-                                            ->collapsed(fn(Get $get) => $get('type') !== 'shortcode')
+                                        Section::make('Shortcode Settings')
+                                            ->description('Use a shortcode that will render on the frontend.')
+                                            ->visible(fn(Get $get) => $get('type') === 'shortcode')
                                             ->schema([
                                                 Textarea::make('settings.code')
                                                     ->label('Shortcode')
                                                     ->rows(4)
+                                                    ->placeholder('[your_shortcode]')
                                                     ->required(fn(Get $get) => $get('type') === 'shortcode'),
                                             ]),
 
-                                        // Keep widget_id hidden so we can update same widget next save
                                         TextInput::make('widget_id')
                                             ->dehydrated()
                                             ->visible(false),
-                                    ])
-                                    ->default([]),
-                            ])
-                            ->reorderable(false),
+                                    ]),
+                            ]),
+
+                        Section::make('Bottom Footer')
+                            ->description('This content appears below the footer columns. Shortcodes and HTML can be used here.')
+                            ->schema([
+                                WpClassicEditor::make('bottom_footer_content')
+                                    ->label('Bottom Footer Content')
+                                    ->height(260)
+                                    ->columnSpanFull(),
+                            ]),
                     ]),
             ])
             ->statePath('data');
@@ -222,33 +284,35 @@ class FooterBuilder extends Page
 
         $cols = max(3, min(5, (int) ($state['footer_columns'] ?? 3)));
         $columns = $state['columns'] ?? [];
+        $bottomFooterContent = (string) ($state['bottom_footer_content'] ?? '');
+
         if (!is_array($columns)) {
             $columns = [];
         }
 
-        // Normalize columns length
         $columns = array_values($columns);
+
         while (count($columns) < $cols) {
             $columns[] = ['blocks' => []];
         }
+
         if (count($columns) > $cols) {
             $columns = array_slice($columns, 0, $cols);
         }
 
         try {
-            DB::transaction(function () use ($settings, $versions, $cols, &$columns) {
-                // save columns count
+            DB::transaction(function () use ($settings, $versions, $cols, &$columns, $bottomFooterContent) {
                 $settings->set('core', 'footer_columns', $cols);
+                $settings->set('core', 'footer_bottom_content', $bottomFooterContent);
 
-                // sync widgets+placements per footer column
                 for ($i = 1; $i <= $cols; $i++) {
                     $areaKey = "footer-{$i}";
                     $blocks = $columns[$i - 1]['blocks'] ?? [];
+
                     if (!is_array($blocks)) {
                         $blocks = [];
                     }
 
-                    // wipe placements for this footer area and rebuild cleanly
                     WidgetPlacement::query()
                         ->where('widget_area_key', $areaKey)
                         ->delete();
@@ -273,7 +337,6 @@ class FooterBuilder extends Page
                             $settingsArr = [];
                         }
 
-                        // Create or update widget record
                         $widgetId = isset($block['widget_id']) && is_numeric($block['widget_id'])
                             ? (int) $block['widget_id']
                             : 0;
@@ -294,8 +357,6 @@ class FooterBuilder extends Page
                             ]);
 
                             $widgetId = (int) $widget->id;
-
-                            // persist widget_id back into layout so next save updates it
                             $columns[$i - 1]['blocks'][$bi]['widget_id'] = $widgetId;
                         } else {
                             Widget::query()
@@ -308,7 +369,6 @@ class FooterBuilder extends Page
                                 ]);
                         }
 
-                        // Create placement
                         WidgetPlacement::query()->create([
                             'widget_area_key' => $areaKey,
                             'widget_id' => $widgetId,
@@ -318,24 +378,23 @@ class FooterBuilder extends Page
                         ]);
                     }
 
-                    // bump widget-area cache
                     $versions->bump('widget_area', $areaKey);
                 }
 
-                // store layout JSON for UI reload/edit
                 $settings->set('core', 'footer_builder_layout', json_encode($columns));
-
-                // bump global render too (theme footer HTML depends on it)
                 $versions->bumpRender();
             });
 
-            // refresh form state (important because we inject widget_id on first save)
             $this->form->fill([
                 'footer_columns' => $cols,
                 'columns' => $columns,
+                'bottom_footer_content' => $bottomFooterContent,
             ]);
 
-            Notification::make()->success()->title('Footer saved')->send();
+            Notification::make()
+                ->success()
+                ->title('Footer saved')
+                ->send();
         } catch (Throwable $e) {
             report($e);
 
@@ -367,6 +426,7 @@ class FooterBuilder extends Page
                 if (!$p->widget) {
                     continue;
                 }
+
                 $w = $p->widget;
 
                 $blocks[] = [

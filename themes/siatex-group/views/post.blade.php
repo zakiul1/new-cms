@@ -6,6 +6,22 @@
 
         $title = (string) ($post->title ?? '');
 
+        // ✅ CMS settings
+        $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+        $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+        if ($sloganTag === '') {
+            $sloganTag = 'Your Tech-pack, Our production';
+        }
+
+        $quoteButtonText = trim((string) $settings->get('core', 'quote_button_text', 'Custom Quote'));
+        if ($quoteButtonText === '') {
+            $quoteButtonText = 'Custom Quote';
+        }
+
+        // Save like: Get|Custom Quote
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
+
         // ✅ NEW: get featured images (multiple) from pivot role=featured
         $featuredMedias = collect();
 
@@ -52,17 +68,13 @@
         // -----------------------------
         // ✅ HERO CONTENT (under title)
         // -----------------------------
-        // ✅ Allow tags needed by shortcodes like [products] (div/picture/img/button etc.)
-      $allowedHtml =
-    '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
-    '<div><span><section><article><header><footer>' .
-    '<picture><source><img>' .
-    '<button>' .
-    '<script>';
+        $allowedHtml =
+            '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
+            '<div><span><section><article><header><footer>' .
+            '<picture><source><img>' .
+            '<button>' .
+            '<script>';
 
-        // ✅ IMPORTANT FIX:
-        // strip_tags() removes the <script> tag but keeps its CONTENT.
-        // So we must REMOVE script/style BLOCKS completely before strip_tags().
         $removeScriptStyleBlocks = function (string $html): string {
             $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
             $html = preg_replace('~<\s*style\b[^>]*>.*?<\s*/\s*style\s*>~is', '', $html) ?? $html;
@@ -86,7 +98,6 @@
             }
         }
 
-        // ✅ IMPORTANT: run shortcodes for post content
         if (function_exists('do_shortcode')) {
             try {
                 $rawHtml = do_shortcode((string) $rawHtml, ['post' => $post]);
@@ -95,13 +106,12 @@
             }
         }
 
-        // ✅ FIX: remove <script>/<style> blocks from shortcode output completely
         $rawHtml = $removeScriptStyleBlocks((string) $rawHtml);
 
         $heroHtml = trim($rawHtml) !== '' ? strip_tags($rawHtml, $allowedHtml) : '';
 
         // ✅ Cart/Add-to-cart payload (for ContactForm cart.js)
-       $productUrl = cms_post_url($post);
+        $productUrl = cms_post_url($post);
         $productImage = '';
 
         try {
@@ -136,11 +146,11 @@
     {{-- Hero --}}
     <section class=" mt-3 ">
         <div class="cms-container mx-auto px-4 py-10">
-            <div class="grid gap-6 sm:gap-8 lg:grid-cols-2 bg-slate-50 p-5 sm:p-8 lg:p-10">
+            <div class="grid gap-6 bg-slate-50 p-5 sm:gap-8 sm:p-8 lg:grid-cols-2 lg:p-10">
                 <div class="order-2 lg:order-1">
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
-                        Your Tech-pack, Our production
+                        {{ $sloganTag }}
                     </div>
 
                     <h1 class="mt-3 text-4xl font-extrabold leading-tight tracking-tight text-slate-900">
@@ -148,21 +158,24 @@
                     </h1>
 
                     @if ($heroHtml !== '')
-                        <div class="prose text-justify prose-slate mt-4 max-w-none text-sm leading-7 text-slate-700">
+                        <div class="prose prose-slate mt-4 max-w-none text-justify text-sm leading-7 text-slate-700">
                             {!! $heroHtml !!}
                         </div>
                     @endif
 
-                    {{-- ✅ UPDATED ONLY: Custom Quote -> Cart button (no other code changed) --}}
-                    <a href="#"
-                        class="cf-get-price mt-6 inline-flex items-center bg-[#1f5f99] px-5 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
-                        data-item-id="{{ (int) $post->id }}" data-item-type="post" data-item-title="{{ e($title) }}"
-                        data-item-url="{{ e($productUrl) }}" data-item-image="{{ e($productImage) }}">
-                        Custom Quote
-                    </a>
+                   <a href="#"
+    class="cf-get-price mt-6 inline-flex items-center justify-center bg-[#1f5f99] px-5 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
+    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+    data-item-id="{{ (int) $post->id }}"
+    data-item-type="post"
+    data-item-title="{{ e($title) }}"
+    data-item-url="{{ e($productUrl) }}"
+    data-item-image="{{ e($productImage) }}">
+    {!! $quoteButtonHtml !!}
+</a>
                 </div>
 
-                <div class="order-1 lg:order-2 p-0 sm:p-2 lg:p-4">
+                <div class="order-1 p-0 sm:p-2 lg:order-2 lg:p-4">
                     @if ($featuredCount === 1)
                         @php $media = $featuredMedias->first(); @endphp
 
@@ -184,7 +197,7 @@
                                 {{-- Slides --}}
                                 <div class="relative h-[360px] md:h-[420px]">
                                     @foreach ($featuredMedias as $index => $m)
-                                        <div class="carousel-slide absolute inset-0 transition-opacity duration-300 {{ $index === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none' }}"
+                                        <div class="carousel-slide absolute inset-0 transition-opacity duration-300 {{ $index === 0 ? 'opacity-100' : 'pointer-events-none opacity-0' }}"
                                             data-slide="{{ $index }}">
                                             {!! cms_picture(
                                                 $m,
@@ -204,7 +217,7 @@
 
                                 {{-- Prev/Next (SVG icons) --}}
                                 <button type="button"
-                                    class="carousel-prev cursor-pointer absolute left-1 top-1/2 -translate-y-1/2  p-1 "
+                                    class="carousel-prev cursor-pointer absolute left-1 top-1/2 -translate-y-1/2 p-1"
                                     aria-label="Previous image">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -214,7 +227,7 @@
                                 </button>
 
                                 <button type="button"
-                                    class="carousel-next cursor-pointer absolute right-1 top-1/2 -translate-y-1/2 p-1 "
+                                    class="carousel-next cursor-pointer absolute right-1 top-1/2 -translate-y-1/2 p-1"
                                     aria-label="Next image">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                                         stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -224,17 +237,15 @@
                                 </button>
 
                                 {{-- Indicators OUTSIDE image (flat gray bars) --}}
-                                <div class="mt-7 mb-2   flex justify-center gap-2">
+                                <div class="mt-7 mb-2 flex justify-center gap-2">
                                     @foreach ($featuredMedias as $index => $m)
                                         <button type="button"
-                                            class="carousel-dot h-1 w-5 bg-slate-300 hover:bg-slate-400 transition"
+                                            class="carousel-dot h-1 w-5 bg-slate-300 transition hover:bg-slate-400"
                                             aria-label="Go to image {{ $index + 1 }}"
                                             data-dot="{{ $index }}"></button>
                                     @endforeach
                                 </div>
                             </div>
-
-
                         </div>
                     @else
                         <div class="h-80 w-full bg-slate-100"></div>
@@ -257,7 +268,6 @@
         }
         $subDescRaw = is_string($subDescRaw) ? $subDescRaw : '';
 
-        // ✅ IMPORTANT: run shortcodes for sub description
         if (function_exists('do_shortcode')) {
             try {
                 $subDescRaw = do_shortcode((string) $subDescRaw, ['post' => $post]);
@@ -266,7 +276,6 @@
             }
         }
 
-        // ✅ FIX: remove <script>/<style> blocks from shortcode output completely
         $subDescRaw = $removeScriptStyleBlocks((string) $subDescRaw);
 
         $subDescHtml = trim($subDescRaw) !== '' ? strip_tags($subDescRaw, $allowedHtml) : '';
@@ -283,7 +292,7 @@
                 $permalinks = app(\App\Cms\Content\PermalinkManager::class);
                 return $permalinks->postUrl($p);
             } catch (\Throwable $e) {
-              return cms_post_url($p);
+                return cms_post_url($p);
             }
         };
 
@@ -311,12 +320,10 @@
         };
 
         if ($category) {
-            // 1) Related products/cards (random) max 10
             $related = $fetchSameCategoryRandom([(int) $post->id], 80)
                 ->take(10)
                 ->values();
 
-            // 2) Related links (random) max 10, exclude related cards too
             $excludeForLinks = collect([(int) $post->id])
                 ->merge($related->pluck('id'))
                 ->unique()
@@ -335,7 +342,6 @@
                 $relatedLinks = $relatedLinks->concat($more)->take(10)->values();
             }
 
-            // ✅ Absolute fallback: if still empty, at least show something from same category
             if ($relatedLinks->isEmpty()) {
                 $relatedLinks = $related->take(10)->values();
             }
@@ -404,7 +410,6 @@
                                     </div>
                                 </a>
 
-                                {{-- ✅ Custom Quote button (adds related post to cart) --}}
                                 @php
                                     $rImage = '';
                                     try {
@@ -418,13 +423,16 @@
                                     }
                                 @endphp
 
-                                <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
-                                    data-item-id="{{ (int) $r->id }}" data-item-type="post"
-                                    data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
-                                    data-item-image="{{ e($rImage) }}">
-                                    Custom Quote
-                                </button>
+                              <button type="button"
+    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+    data-item-id="{{ (int) $r->id }}"
+    data-item-type="post"
+    data-item-title="{{ e($rTitle) }}"
+    data-item-url="{{ e($rUrl) }}"
+    data-item-image="{{ e($rImage) }}">
+    {!! $quoteButtonHtml !!}
+</button>
                             </div>
                         @endforeach
                     </div>
@@ -537,11 +545,9 @@
 
                     const slides = Array.from(root.querySelectorAll('.carousel-slide'));
                     const dots = Array.from(document.querySelectorAll('#' + root.id + ' ~ div .carousel-dot')) || [];
-                    // Fallback if selector above fails (because indicators are outside root):
                     const indicatorWrap = root.parentElement?.querySelector('.mt-3');
                     const dots2 = indicatorWrap ? Array.from(indicatorWrap.querySelectorAll('.carousel-dot')) : [];
-                    const dotsFinal = dots2.length ? dots2 : Array.from(root.parentElement?.querySelectorAll('.carousel-dot') ||
-                        []);
+                    const dotsFinal = dots2.length ? dots2 : Array.from(root.parentElement?.querySelectorAll('.carousel-dot') || []);
 
                     const prevBtn = root.querySelector('.carousel-prev');
                     const nextBtn = root.querySelector('.carousel-next');
@@ -558,7 +564,6 @@
                             el.classList.toggle('pointer-events-none', !active);
                         });
 
-                        // indicators: flat gray, active darker
                         dotsFinal.forEach((dot, idx) => {
                             dot.classList.toggle('bg-slate-700', idx === index);
                             dot.classList.toggle('bg-slate-300', idx !== index);
@@ -580,7 +585,6 @@
                         if (e.key === 'ArrowRight') show(index + 1);
                     });
 
-                    // Init: set first indicator active
                     show(0);
                 })();
             </script>

@@ -94,6 +94,9 @@ class CmsServiceProvider extends ServiceProvider
         /** @var Hooks $hooks */
         $hooks = $this->app->make(Hooks::class);
 
+        // ✅ Apply runtime media settings from DB (Option A)
+        $this->applyMediaRuntimeSettings();
+
         // ✅ OPTIONAL: Add page template option safely (won’t break if unused)
         $hooks->addFilter('cms.page_template_options', function (array $opts) {
             if (view()->exists('templates.static-landing-page')) {
@@ -136,6 +139,33 @@ class CmsServiceProvider extends ServiceProvider
         $hooks->doAction(HookPoints::CMS_BOOTED);
 
         $this->app->singleton(\App\Cms\Seo\SeoRenderer::class);
+    }
+
+    /**
+     * Apply saved media settings to runtime config.
+     *
+     * Option A:
+     * - UI stores width/height/crop values
+     * - actual variant generation uses width values only
+     */
+    private function applyMediaRuntimeSettings(): void
+    {
+        /** @var SettingsRepository $settings */
+        $settings = app(SettingsRepository::class);
+
+        $defaults = (array) config('cms-media.image_variants', []);
+
+        $thumb = (int) $settings->get('core', 'media_thumbnail_width', (int) ($defaults['thumb'] ?? 300));
+        $medium = (int) $settings->get('core', 'media_medium_width', (int) ($defaults['medium'] ?? 768));
+        $mediumLarge = (int) $settings->get('core', 'media_medium_large_width', (int) ($defaults['medium_large'] ?? 1024));
+        $large = (int) $settings->get('core', 'media_large_width', (int) ($defaults['large'] ?? 1600));
+
+        config()->set('cms-media.image_variants', [
+            'thumb' => max(1, $thumb),
+            'medium' => max(1, $medium),
+            'medium_large' => max(1, $mediumLarge),
+            'large' => max(1, $large),
+        ]);
     }
 
     /**

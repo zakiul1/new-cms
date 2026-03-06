@@ -4,32 +4,47 @@ namespace Plugins\BlogPosts\Filament\Resources\BlogCategories\Pages;
 
 use App\Models\Taxonomy;
 use Filament\Resources\Pages\CreateRecord;
-use Illuminate\Database\Eloquent\Model;
 use Plugins\BlogPosts\Filament\Resources\BlogCategories\BlogCategoryResource;
 
 class CreateBlogCategory extends CreateRecord
 {
     protected static string $resource = BlogCategoryResource::class;
 
-    protected function mutateFormDataBeforeCreate(array $data): array
+    public function getHeading(): string
     {
-        // Force taxonomy_id to blog_category taxonomy
-        $taxonomy = Taxonomy::query()->where('key', 'blog_category')->firstOrFail();
-        $data['taxonomy_id'] = $taxonomy->getKey();
-
-        return $data;
+        return '';
     }
 
-    protected function handleRecordCreation(array $data): Model
+    public function getSubheading(): ?string
     {
-        /** @var Model $record */
-        $record = static::getModel()::create($data);
-
-        return $record;
+        return null;
     }
-
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            $this->getCancelFormAction(),
+            $this->getCreateAnotherFormAction()->formId('form'),
+            $this->getCreateFormAction()->formId('form'),
+        ];
+    }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $taxonomy = Taxonomy::query()->where('key', 'blog_category')->firstOrFail();
+
+        $data['taxonomy_id'] = $taxonomy->getKey();
+        $data['visibility'] = 'public';
+
+        return $data;
     }
 }

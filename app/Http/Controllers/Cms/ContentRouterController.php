@@ -355,8 +355,9 @@ class ContentRouterController extends Controller
                     ->first();
 
                 if ($media) {
+                    // ✅ CHANGED: private media now redirects to homepage with 301
                     if ($this->hasPrivateMediaCategory($media)) {
-                        return redirect()->to('/lara-admin?private=1&from=' . urlencode($path));
+                        return redirect()->to(url('/'), 301);
                     }
 
                     // ✅ Attachment canonical MUST include trailing slash
@@ -975,8 +976,9 @@ class ContentRouterController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
+        // ✅ CHANGED: private term archives now redirect to homepage with 301
         if (($term->visibility ?? 'public') !== 'public') {
-            return redirect()->to('/lara-admin?private=1&from=' . urlencode($request->getPathInfo()));
+            return redirect()->to(url('/'), 301);
         }
 
         $now = now();

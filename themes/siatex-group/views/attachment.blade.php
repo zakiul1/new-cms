@@ -16,8 +16,6 @@
         // -----------------------------
         // Helpers
         // -----------------------------
-        // ✅ UPDATED: allow tags needed by shortcodes like [products] (div/picture/img/button etc.)
-        // ⚠️ Do NOT allow <script>/<style> here, we will remove those blocks before strip_tags()
         $allowedHtml =
             '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
             '<div><span><section><article><header><footer>' .
@@ -25,9 +23,6 @@
             '<button>' .
             '<script>';
 
-        // ✅ IMPORTANT FIX:
-        // strip_tags() removes <script> tag but keeps its CONTENT, so JS appears as text.
-        // Remove script/style blocks completely BEFORE strip_tags().
         $removeScriptStyleBlocks = function (string $html): string {
             $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
             $html = preg_replace('~<\s*style\b[^>]*>.*?<\s*/\s*style\s*>~is', '', $html) ?? $html;
@@ -43,6 +38,29 @@
         if (!is_array($meta)) {
             $meta = [];
         }
+
+        // -----------------------------
+        // ✅ CMS settings
+        // -----------------------------
+        $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+        $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+        if ($sloganTag === '') {
+            $sloganTag = 'Your Tech-pack, Our production';
+        }
+
+        $productStylePrefix = trim((string) $settings->get('core', 'product_style_prefix', 'Art:SC'));
+        if ($productStylePrefix === '') {
+            $productStylePrefix = 'Art:SC';
+        }
+
+        $quoteButtonText = trim((string) $settings->get('core', 'quote_button_text', 'Custom Quote'));
+        if ($quoteButtonText === '') {
+            $quoteButtonText = 'Custom Quote';
+        }
+
+        // Save value like: Get|Custom Quote
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 
         /**
          * ✅ Read editor HTML safely:
@@ -74,7 +92,6 @@
             return '';
         };
 
-        // ✅ UPDATED: run do_shortcode + remove script/style blocks + then strip_tags
         $sanitizeRichHtml = function ($value) use ($allowedHtml, $htmlValue, $removeScriptStyleBlocks): string {
             $html = trim($htmlValue($value));
             if ($html === '') {
@@ -104,7 +121,6 @@
             return '';
         };
 
-        // ✅ detect empty editor html (<p><br></p>, &nbsp;, etc.)
         $htmlIsEmpty = function ($value) use ($htmlValue): bool {
             $html = trim($htmlValue($value));
             if ($html === '') {
@@ -112,20 +128,18 @@
             }
 
             $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $text = str_replace("\xc2\xa0", ' ', $text); // NBSP char
+            $text = str_replace("\xc2\xa0", ' ', $text);
             $text = trim(strip_tags($text));
 
             return $text === '';
         };
 
-        // ✅ normalize plain text to html for defaults
         $normalizeToHtml = function (string $value): string {
             $value = trim($value);
             if ($value === '') {
                 return '';
             }
 
-            // If already has HTML tags, keep as-is
             if ($value !== strip_tags($value)) {
                 return $value;
             }
@@ -137,7 +151,6 @@
         // ✅ APPLY DEFAULTS ON FRONTEND (ALWAYS, not only preview)
         // ------------------------------------------------------------------
         if (function_exists('do_action')) {
-            // ✅ 1) Preview-only: apply Livewire session state first (for realtime iframe preview)
             if (request()->query('md_preview') === '1') {
                 $previewState = session('media_defaults_preview_state', null);
 
@@ -145,17 +158,14 @@
                     $d = $previewState['data'] ?? null;
 
                     if (is_array($d)) {
-                        // Title (only if empty)
                         if (!filled($media->title ?? null) && filled($d['default_title'] ?? null)) {
                             $media->title = (string) $d['default_title'];
                         }
 
-                        // Description (Product) (only if empty)
                         if ($htmlIsEmpty($media->description ?? null) && filled($d['default_description'] ?? null)) {
                             $media->description = $normalizeToHtml((string) $d['default_description']);
                         }
 
-                        // Meta fields
                         $m = $media->meta ?? [];
                         if (is_string($m) && trim($m) !== '') {
                             $decoded = json_decode($m, true);
@@ -165,7 +175,6 @@
                             $m = [];
                         }
 
-                        // Sub title only if empty
                         if (
                             !filled(data_get($m, 'frontend.meta_title', '')) &&
                             filled($d['default_sub_title'] ?? null)
@@ -173,7 +182,6 @@
                             data_set($m, 'frontend.meta_title', (string) $d['default_sub_title']);
                         }
 
-                        // Sub description only if empty
                         $curSub = data_get($m, 'frontend.meta_description', null);
                         if ($htmlIsEmpty($curSub) && filled($d['default_sub_description'] ?? null)) {
                             data_set(
@@ -188,10 +196,8 @@
                 }
             }
 
-            // ✅ 2) Always apply DB-based defaults (category-wise + global fallback)
             do_action('media.attachment.defaults.persist', $media);
 
-            // ✅ Re-read meta after plugin may have mutated it
             $meta = $media->meta ?? [];
             if (is_string($meta) && trim($meta) !== '') {
                 $decoded = json_decode($meta, true);
@@ -228,13 +234,11 @@
         $metaDescHtml = strip_tags($metaDescRaw, $allowedHtml);
 
         // -----------------------------
-        // Base title + hero text (SEO-correct)
+        // Base title + hero text
         // -----------------------------
-        // ✅ H1 should be MAIN title (title/default_title), NOT sub title
         $title = (string) ($media->title ?: $media->original_filename ?? '');
         $title = trim($title) !== '' ? trim($title) : 'Attachment';
 
-        // Description (Product) is HTML, Caption is plain text
         $heroDescRaw = (string) ($media->description ?? '');
         if (function_exists('do_shortcode')) {
             try {
@@ -254,11 +258,9 @@
         } elseif ($heroCaption !== '') {
             $heroHtml = nl2br(e($heroCaption));
         } elseif ($metaDescHtml !== '') {
-            // only as final fallback
             $heroHtml = $metaDescHtml;
         }
 
-        // ✅ Cart/Add-to-cart payload (for ContactForm cart.js)
         $productUrl = filled($media->slug) ? cms_slug_url((string) $media->slug) : url()->current();
         $productImage = '';
 
@@ -430,7 +432,6 @@
 
             @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
-
                 <span class="text-slate-600"> {{ $breadcrumbTerm->name }}</span>
             @endif
 
@@ -439,7 +440,6 @@
         </nav>
     </div>
 
-    {{-- HERO --}}
     {{-- HERO --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
@@ -451,7 +451,6 @@
                             $media,
                             [
                                 'alt' => e($title),
-                                // make image fit nicely + not overflow viewport
                                 'class' => 'w-full object-contain ',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
@@ -470,7 +469,7 @@
                 <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
-                        Your Tech-pack, Our production
+                        {{ $sloganTag }}
                     </div>
 
                     <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
@@ -484,10 +483,11 @@
                     @endif
 
                     <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center rounded bg-[#1f5f99] px-6 py-3 text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
+                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                         data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ e($title) }}"
                         data-item-url="{{ e($productUrl) }}" data-item-image="{{ e($productImage) }}">
-                        Get Price
+                        {!! $quoteButtonHtml !!}
                     </a>
                 </div>
             </div>
@@ -506,7 +506,6 @@
                             @php
                                 /** @var \App\Models\Media $r */
 
-                                // ✅ Apply plugin defaults in-memory for related cards too (NO SAVE)
                                 if (function_exists('do_action')) {
                                     do_action('media.attachment.defaults.persist', $r);
                                 }
@@ -550,13 +549,16 @@
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <h3 class="text-sm font-semibold leading-snug line-clamp-2">
+                                        <div class="text-sm font-medium leading-snug text-slate-500">
+                                            {{ $productStylePrefix }}{{ (int) $r->id }}
+                                        </div>
+
+                                        <h3 class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
                                             {{ $rTitle }}
                                         </h3>
                                     </div>
                                 </a>
 
-                                {{-- ✅ ADD THIS BUTTON --}}
                                 @php
                                     $rImage = '';
                                     try {
@@ -569,11 +571,12 @@
                                 @endphp
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
+                                    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
                                     data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
                                     data-item-image="{{ e($rImage) }}">
-                                    Get Price
+                                    {!! $quoteButtonHtml !!}
                                 </button>
                             </div>
                         @endforeach
@@ -581,7 +584,6 @@
                 @endif
 
                 {{-- META + RELATED LINKS --}}
-                {{-- ✅ Mobile optimized: stack on mobile, hide Related Links on mobile --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
@@ -595,7 +597,6 @@
                         @endif
                     </div>
 
-                    {{-- ✅ Hide on mobile --}}
                     <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
@@ -606,7 +607,6 @@
                                         @php
                                             /** @var \App\Models\Media $q */
 
-                                            // ✅ Apply plugin defaults in-memory for link titles too (NO SAVE)
                                             if (function_exists('do_action')) {
                                                 do_action('media.attachment.defaults.persist', $q);
                                             }

@@ -27,6 +27,7 @@ class BlogCategoryForm
                                 if (!filled($get('slug'))) {
                                     $set('slug', Str::slug((string) $state));
                                 }
+
                                 if (!filled($get('product'))) {
                                     $set('product', (string) $state);
                                 }
@@ -62,18 +63,6 @@ class BlogCategoryForm
                             ->nullable(),
                     ])
                     ->columns(1),
-
-                \Filament\Schemas\Components\Section::make('Visibility')
-                    ->columnSpan(['default' => 1, 'lg' => 1])
-                    ->schema([
-                        Select::make('visibility')
-                            ->options([
-                                'public' => 'public',
-                                'private' => 'private',
-                            ])
-                            ->default('public')
-                            ->required(),
-                    ]),
             ]);
     }
 }

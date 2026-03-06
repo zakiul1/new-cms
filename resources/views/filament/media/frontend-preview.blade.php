@@ -3,6 +3,20 @@
     $description = (string) ($description ?? '');
     $url = (string) ($url ?? '');
     $imageUrl = $imageUrl ?? null;
+
+    $settings = app(\App\Cms\Core\SettingsRepository::class);
+
+    $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
+    if ($sloganTag === '') {
+        $sloganTag = 'Your Tech-pack, Our production';
+    }
+
+    $quoteButtonText = trim((string) $settings->get('core', 'quote_button_text', 'Custom Quote'));
+    if ($quoteButtonText === '') {
+        $quoteButtonText = 'Custom Quote';
+    }
+
+    $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 @endphp
 
 <div class="rounded-lg border bg-white p-4 space-y-3">
@@ -24,7 +38,7 @@
             <div class="h-1 w-14 bg-red-500"></div>
 
             <div class="mt-3 text-sm font-semibold text-slate-700">
-                Your Tech-pack, Our production
+                {{ $sloganTag }}
             </div>
 
             <div class="mt-2 text-2xl font-extrabold leading-tight tracking-tight text-slate-900 break-words">
@@ -37,8 +51,9 @@
                 </div>
             @endif
 
-            <div class="mt-4 inline-flex items-center rounded bg-[#1f5f99] px-4 py-2 text-sm font-semibold text-white">
-                Get Price
+            <div
+                class="mt-4 inline-flex items-center justify-center rounded bg-[#1f5f99] px-4 py-2 text-center text-sm font-semibold text-white">
+                {!! $quoteButtonHtml !!}
             </div>
         </div>
 
