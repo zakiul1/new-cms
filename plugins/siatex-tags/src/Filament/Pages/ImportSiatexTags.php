@@ -15,12 +15,12 @@ use UnitEnum;
 class ImportSiatexTags extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-arrow-up-tray';
-    protected static string|UnitEnum|null $navigationGroup = 'Media';
-    protected static ?string $title = 'Import Siatex Tags';
+    protected static string|UnitEnum|null $navigationGroup = 'Tags';
+    protected static ?string $navigationLabel = 'Add Tags';
+    protected static ?string $title = 'Add Tags';
 
     protected string $view = 'siatex-tags::filament.import-siatex-tags';
 
-    // ✅ form state
     public array $data = [
         'lines' => '',
     ];
@@ -33,9 +33,9 @@ class ImportSiatexTags extends Page
     public function form(Schema $schema): Schema
     {
         return $schema
-            ->statePath('data') // ✅ important
+            ->statePath('data')
             ->components([
-                Textarea::make('lines') // ✅ key must match data['lines']
+                Textarea::make('lines')
                     ->label('Paste tags (one per line)')
                     ->rows(16)
                     ->required()
@@ -51,7 +51,6 @@ class ImportSiatexTags extends Page
                 ->icon('heroicon-o-arrow-up-tray')
                 ->color('primary')
                 ->action(function () {
-                    // ✅ now this will contain lines correctly
                     $raw = (string) ($this->data['lines'] ?? '');
 
                     $rows = preg_split("/\r\n|\n|\r/", $raw) ?: [];
@@ -90,7 +89,6 @@ class ImportSiatexTags extends Page
                         ->success()
                         ->send();
 
-                    // reset
                     $this->data['lines'] = '';
                     $this->form->fill($this->data);
                 }),

@@ -4,24 +4,22 @@ namespace App\Filament\Resources\Posts\Schemas;
 
 use App\Cms\Content\PermalinkManager;
 use App\Filament\Forms\Components\MediaPicker;
+use App\Filament\Forms\Components\WpClassicEditor;
 use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
-use Filament\Forms\Components\ColorPicker;
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use App\Filament\Forms\Components\WpClassicEditor;
 
 class PostForm
 {
@@ -33,9 +31,6 @@ class PostForm
                 'lg' => 3,
             ])
             ->components([
-                /**
-                 * LEFT (2/3): Tabs
-                 */
                 Tabs::make('Editor')
                     ->columnSpan([
                         'default' => 1,
@@ -45,95 +40,60 @@ class PostForm
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
-                                    ->required()
+                                    ->label('Post Title')
+
                                     ->maxLength(255)
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        // slug fill (existing behavior)
                                         if (!filled($get('slug'))) {
                                             $set('slug', Str::slug((string) $state));
                                         }
 
-                                        // ✅ SEO title fill (only if empty)
                                         if (!filled($get('meta_json.seo.title'))) {
                                             $set('meta_json.seo.title', (string) $state);
                                         }
                                     }),
 
-                                // ✅ NEW: Slider Title (meta_json.slider.title)
                                 TextInput::make('meta_json.slider.title')
-                                    ->label('Slider Title')
+                                    ->label('H1')
                                     ->maxLength(255)
                                     ->live(onBlur: true),
 
-                                // ✅ GLOBAL uniqueness + slug safety
                                 TextInput::make('slug')
-                                    ->label('Slug (optional)')
+                                    ->label('Slug')
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                                    // ✅ sanitize on blur
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         $set('slug', filled($state) ? Str::slug((string) $state) : null);
                                     })
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
                                     ->rule(function (?Post $record) {
-                                        // ✅ Global across all posts table rows (posts + pages share same slug namespace)
                                         return Rule::unique('posts', 'slug')->ignore($record?->id);
-                                    })
-                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).'),
+                                    }),
 
-                                // ✅ Show actual frontend URL (uses Permalink Settings)
                                 Placeholder::make('permalink_preview')
-                                    ->label('Permalink')
+                                    ->label('')
                                     ->content(function (?Post $record, Get $get, PermalinkManager $permalinks) {
-                                        // When editing an existing post, show the true permalink
                                         if ($record) {
                                             return $permalinks->postUrl($record);
                                         }
 
-                                        // On create, we don't have ID/date yet; show a "preview"
                                         $base = rtrim((string) config('app.url'), '/');
 
                                         $slug = trim((string) $get('slug'), '/');
                                         if ($slug === '') {
                                             $slug = Str::slug((string) ($get('title') ?? ''));
                                         }
-                                        $slug = $slug !== '' ? $slug : '(auto)';
+                                        $slug = $slug !== '' ? $slug : 'your-page-slug';
 
-                                        $structure = $permalinks->postStructure();
-
-                                        // Plain mode uses query param
-                                        if ($structure === 'plain') {
-                                            return "{$base}/?p=(after-save)";
-                                        }
-
-                                        // Build a preview path by replacing tokens; ID not known yet
-                                        $now = now();
-                                        $preview = strtr($structure, [
-                                            '%year%' => $now->format('Y'),
-                                            '%monthnum%' => $now->format('m'),
-                                            '%day%' => $now->format('d'),
-                                            '%hour%' => $now->format('H'),
-                                            '%minute%' => $now->format('i'),
-                                            '%second%' => $now->format('s'),
-                                            '%post_id%' => '(after-save)',
-                                            '%postname%' => $slug,
-                                        ]);
-
-                                        $preview = '/' . ltrim($preview, '/');
-                                        $preview = $preview !== '/' ? rtrim($preview, '/') : '/';
-
-                                        return $base . $preview;
+                                        return $base . '/' . $slug;
                                     }),
 
-                                // ✅ Editor
                                 WpClassicEditor::make('content_json')
-                                    ->label('Content')
+                                    ->label('Hero Section')
                                     ->height(320)
                                     ->columnSpanFull()
-
-                                    // ✅ editor always receives a STRING (not array)
                                     ->formatStateUsing(function ($state): string {
                                         if (is_array($state)) {
                                             $html = $state['html'] ?? '';
@@ -142,9 +102,7 @@ class PostForm
 
                                         return is_string($state) ? $state : '';
                                     })
-
-                                    // ✅ when saving, convert string back into array for content_json
-                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get): array {
+                                    ->dehydrateStateUsing(function ($state, Get $get): array {
                                         $current = $get('content_json');
 
                                         if (!is_array($current)) {
@@ -156,13 +114,8 @@ class PostForm
                                         return $current;
                                     }),
 
-                                TextInput::make('meta_json.subtitle')
-                                    ->label('Sub Title')
-                                    ->maxLength(255)
-                                    ->live(onBlur: true),
-
-                                WpClassicEditor::make('meta_json.sub_description')
-                                    ->label('Sub Description')
+                                WpClassicEditor::make('meta_json.product')
+                                    ->label('Product')
                                     ->height(180)
                                     ->columnSpanFull()
                                     ->formatStateUsing(function ($state): string {
@@ -173,12 +126,26 @@ class PostForm
 
                                         return is_string($state) ? $state : '';
                                     })
-                                    ->dehydrateStateUsing(function ($state, \Filament\Schemas\Components\Utilities\Get $get) {
-                                        // store as string html (simple)
+                                    ->dehydrateStateUsing(function ($state) {
                                         return is_string($state) ? $state : '';
                                     }),
 
-                                // ✅ SEO (Premium-feel)
+                                WpClassicEditor::make('meta_json.sub_description')
+                                    ->label('Promo')
+                                    ->height(180)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        return is_string($state) ? $state : '';
+                                    }),
+
                                 Section::make('SEO (Premium)')
                                     ->description('Control how this page appears in Google and when shared on social media.')
                                     ->collapsible()
@@ -186,13 +153,11 @@ class PostForm
                                     ->schema([
                                         TextInput::make('meta_json.seo.title')
                                             ->label('SEO Title')
-                                            ->helperText('')
                                             ->maxLength(1000)
                                             ->live(onBlur: true),
 
                                         Textarea::make('meta_json.seo.description')
                                             ->label('Meta Description')
-                                            ->helperText('')
                                             ->rows(3)
                                             ->maxLength(2000)
                                             ->live(onBlur: true),
@@ -205,7 +170,6 @@ class PostForm
 
                                         Select::make('meta_json.seo.robots')
                                             ->label('Robots')
-                                            ->helperText('Default: index, follow')
                                             ->options([
                                                 '' => 'Default (index, follow)',
                                                 'index, follow' => 'index, follow',
@@ -217,7 +181,6 @@ class PostForm
 
                                         TextInput::make('meta_json.seo.og_image')
                                             ->label('OpenGraph Image (optional)')
-                                            ->helperText('Absolute URL or path. Used for Facebook/Twitter previews.')
                                             ->placeholder('https://example.com/og.jpg')
                                             ->maxLength(255),
                                     ])
@@ -227,8 +190,8 @@ class PostForm
                         Tab::make('Custom CSS & JS')
                             ->schema([
                                 Textarea::make('meta_json.assets.css')
-                                    ->label('Custom CSS (Paste Row CSS Without <style> tags)')
-                                    ->helperText('Applies to this post only. Output inside <head>.')
+                                    ->label('Custom CSS (Paste Raw CSS Without <style> tags)')
+                                    ->helperText('Applies to this page only. Output inside <head>.')
                                     ->rows(14)
                                     ->extraAttributes([
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
@@ -237,7 +200,7 @@ class PostForm
 
                                 Textarea::make('meta_json.assets.js')
                                     ->label('Custom JS (Paste Script Without <script> tags)')
-                                    ->helperText('Applies to this post only. Output before </body>.')
+                                    ->helperText('Applies to this page only. Output before </body>.')
                                     ->rows(14)
                                     ->extraAttributes([
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
@@ -246,7 +209,7 @@ class PostForm
 
                                 Textarea::make('meta_json.custom_json')
                                     ->label('Custom JSON (Paste Valid JSON)')
-                                    ->helperText('Valid JSON only. Saved per post. (Do not include <script> tag)')
+                                    ->helperText('Valid JSON only. Saved per page. (Do not include <script> tag)')
                                     ->rows(18)
                                     ->nullable()
                                     ->rules(['json'])
@@ -262,7 +225,6 @@ class PostForm
                                             ) ?: '';
                                         }
 
-                                        // keep legacy string JSON editable
                                         return (string) $state;
                                     })
                                     ->dehydrateStateUsing(function ($state) {
@@ -274,7 +236,6 @@ class PostForm
 
                                         $decoded = json_decode($state, true);
 
-                                        // extra safety (rules(['json']) should already prevent invalid)
                                         if (json_last_error() !== JSON_ERROR_NONE) {
                                             return null;
                                         }
@@ -291,7 +252,7 @@ class PostForm
                                     ->content(function (?Post $record, PermalinkManager $permalinks): \Illuminate\Support\HtmlString {
                                         if (!$record) {
                                             return new \Illuminate\Support\HtmlString(
-                                                '<div class="text-sm text-gray-600">Save the post first to preview the real frontend page.</div>'
+                                                '<div class="text-sm text-gray-600">Save the page first to preview the real frontend page.</div>'
                                             );
                                         }
 
@@ -305,9 +266,6 @@ class PostForm
                             ]),
                     ]),
 
-                /**
-                 * RIGHT (1/3): Publish
-                 */
                 Section::make('Publish')
                     ->columnSpan([
                         'default' => 1,
@@ -315,6 +273,7 @@ class PostForm
                     ])
                     ->schema([
                         Select::make('status')
+                            ->label('Status')
                             ->options([
                                 'draft' => 'Draft',
                                 'published' => 'Published',
@@ -323,21 +282,18 @@ class PostForm
                             ->default('published')
                             ->required(),
 
-                        // ✅ Template select (stored in meta_json.template)
                         Select::make('meta_json.template')
                             ->label('Template')
-                            ->helperText('If selected, frontend will use that template. If empty, theme default view is used.')
+                            ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
                             ->options([
-                                '' => 'Theme Default (post.blade.php)',
-                                'default' => 'Slider Template',
+                                '' => 'Select an option',
+                                'default' => 'Default',
                             ])
-                            ->default('') // ✅ empty by default
+                            ->default('')
                             ->native(false)
                             ->dehydrateStateUsing(function ($state) {
-                                // ✅ always store as string; keep empty string if not selected
                                 return is_string($state) ? $state : '';
                             }),
-
 
                         MediaPicker::make('featured_media_ids')
                             ->label('Featured Images')
@@ -345,33 +301,25 @@ class PostForm
                             ->multiple()
                             ->maxItems(20),
 
-                        // ✅ NEW: Product Images (multiple) - saving/sync handled in Create/Edit page classes
                         MediaPicker::make('product_media_ids')
                             ->label('Product Images')
                             ->modalHeading('Product images')
                             ->multiple()
                             ->maxItems(50),
 
-                        // ✅ NEW: Duotone panel fields (stored in meta_json.duotone.*)
-                        Section::make('Duotone')
-                            ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
-                            ->collapsible()
-                            ->collapsed()
-                            ->schema([
-                                ColorPicker::make('meta_json.duotone.color')
-                                    ->label('Color')
-                                    ->nullable(),
-
-                                TextInput::make('meta_json.duotone.opacity')
-                                    ->label('Opacity')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->maxValue(100)
-                                    ->default(0)
-                                    ->suffix('%')
-                                    ->helperText('0 = transparent, 100 = fully opaque.')
-                                    ->nullable(),
-                            ]),
+                        Select::make('parent_id')
+                            ->label('Parent Page (optional)')
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->options(function (?Post $record): array {
+                                return Post::query()
+                                    ->where('type', 'page')
+                                    ->when($record, fn($q) => $q->where('id', '!=', $record->id))
+                                    ->orderBy('title')
+                                    ->pluck('title', 'id')
+                                    ->all();
+                            }),
 
                         Select::make('categories')
                             ->label('Categories')
@@ -397,9 +345,8 @@ class PostForm
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
                                     ->live(onBlur: true)
-                                    ->afterStateUpdated(fn($state, Set $set) => $set('slug', Str::slug((string) $state)))
+                                    ->afterStateUpdated(fn($state, Set $set) => $set('slug', filled($state) ? Str::slug((string) $state) : null))
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Str::slug((string) $state) : null)
-                                    // ✅ FIX: unique within CATEGORY taxonomy (taxonomy_id)
                                     ->rule(function (?Term $record) {
                                         $taxonomyId = Taxonomy::where('key', 'category')->value('id');
 
@@ -419,6 +366,7 @@ class PostForm
                                     ->nullable()
                                     ->options(function (): array {
                                         $taxonomyId = Taxonomy::where('key', 'category')->value('id');
+
                                         if (!$taxonomyId) {
                                             return [];
                                         }
@@ -459,18 +407,6 @@ class PostForm
 
                                 return $term->getKey();
                             }),
-
-                        Select::make('tags')
-                            ->label('Tags')
-                            ->relationship('tags', 'name')
-                            ->multiple()
-                            ->preload()
-                            ->searchable(),
-
-                        DateTimePicker::make('published_at')
-                            ->label('Publish At')
-                            ->seconds(false)
-                            ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
                     ]),
             ]);
     }

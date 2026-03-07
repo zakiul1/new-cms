@@ -28,8 +28,8 @@ class TagDefaults extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Media';
-    protected static ?string $navigationLabel = 'Tags Defaults';
+    protected static string|UnitEnum|null $navigationGroup = 'Tags';
+    protected static ?string $navigationLabel = 'Tags Default';
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-adjustments-horizontal';
     protected static ?int $navigationSort = 61;
 
@@ -60,7 +60,7 @@ class TagDefaults extends Page implements HasForms
         'default_assets_css' => '',
         'default_assets_js' => '',
 
-        // ✅ string in UI
+        // string in UI
         'default_custom_json' => '',
     ];
 
@@ -84,7 +84,6 @@ class TagDefaults extends Page implements HasForms
             return \Plugins\SiatexTags\Models\SiatexTag::query()->latest('id')->value('id');
         }
 
-        // Fallback if model isn't available
         return (int) (\Illuminate\Support\Facades\DB::table('siatex_tags')->latest('id')->value('id') ?: 0) ?: null;
     }
 
@@ -192,7 +191,7 @@ class TagDefaults extends Page implements HasForms
                     ->tabs([
                         Tab::make('Content')
                             ->schema([
-                                Section::make('Tags Defaults')
+                                Section::make('Tags Default')
                                     ->description('These defaults are applied when you open Edit Siatex Tag. Only empty fields are auto-filled.')
                                     ->statePath('data')
                                     ->schema([
@@ -353,6 +352,7 @@ class TagDefaults extends Page implements HasForms
                                                     ->mapWithKeys(function ($t) {
                                                         $label = trim((string) ($t->title ?: $t->slug));
                                                         $slug = (string) $t->slug;
+
                                                         return [
                                                             $t->id => Str::limit($label, 60) . '  (/' . $slug . ')',
                                                         ];
@@ -380,6 +380,7 @@ class TagDefaults extends Page implements HasForms
                                                     ->mapWithKeys(function ($t) {
                                                         $label = trim((string) ($t->title ?: $t->slug));
                                                         $slug = (string) $t->slug;
+
                                                         return [
                                                             $t->id => Str::limit($label, 60) . '  (/' . $slug . ')',
                                                         ];
@@ -398,6 +399,7 @@ class TagDefaults extends Page implements HasForms
                                                 }
 
                                                 $label = trim((string) ($t->title ?: $t->slug));
+
                                                 return Str::limit($label, 80) . '  (/' . (string) $t->slug . ')';
                                             })
                                             ->live()
@@ -461,7 +463,6 @@ class TagDefaults extends Page implements HasForms
             $this->data = $state['data'];
         }
 
-        // ✅ JSON validation (UI string -> array|null)
         $jsonString = trim((string) ($this->data['default_custom_json'] ?? ''));
 
         $jsonArray = null;
@@ -480,24 +481,20 @@ class TagDefaults extends Page implements HasForms
             $jsonArray = $decoded;
         }
 
-        // Save global-only defaults
         $settings->set('default_title', (string) ($this->data['default_title'] ?? ''), $group);
         $settings->set('default_description', (string) ($this->data['default_description'] ?? ''), $group);
         $settings->set('default_sub_title', (string) ($this->data['default_sub_title'] ?? ''), $group);
         $settings->set('default_sub_description', (string) ($this->data['default_sub_description'] ?? ''), $group);
 
-        // SEO
         $settings->set('default_seo_title', (string) ($this->data['default_seo_title'] ?? ''), $group);
         $settings->set('default_seo_description', (string) ($this->data['default_seo_description'] ?? ''), $group);
         $settings->set('default_seo_canonical', (string) ($this->data['default_seo_canonical'] ?? ''), $group);
         $settings->set('default_seo_robots', (string) ($this->data['default_seo_robots'] ?? ''), $group);
         $settings->set('default_seo_og_image', (string) ($this->data['default_seo_og_image'] ?? ''), $group);
 
-        // Assets
         $settings->set('default_assets_css', (string) ($this->data['default_assets_css'] ?? ''), $group);
         $settings->set('default_assets_js', (string) ($this->data['default_assets_js'] ?? ''), $group);
 
-        // JSON
         $settings->set('default_custom_json', $jsonArray, $group);
 
         $this->syncPreviewSession();

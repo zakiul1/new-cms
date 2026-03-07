@@ -8,29 +8,26 @@ use App\Models\Post;
 use App\Models\Taxonomy;
 use App\Models\Term;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Illuminate\Support\HtmlString;
-use Filament\Actions\BulkAction;
-use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Collection;
-
-
+use Illuminate\Support\HtmlString;
 
 class PostsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
-            // ✅ Needed for hover UI (group-hover)
             ->recordClasses(fn() => 'group')
-            ->defaultSort('id', 'desc')
+            ->defaultSort('updated_at', 'desc')
             ->columns([
                 TextColumn::make('title')
                     ->label('Title')
@@ -38,10 +35,8 @@ class PostsTable
                     ->sortable()
                     ->wrap(false)
                     ->limit(50)
-                    ->tooltip(fn($record) => $record->title)
+                    ->tooltip(fn(Post $record) => $record->title)
                     ->extraAttributes(['class' => 'max-w-[420px] truncate'])
-
-                    // ✅ WP-like hover actions
                     ->description(function (Post $record, PermalinkManager $permalinks): HtmlString {
                         $editUrl = PostResource::getUrl('edit', ['record' => $record]);
                         $viewUrl = $permalinks->postUrl($record);
@@ -55,7 +50,6 @@ class PostsTable
                         );
                     }),
 
-                // ✅ Permalink (uses current permalink settings)
                 TextColumn::make('url')
                     ->label('URL')
                     ->state(fn(Post $record, PermalinkManager $permalinks) => $permalinks->postUrl($record))
@@ -71,6 +65,7 @@ class PostsTable
                     ->toggleable(),
 
                 TextColumn::make('status')
+                    ->label('Status')
                     ->badge()
                     ->sortable(),
 
@@ -105,8 +100,6 @@ class PostsTable
                         return $query->whereHas('categories', fn($q) => $q->whereKey($termId));
                     }),
             ])
-
-            // ✅ Right-side row actions (Edit + View + Trash)
             ->recordActions([
                 EditAction::make(),
 
@@ -119,7 +112,6 @@ class PostsTable
                 DeleteAction::make()
                     ->label('Trash'),
             ])
-
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('copy_to_category')
@@ -130,6 +122,7 @@ class PostsTable
                                 ->label('Target Category')
                                 ->options(function (): array {
                                     $taxonomyId = Taxonomy::idByKey('category');
+
                                     if (!$taxonomyId) {
                                         return [];
                                     }
@@ -151,7 +144,6 @@ class PostsTable
                                 return;
                             }
 
-                            // Ensure selected term is really a "category" term
                             $valid = Term::query()
                                 ->where('taxonomy_id', $taxonomyId)
                                 ->where('id', $categoryId)
@@ -162,11 +154,12 @@ class PostsTable
                                     ->title('Invalid category selected')
                                     ->danger()
                                     ->send();
+
                                 return;
                             }
 
                             foreach ($records as $post) {
-                                /** @var \App\Models\Post $post */
+                                /** @var Post $post */
                                 $post->terms()->syncWithoutDetaching([$categoryId]);
                             }
                         })
@@ -182,6 +175,7 @@ class PostsTable
                                 ->label('Target Category')
                                 ->options(function (): array {
                                     $taxonomyId = Taxonomy::idByKey('category');
+
                                     if (!$taxonomyId) {
                                         return [];
                                     }
@@ -213,17 +207,17 @@ class PostsTable
                                     ->title('Invalid category selected')
                                     ->danger()
                                     ->send();
+
                                 return;
                             }
 
-                            // Get all term IDs for the "category" taxonomy (so we only detach categories, not tags)
                             $allCategoryTermIds = Term::query()
                                 ->where('taxonomy_id', $taxonomyId)
                                 ->pluck('id')
                                 ->all();
 
                             foreach ($records as $post) {
-                                /** @var \App\Models\Post $post */
+                                /** @var Post $post */
                                 if (!empty($allCategoryTermIds)) {
                                     $post->terms()->detach($allCategoryTermIds);
                                 }
@@ -236,6 +230,5 @@ class PostsTable
                     DeleteBulkAction::make(),
                 ]),
             ]);
-
     }
 }

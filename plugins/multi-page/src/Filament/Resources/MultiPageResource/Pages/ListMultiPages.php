@@ -18,7 +18,7 @@ class ListMultiPages extends ListRecords
     {
         return [
             Actions\CreateAction::make()
-                ->label('Add Multipages')
+                ->label('Add Mega Pages')
                 ->url(fn() => MultiPageResource::getUrl('create', panel: 'admin')),
         ];
     }

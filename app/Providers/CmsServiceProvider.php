@@ -94,14 +94,19 @@ class CmsServiceProvider extends ServiceProvider
         /** @var Hooks $hooks */
         $hooks = $this->app->make(Hooks::class);
 
-        // ✅ Apply runtime media settings from DB (Option A)
+        // Apply runtime media settings from DB
         $this->applyMediaRuntimeSettings();
 
-        // ✅ OPTIONAL: Add page template option safely (won’t break if unused)
+        // Page template options
         $hooks->addFilter('cms.page_template_options', function (array $opts) {
             if (view()->exists('templates.static-landing-page')) {
                 $opts['static-landing-page'] = 'Static Landing Page';
             }
+
+            if (view()->exists('templates.huraira-fashion')) {
+                $opts['huraira-fashion'] = 'Huraira Fashion';
+            }
+
             return $opts;
         }, 20, 1);
 
@@ -111,7 +116,7 @@ class CmsServiceProvider extends ServiceProvider
         // Content pipeline (shortcodes)
         $this->registerContentPipeline($hooks);
 
-        // ✅ IMPORTANT: enable shortcodes for widget output (footer builder needs this)
+        // Enable shortcodes for widget output
         $hooks->addFilter('cms.sidebar.widget_html', function ($html, $widget, $ctx) use ($hooks) {
             return $hooks->applyFilters(HookPoints::CMS_THE_CONTENT, (string) $html, is_array($ctx) ? $ctx : []);
         }, 20, 3);
@@ -119,15 +124,15 @@ class CmsServiceProvider extends ServiceProvider
         // Theme: boot views / publish dist if missing
         $this->app->make(ThemeManager::class)->bootActiveTheme();
 
-        // ✅ Register built-in/core locations & widget types (NO helper functions)
+        // Register built-in/core locations & widget types
         $this->registerCoreMenusAndWidgets($hooks);
 
-        // ✅ Let theme + plugins register menu locations, sidebars, widget types
+        // Let theme + plugins register menu locations, sidebars, widget types
         $hooks->doAction(HookPoints::CMS_REGISTER_MENUS);
         $hooks->doAction(HookPoints::CMS_REGISTER_SIDEBARS);
         $hooks->doAction(HookPoints::CMS_REGISTER_WIDGETS);
 
-        // ✅ Register cache bump observer for widgets
+        // Register cache bump observer for widgets
         $this->registerWidgetCacheObserver();
 
         // Core blocks (HTTP only)
@@ -185,10 +190,6 @@ class CmsServiceProvider extends ServiceProvider
             app(MenuRegistry::class)->register('footer', 'Footer Menu');
         }, 5, 0);
 
-        /**
-         * ✅ Dynamic Footer Sidebars
-         * footer-1..footer-3/4/5 based on core.footer_columns
-         */
         $hooks->addAction(HookPoints::CMS_REGISTER_SIDEBARS, function () {
             app(SidebarRegistry::class)->register('sidebar-1', 'Main Sidebar');
 
@@ -200,22 +201,13 @@ class CmsServiceProvider extends ServiceProvider
             }
         }, 5, 0);
 
-        /**
-         * ✅ Register Core Widget Types
-         * - Text (existing)
-         * - Menu (existing)
-         * - Categories (new)
-         * - Shortcode (optional)
-         */
         $hooks->addAction(HookPoints::CMS_REGISTER_WIDGETS, function () {
             $reg = app(WidgetRegistry::class);
 
             $reg->register(TextWidget::class);
             $reg->register(MenuWidget::class);
-
             $reg->register(CategoriesWidget::class);
 
-            // If you created ShortcodeWidget, register it too
             if (class_exists(ShortcodeWidget::class)) {
                 $reg->register(ShortcodeWidget::class);
             }
@@ -240,17 +232,15 @@ class CmsServiceProvider extends ServiceProvider
     }
 
     /**
-     * ✅ This is the ONLY correct place to register shortcodes for ShortcodeParser
+     * This is the correct place to register shortcodes for ShortcodeParser
      */
     private function registerContentPipeline(Hooks $hooks): void
     {
         /** @var ShortcodeRegistry $shortcodes */
         $shortcodes = $this->app->make(ShortcodeRegistry::class);
 
-        // ✅ Register your core shortcodes into the registry (H1, POSTS, PRODUCTS, LOGO, SP...)
         \App\Cms\Shortcodes\CoreShortcodes::register($shortcodes);
 
-        // Apply shortcodes through CMS_THE_CONTENT pipeline
         $hooks->addFilter(HookPoints::CMS_THE_CONTENT, function ($html, $ctx = []) {
             return app(ShortcodeParser::class)->render(
                 (string) $html,

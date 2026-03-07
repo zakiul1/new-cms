@@ -230,11 +230,6 @@
             }
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Breadcrumb
-        |--------------------------------------------------------------------------
-        */
         $currentTitle = trim((string) ($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page'));
 
         $breadcrumbParentTitle = null;
@@ -273,7 +268,6 @@
             $breadcrumbParentUrl = null;
         }
 
-        // fallback from first featured media category
         if (!$breadcrumbParentTitle && $featuredMediaItems->isNotEmpty()) {
             try {
                 $firstMedia = $featuredMediaItems->first();
@@ -304,13 +298,7 @@
                     @if (!empty($breadcrumbParentTitle))
                         <li class="text-slate-400">/</li>
                         <li>
-                            @if (!empty($breadcrumbParentUrl))
-                                <span class="text-slate-700 cursor-pointer">
-                                    {{ $breadcrumbParentTitle }}
-                                </span>
-                            @else
-                                <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
-                            @endif
+                            <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
                         </li>
                     @endif
 
@@ -484,7 +472,7 @@
 
         @if ($hasProductContent)
             <section class="mt-5 bg-white">
-                <div class="cms-container mx-auto px-4">
+                <div class="page-container mx-auto px-4">
                     <div class="cms-content">
                         {!! $productHtml !!}
                     </div>

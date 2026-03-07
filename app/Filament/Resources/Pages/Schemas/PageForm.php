@@ -2,17 +2,11 @@
 
 namespace App\Filament\Resources\Pages\Schemas;
 
-use App\Cms\Content\PermalinkManager;
-use App\Cms\Core\SettingsRepository;
 use App\Filament\Forms\Components\MediaPicker;
 use App\Filament\Forms\Components\WpClassicEditor;
 use App\Models\Post;
-use App\Models\Slider;
 use App\Models\Taxonomy;
 use App\Models\Term;
-use Filament\Forms\Components\ColorPicker;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -29,9 +23,6 @@ class PageForm
 {
     public static function configure(Schema $schema): Schema
     {
-        /**
-         * ✅ RIGHT (1/3): Publish schema extracted so plugins can inject metaboxes
-         */
         $publishSchema = [
             Select::make('status')
                 ->options([
@@ -42,7 +33,6 @@ class PageForm
                 ->default('published')
                 ->required(),
 
-            // ✅ Template select
             Select::make('meta_json.template')
                 ->label('Template')
                 ->helperText('If selected, frontend will use that template file. If empty, theme default page view is used.')
@@ -52,7 +42,6 @@ class PageForm
                         'default' => 'Slider Template',
                     ];
 
-                    // Allow plugins to add templates
                     if (function_exists('apply_filters')) {
                         $base = (array) apply_filters('cms.page_template_options', $base);
                     }
@@ -63,90 +52,17 @@ class PageForm
                 ->native(false)
                 ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
 
-            // ✅ Home Hero Slider (shows ONLY when this page is selected as homepage in Settings)
-            Section::make('Home Hero Slider (Siatex)')
-                ->collapsible()
-                ->collapsed()
-                ->visible(function (?Post $record): bool {
-                    if (!$record) {
-                        return false; // Create page: no record yet
-                    }
-
-                    /** @var SettingsRepository $settings */
-                    $settings = app(SettingsRepository::class);
-
-                    $homepageId = $settings->get('core', 'homepage_page_id', null);
-                    $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
-
-                    return $homepageId !== null && (int) $record->getKey() === $homepageId;
-                })
-                ->schema([
-                    Select::make('meta_json.home.hero_slider_key')
-                        ->label('Hero Slider')
-                        ->searchable()
-                        ->preload()
-                        ->placeholder('— None —')
-                        ->nullable()
-                        ->options(function (): array {
-                            if (!class_exists(Slider::class)) {
-                                return [];
-                            }
-
-                            try {
-                                return Slider::query()
-                                    ->where('is_active', true)
-                                    ->orderBy('name')
-                                    ->get()
-                                    ->mapWithKeys(fn($s) => [$s->key => "{$s->name} ({$s->key})"])
-                                    ->all();
-                            } catch (\Throwable $e) {
-                                return [];
-                            }
-                        }),
-
-                    Select::make('meta_json.home.hero_slider_variant')
-                        ->label('Variant')
-                        ->native(false)
-                        ->options(fn(): array => function_exists('siatex_slider_variants')
-                            ? siatex_slider_variants()
-                            : ['siatex-default' => 'Siatex Default'])
-                        ->default('siatex-default'),
-                ]),
-
-            // ✅ Featured Images
             MediaPicker::make('featured_media_ids')
                 ->label('Featured Images')
                 ->modalHeading('Featured images')
                 ->multiple()
                 ->maxItems(20),
 
-            // ✅ Product Images
             MediaPicker::make('product_media_ids')
                 ->label('Product Images')
                 ->modalHeading('Product images')
                 ->multiple()
                 ->maxItems(50),
-
-            // ✅ Duotone panel
-            Section::make('Duotone')
-                ->description('Optional overlay color + opacity you can use in the theme for image overlay effects.')
-                ->collapsible()
-                ->collapsed()
-                ->schema([
-                    ColorPicker::make('meta_json.duotone.color')
-                        ->label('Color')
-                        ->nullable(),
-
-                    TextInput::make('meta_json.duotone.opacity')
-                        ->label('Opacity')
-                        ->numeric()
-                        ->minValue(0)
-                        ->maxValue(100)
-                        ->default(0)
-                        ->suffix('%')
-                        ->helperText('0 = transparent, 100 = fully opaque.')
-                        ->nullable(),
-                ]),
 
             Select::make('meta_json.parent_id')
                 ->label('Parent Page (optional)')
@@ -158,12 +74,6 @@ class PageForm
                     ->orderBy('title')
                     ->pluck('title', 'id')
                     ->all()),
-
-            TextInput::make('meta_json.menu_order')
-                ->label('Order')
-                ->helperText('Lower numbers appear first (like WordPress menu order).')
-                ->numeric()
-                ->default(0),
 
             Select::make('categories')
                 ->label('Categories')
@@ -247,24 +157,8 @@ class PageForm
 
                     return $term->getKey();
                 }),
-
-            Select::make('tags')
-                ->label('Tags')
-                ->relationship('tags', 'name')
-                ->multiple()
-                ->preload()
-                ->searchable(),
-
-            DateTimePicker::make('published_at')
-                ->label('Publish At')
-                ->seconds(false)
-                ->required(fn(Get $get) => (string) $get('status') === 'scheduled'),
         ];
 
-        /**
-         * ✅ Allow plugins to inject additional Publish panel sections/fields
-         * Example: MultiPage "Multipage Settings" metabox.
-         */
         if (function_exists('apply_filters')) {
             $publishSchema = (array) apply_filters('cms.page_publish_schema', $publishSchema);
         }
@@ -275,9 +169,6 @@ class PageForm
                 'lg' => 3,
             ])
             ->components([
-                /**
-                 * LEFT (2/3): Tabs
-                 */
                 Tabs::make('Editor')
                     ->columnSpan([
                         'default' => 1,
@@ -287,7 +178,7 @@ class PageForm
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
-                                    ->required()
+                                    ->label('Page Title')
                                     ->maxLength(255)
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
@@ -300,15 +191,14 @@ class PageForm
                                         }
                                     }),
 
-                                // ✅ Slider Title (meta_json.slider.title)
                                 TextInput::make('meta_json.slider.title')
-                                    ->label('Slider Title')
+                                    ->label('H1')
                                     ->maxLength(255)
                                     ->live(onBlur: true),
 
                                 TextInput::make('slug')
-                                    ->label('Slug (optional)')
-                                    ->helperText('Leave blank to auto-generate. Must be globally unique (posts + pages).')
+                                    ->label('Slug')
+                                    ->helperText(url('/') . '/your-page-slug')
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
                                     ->live(onBlur: true)
@@ -320,16 +210,8 @@ class PageForm
                                         return Rule::unique('posts', 'slug')->ignore($record?->id);
                                     }),
 
-                                Placeholder::make('permalink_preview')
-                                    ->label('Permalink')
-                                    ->content(function (?Post $record, PermalinkManager $permalinks) {
-                                        return $record
-                                            ? $permalinks->pageUrl($record)
-                                            : 'Will be generated after saving.';
-                                    }),
-
                                 WpClassicEditor::make('content_json')
-                                    ->label('Content')
+                                    ->label('Hero Section')
                                     ->height(320)
                                     ->columnSpanFull()
                                     ->formatStateUsing(function ($state): string {
@@ -352,13 +234,24 @@ class PageForm
                                         return $current;
                                     }),
 
-                                TextInput::make('meta_json.subtitle')
-                                    ->label('Sub Title')
-                                    ->maxLength(255)
-                                    ->live(onBlur: true),
+                                WpClassicEditor::make('meta_json.product')
+                                    ->label('Product')
+                                    ->height(220)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            $html = $state['html'] ?? '';
+                                            return is_string($html) ? $html : '';
+                                        }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(function ($state) {
+                                        return is_string($state) ? $state : '';
+                                    }),
 
                                 WpClassicEditor::make('meta_json.sub_description')
-                                    ->label('Sub Description')
+                                    ->label('Promo')
                                     ->height(180)
                                     ->columnSpanFull()
                                     ->formatStateUsing(function ($state): string {
@@ -478,9 +371,9 @@ class PageForm
 
                         Tab::make('Frontend Preview')
                             ->schema([
-                                Placeholder::make('frontend_preview')
+                                \Filament\Forms\Components\Placeholder::make('frontend_preview')
                                     ->label('')
-                                    ->content(function (?Post $record, PermalinkManager $permalinks): \Illuminate\Support\HtmlString {
+                                    ->content(function (?Post $record, \App\Cms\Content\PermalinkManager $permalinks): \Illuminate\Support\HtmlString {
                                         if (!$record) {
                                             return new \Illuminate\Support\HtmlString(
                                                 '<div class="text-sm text-gray-600">Save the page first to preview the real frontend page.</div>'
@@ -497,9 +390,6 @@ class PageForm
                             ]),
                     ]),
 
-                /**
-                 * RIGHT (1/3): Publish (now plugin-extendable)
-                 */
                 Section::make('Publish')
                     ->columnSpan([
                         'default' => 1,

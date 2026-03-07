@@ -17,9 +17,9 @@ class LinksBlockSettingsPage extends Page implements HasForms
     use InteractsWithForms;
 
     protected static ?string $navigationLabel = 'Links Block';
-    protected static string|UnitEnum|null $navigationGroup = 'Pages';
+    protected static string|UnitEnum|null $navigationGroup = null;
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-link';
-    protected static ?int $navigationSort = 53;
+    protected static ?int $navigationSort = 50;
 
     protected string $view = 'links-block::filament.pages.links-block-settings';
 
@@ -76,18 +76,17 @@ class LinksBlockSettingsPage extends Page implements HasForms
 
     private function buildShortcode(array $d): string
     {
-        // match WP screenshot order
         return sprintf(
             '[linksblock col="%s" hide="%s" new-window="%s" row="%s" rand="%s" n="%s" mcol="%s" tcol="%s" single-line="%s"]',
-            (int)($d['col'] ?? 3),
-            (string)($d['hide'] ?? 'no'),
-            (string)($d['new_window'] ?? 'yes'),
-            (int)($d['row'] ?? 2),
-            (string)($d['rand'] ?? 'yes'),
-            (int)($d['n'] ?? 60),
-            (int)($d['mcol'] ?? 1),
-            (int)($d['tcol'] ?? 2),
-            (string)($d['single_line'] ?? 'yes'),
+            (int) ($d['col'] ?? 3),
+            (string) ($d['hide'] ?? 'no'),
+            (string) ($d['new_window'] ?? 'yes'),
+            (int) ($d['row'] ?? 2),
+            (string) ($d['rand'] ?? 'yes'),
+            (int) ($d['n'] ?? 60),
+            (int) ($d['mcol'] ?? 1),
+            (int) ($d['tcol'] ?? 2),
+            (string) ($d['single_line'] ?? 'yes'),
         );
     }
 }

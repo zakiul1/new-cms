@@ -34,30 +34,35 @@ class EditSiatexTag extends EditRecord
         return Width::Full;
     }
 
-    /**
-     * ✅ IMPORTANT FIX:
-     * If SEO title is empty in the form, Filament sometimes doesn't overwrite the existing JSON value.
-     * This method ensures empty SEO title truly clears meta_json.seo.title so Tag Defaults can apply.
-     */
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
+
+    public function getTitle(): string
+    {
+        return 'Edit Siatex Tag';
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $meta = $data['meta_json'] ?? [];
+
         if (!is_array($meta)) {
             $meta = [];
         }
 
         $seo = $meta['seo'] ?? [];
+
         if (!is_array($seo)) {
             $seo = [];
         }
 
-        // Normalize SEO title (trim + NBSP cleanup)
         $seoTitle = (string) ($seo['title'] ?? '');
         $seoTitle = html_entity_decode($seoTitle, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $seoTitle = str_replace("\xc2\xa0", ' ', $seoTitle); // NBSP
+        $seoTitle = str_replace("\xc2\xa0", ' ', $seoTitle);
         $seoTitle = trim($seoTitle);
 
-        // If empty -> remove key so defaults can apply
         if ($seoTitle === '') {
             unset($seo['title']);
         } else {
@@ -99,30 +104,44 @@ class EditSiatexTag extends EditRecord
             ])
             ->components([
                 Tabs::make('Editor')
-                    ->columnSpan(['default' => 1, 'lg' => 2])
+                    ->columnSpan([
+                        'default' => 1,
+                        'lg' => 2,
+                    ])
                     ->tabs([
                         Tab::make('Content')
                             ->schema([
                                 TextInput::make('title')
                                     ->label('Tag Name')
-                                    ->required()
                                     ->maxLength(255)
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        // ✅ Use slug template if slug is empty
                                         if (!filled($get('slug'))) {
                                             $set('slug', $this->makeSlugFromTemplate((string) $state));
                                         }
 
-                                        // ❌ Removed: auto-filling meta_json.seo.title from H1
-                                        // This was blocking Tag Defaults "Default SEO Title"
+                                        if (!filled($get('meta_json.h1'))) {
+                                            $set('meta_json.h1', (string) $state);
+                                        }
                                     }),
+
+                                TextInput::make('meta_json.h1')
+                                    ->label('H1')
+                                    ->maxLength(255)
+                                    ->live(onBlur: true),
 
                                 TextInput::make('slug')
                                     ->label('Slug')
-                                    ->required()
                                     ->maxLength(255)
                                     ->regex('/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
+                                    ->helperText(function (?SiatexTag $record, Get $get) {
+                                        $slug = $record?->slug ?: (string) $get('slug');
+                                        $slug = trim($slug) !== '' ? $slug : 'save to preview';
+
+                                        return function_exists('cms_slug_url')
+                                            ? cms_slug_url((string) $slug)
+                                            : url('/' . trim((string) $slug, '/') . '/');
+                                    })
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set) => $set('slug', Str::slug((string) $state)))
                                     ->dehydrateStateUsing(fn($state) => Str::slug((string) $state))
@@ -130,49 +149,51 @@ class EditSiatexTag extends EditRecord
                                         return Rule::unique('siatex_tags', 'slug')->ignore($record?->id);
                                     }),
 
-                                Placeholder::make('permalink_preview')
-                                    ->label('Permalink')
-                                    ->content(function (?SiatexTag $record, Get $get) {
-                                        $slug = $record?->slug ?: (string) $get('slug');
-                                        $slug = trim($slug) !== '' ? $slug : '(save to preview)';
-                                        // ✅ no /tag/ prefix
-                                        return function_exists('cms_slug_url')
-                                            ? cms_slug_url((string) $slug)
-                                            : url('/' . trim((string) $slug, '/') . '/');
-                                    }),
-
                                 WpClassicEditor::make('content_json')
-                                    ->label('Content')
+                                    ->label('Hero Section')
                                     ->height(320)
                                     ->columnSpanFull()
                                     ->formatStateUsing(function ($state): string {
                                         if (is_array($state)) {
                                             return (string) ($state['html'] ?? '');
                                         }
+
                                         return is_string($state) ? $state : '';
                                     })
                                     ->dehydrateStateUsing(function ($state, Get $get): array {
                                         $current = $get('content_json');
+
                                         if (!is_array($current)) {
                                             $current = [];
                                         }
+
                                         $current['html'] = is_string($state) ? $state : '';
+
                                         return $current;
                                     }),
 
-                                TextInput::make('meta_json.subtitle')
-                                    ->label('Sub title')
-                                    ->maxLength(255)
-                                    ->live(onBlur: true),
-
-                                WpClassicEditor::make('meta_json.sub_description')
-                                    ->label('Sub description')
+                                WpClassicEditor::make('meta_json.product')
+                                    ->label('Product')
                                     ->height(180)
                                     ->columnSpanFull()
                                     ->formatStateUsing(function ($state): string {
                                         if (is_array($state)) {
                                             return (string) ($state['html'] ?? '');
                                         }
+
+                                        return is_string($state) ? $state : '';
+                                    })
+                                    ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
+
+                                WpClassicEditor::make('meta_json.sub_description')
+                                    ->label('Promo')
+                                    ->height(180)
+                                    ->columnSpanFull()
+                                    ->formatStateUsing(function ($state): string {
+                                        if (is_array($state)) {
+                                            return (string) ($state['html'] ?? '');
+                                        }
+
                                         return is_string($state) ? $state : '';
                                     })
                                     ->dehydrateStateUsing(fn($state) => is_string($state) ? $state : ''),
@@ -218,7 +239,7 @@ class EditSiatexTag extends EditRecord
                         Tab::make('Custom CSS & JS')
                             ->schema([
                                 Textarea::make('meta_json.assets.css')
-                                    ->label('Custom CSS (without <style>)')
+                                    ->label('Custom CSS (Paste Raw CSS Without <style> tags)')
                                     ->rows(14)
                                     ->extraAttributes([
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
@@ -226,7 +247,7 @@ class EditSiatexTag extends EditRecord
                                     ->live(onBlur: true),
 
                                 Textarea::make('meta_json.assets.js')
-                                    ->label('Custom JS (without <script>)')
+                                    ->label('Custom JS (Paste Script Without <script> tags)')
                                     ->rows(14)
                                     ->extraAttributes([
                                         'style' => 'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;',
@@ -234,7 +255,7 @@ class EditSiatexTag extends EditRecord
                                     ->live(onBlur: true),
 
                                 Textarea::make('meta_json.custom_json')
-                                    ->label('Custom JSON (valid JSON)')
+                                    ->label('Custom JSON (Paste Valid JSON)')
                                     ->rows(16)
                                     ->nullable()
                                     ->rules(['json'])
@@ -242,17 +263,25 @@ class EditSiatexTag extends EditRecord
                                         if (blank($state)) {
                                             return '';
                                         }
+
                                         if (is_array($state)) {
-                                            return json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
+                                            return json_encode(
+                                                $state,
+                                                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                                            ) ?: '';
                                         }
+
                                         return (string) $state;
                                     })
                                     ->dehydrateStateUsing(function ($state) {
                                         $state = trim((string) $state);
+
                                         if ($state === '') {
                                             return null;
                                         }
+
                                         $decoded = json_decode($state, true);
+
                                         return json_last_error() === JSON_ERROR_NONE ? $decoded : null;
                                     })
                                     ->live(onBlur: true),
@@ -269,7 +298,6 @@ class EditSiatexTag extends EditRecord
                                             );
                                         }
 
-                                        // ✅ no /tag/ prefix
                                         $url = function_exists('cms_slug_url')
                                             ? cms_slug_url((string) $record->slug)
                                             : url('/' . trim((string) $record->slug, '/') . '/');
@@ -282,8 +310,11 @@ class EditSiatexTag extends EditRecord
                             ]),
                     ]),
 
-                Section::make('Media')
-                    ->columnSpan(['default' => 1, 'lg' => 1])
+                Section::make('Publish')
+                    ->columnSpan([
+                        'default' => 1,
+                        'lg' => 1,
+                    ])
                     ->schema([
                         Select::make('media_category_term_id')
                             ->label('Media category')
@@ -306,13 +337,11 @@ class EditSiatexTag extends EditRecord
             Action::make('visit')
                 ->label('Visit')
                 ->icon('heroicon-o-arrow-top-right-on-square')
-                // ✅ no /tag/ prefix
                 ->url(fn() => function_exists('cms_slug_url')
                     ? cms_slug_url((string) $record->slug)
                     : url('/' . trim((string) $record->slug, '/') . '/'))
                 ->openUrlInNewTab(),
 
-            // ✅ overwrite existing slug using template
             Action::make('regenerateSlug')
                 ->label('Regenerate Slug')
                 ->icon('heroicon-o-arrow-path')
@@ -321,25 +350,33 @@ class EditSiatexTag extends EditRecord
                     $newSlug = $this->makeSlugFromTemplate((string) $record->title);
 
                     if ($newSlug === '') {
-                        Notification::make()->title('Cannot generate slug')->danger()->send();
+                        Notification::make()
+                            ->title('Cannot generate slug')
+                            ->danger()
+                            ->send();
                         return;
                     }
 
-                    // avoid duplicates
                     $exists = SiatexTag::query()
                         ->where('slug', $newSlug)
                         ->where('id', '!=', $record->id)
                         ->exists();
 
                     if ($exists) {
-                        Notification::make()->title('Slug already exists')->danger()->send();
+                        Notification::make()
+                            ->title('Slug already exists')
+                            ->danger()
+                            ->send();
                         return;
                     }
 
                     $record->slug = $newSlug;
                     $record->save();
 
-                    Notification::make()->title('Slug regenerated')->success()->send();
+                    Notification::make()
+                        ->title('Slug regenerated')
+                        ->success()
+                        ->send();
                 }),
 
             Action::make('back')

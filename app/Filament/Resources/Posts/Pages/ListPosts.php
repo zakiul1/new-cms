@@ -16,7 +16,6 @@ class ListPosts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            // LEFT
             Action::make('publishAssets')
                 ->label('Publish Assets')
                 ->icon('heroicon-o-arrow-up-tray')
@@ -26,15 +25,14 @@ class ListPosts extends ListRecords
                     Artisan::call('cms:publish-assets', ['--clean' => true]);
 
                     Notification::make()
-                        ->success()
                         ->title('Assets published')
                         ->body(trim(Artisan::output()))
+                        ->success()
                         ->send();
                 }),
 
-            // RIGHT
             CreateAction::make()
-                ->label('Create Post')
+                ->label('Add Post')
                 ->icon('heroicon-o-plus')
                 ->color('info'),
         ];

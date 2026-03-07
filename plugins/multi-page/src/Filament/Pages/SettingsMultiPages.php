@@ -30,8 +30,8 @@ class SettingsMultiPages extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationLabel = 'Settings Multipages';
-    protected static string|UnitEnum|null $navigationGroup = 'Pages';
+    protected static ?string $navigationLabel = 'Settings MegaPages';
+    protected static string|UnitEnum|null $navigationGroup = 'Mega Post';
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-cog-6-tooth';
     protected static ?int $navigationSort = 52;
 
@@ -134,8 +134,8 @@ class SettingsMultiPages extends Page implements HasForms
                                             ->label('Sitemaps Dir (public)')
                                             ->helperText('Leave blank to store at ROOT (e.g. /static.xml).')
                                             ->default('')
-                                            ->disabled()      // ✅ blocks typing + editing
-                                            ->dehydrated(true), // ✅ still saved with form (keep it)
+                                            ->disabled()
+                                            ->dehydrated(true),
 
                                         TextInput::make('max_links_per_file')
                                             ->label('Max Links (per file)')
@@ -292,10 +292,9 @@ class SettingsMultiPages extends Page implements HasForms
                     Notification::make()
                         ->success()
                         ->title('Saved')
-                        ->body('Multipage settings saved.')
+                        ->body('MegaPages settings saved.')
                         ->send();
 
-                    // refresh preview
                     $name = trim((string) ($this->data['file_base_name'] ?? 'static')) ?: 'static';
                     $dir = trim((string) ($this->data['sitemaps_dir'] ?? ''));
                     $this->lastSitemapUrl = $this->computeSitemapUrl($name, $dir);
@@ -317,7 +316,6 @@ class SettingsMultiPages extends Page implements HasForms
         $gen = new MultiPageSitemapGenerator();
         $res = $gen->generate();
 
-        // Update preview URL based on current settings
         $name = trim((string) ($this->data['file_base_name'] ?? 'static')) ?: 'static';
         $dir = trim((string) ($this->data['sitemaps_dir'] ?? ''));
         $this->lastSitemapUrl = $this->computeSitemapUrl($name, $dir);

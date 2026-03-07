@@ -9,8 +9,8 @@ use UnitEnum;
 
 class AddMultiPage extends Page
 {
-    protected static ?string $navigationLabel = 'Add Multipages';
-    protected static string|UnitEnum|null $navigationGroup = 'Pages';
+    protected static ?string $navigationLabel = 'Add Mega Pages';
+    protected static string|UnitEnum|null $navigationGroup = 'Mega Post';
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-plus-circle';
     protected static ?int $navigationSort = 51;
 

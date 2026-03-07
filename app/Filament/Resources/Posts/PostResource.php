@@ -21,14 +21,13 @@ class PostResource extends Resource
     protected static ?string $model = Post::class;
 
     protected static ?string $modelLabel = 'Post';
+
     protected static ?string $pluralModelLabel = 'Posts';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    // Top-level (no group)
     protected static ?string $navigationLabel = 'Posts';
 
-    // ✅ v5 allows UnitEnum here (labels/groups as enums), Resource base expects this union
     protected static string|UnitEnum|null $navigationGroup = null;
 
     protected static ?int $navigationSort = 2;
@@ -40,15 +39,9 @@ class PostResource extends Resource
         return parent::getEloquentQuery()->where('type', 'post');
     }
 
-    /**
-     * ✅ Helper for CMS frontend admin bar
-     * Use record model (recommended) to avoid routing issues.
-     */
     public static function cms_edit_post_url(Post $post): string
     {
         return static::getUrl('edit', ['record' => $post]);
-        // If you ever want to force key only:
-        // return static::getUrl('edit', ['record' => $post->getKey()]);
     }
 
     public static function form(Schema $schema): Schema

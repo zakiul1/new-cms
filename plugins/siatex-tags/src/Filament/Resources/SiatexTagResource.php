@@ -20,19 +20,30 @@ class SiatexTagResource extends Resource
 {
     protected static ?string $model = SiatexTag::class;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Media';
+    protected static ?string $modelLabel = 'Siatex Tag';
+
+    protected static ?string $pluralModelLabel = 'Siatex Tags';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Tags';
+
     protected static ?int $navigationSort = 57;
+
     protected static ?string $navigationLabel = 'Siatex Tags';
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-tag';
+
+    protected static ?string $recordTitleAttribute = 'title';
 
     public static function form(Schema $schema): Schema
     {
-        return $schema; // form handled in pages
+        return $schema;
     }
 
     public static function table(Table $table): Table
     {
         return $table
+            ->recordClasses(fn() => 'group')
+            ->defaultSort('id', 'desc')
             ->columns([
                 TextColumn::make('id')
                     ->label('ID')
@@ -44,23 +55,21 @@ class SiatexTagResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->wrap()
-                    ->description(function (SiatexTag $record) {
+                    ->description(function (SiatexTag $record): HtmlString {
                         $editUrl = static::getUrl('edit', ['record' => $record]);
 
-                        // ✅ no /tag/ prefix
                         $viewUrl = function_exists('cms_slug_url')
                             ? cms_slug_url((string) $record->slug)
                             : url('/' . trim((string) $record->slug, '/') . '/');
 
                         return new HtmlString(
-                            '<div class="mt-1 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition">' .
+                            '<div class="mt-1 text-xs text-slate-500 opacity-0 transition group-hover:opacity-100">' .
                             '<a class="text-primary-600 hover:underline" href="' . e($editUrl) . '">Edit</a>' .
-                            '<span class="mx-2 text-gray-300">|</span>' .
-                            '<a class="text-primary-600 hover:underline" href="' . e($viewUrl) . '" target="_blank">View</a>' .
+                            '<span class="mx-2 text-slate-300">|</span>' .
+                            '<a class="text-slate-600 hover:underline" href="' . e($viewUrl) . '" target="_blank" rel="noopener noreferrer">View</a>' .
                             '</div>'
                         );
-                    })
-                    ->extraAttributes(['class' => 'group']),
+                    }),
 
                 TextColumn::make('slug')
                     ->label('Slug')
@@ -71,12 +80,11 @@ class SiatexTagResource extends Resource
 
                 SelectColumn::make('media_category_term_id')
                     ->label('Media Category')
-                    ->options(fn() => MediaCategoryOptions::options())
+                    ->options(fn(): array => MediaCategoryOptions::options())
                     ->searchable()
                     ->placeholder('Select…')
                     ->toggleable(),
             ])
-            ->defaultSort('id', 'desc')
             ->actions([
                 Action::make('edit')
                     ->label('Edit')
@@ -86,8 +94,6 @@ class SiatexTagResource extends Resource
                 Action::make('view')
                     ->label('View')
                     ->icon('heroicon-o-eye')
-
-                    // ✅ no /tag/ prefix
                     ->url(fn(SiatexTag $record) => function_exists('cms_slug_url')
                         ? cms_slug_url((string) $record->slug)
                         : url('/' . trim((string) $record->slug, '/') . '/'))

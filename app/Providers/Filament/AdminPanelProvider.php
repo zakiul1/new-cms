@@ -41,6 +41,10 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->navigationGroups([
                 NavigationGroup::make()->label('Media')->collapsed(),
+                NavigationGroup::make()->label('Tags')->collapsed(),
+                NavigationGroup::make()->label('Blog Posts')->collapsed(),
+                NavigationGroup::make()->label('Static Posts')->collapsed(),
+                NavigationGroup::make()->label('Mega Post')->collapsed(),
                 NavigationGroup::make()->label('Appearance')->collapsed(),
                 NavigationGroup::make()->label('CMS')->collapsed(),
                 NavigationGroup::make()->label('SEO')->collapsed(),

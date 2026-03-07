@@ -18,8 +18,8 @@ class MultiPageResource extends Resource
 {
     protected static ?string $model = Post::class;
 
-    protected static ?string $modelLabel = 'Multi Page';
-    protected static ?string $pluralModelLabel = 'Multi Pages';
+    protected static ?string $modelLabel = 'Mega Page';
+    protected static ?string $pluralModelLabel = 'Mega Pages';
 
     protected static ?string $recordTitleAttribute = 'title';
 
@@ -30,12 +30,12 @@ class MultiPageResource extends Resource
 
     public static function getNavigationLabel(): string
     {
-        return 'Multi Pages';
+        return 'Mega Pages';
     }
 
     public static function getNavigationGroup(): UnitEnum|string|null
     {
-        return 'Pages';
+        return 'Mega Post';
     }
 
     public static function getNavigationSort(): ?int
@@ -61,7 +61,6 @@ class MultiPageResource extends Resource
 
     public static function table(Table $table): Table
     {
-        // ✅ Match Pages list view: use a dedicated Table config class (copied from PagesTable)
         return MultiPagesTable::configure($table);
     }
 

@@ -27,7 +27,6 @@ class PageResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'title';
 
-    // Top-level (no group)
     protected static ?string $navigationLabel = 'Pages';
     protected static string|UnitEnum|null $navigationGroup = null;
 
@@ -38,14 +37,9 @@ class PageResource extends Resource
         return parent::getEloquentQuery()->where('type', 'page');
     }
 
-    /**
-     * ✅ Helper for CMS frontend admin bar
-     */
     public static function cms_edit_page_url(Post $page): string
     {
         return static::getUrl('edit', ['record' => $page]);
-        // If you ever want key only:
-        // return static::getUrl('edit', ['record' => $page->getKey()]);
     }
 
     public static function form(Schema $schema): Schema

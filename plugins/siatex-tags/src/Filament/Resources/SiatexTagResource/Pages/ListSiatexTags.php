@@ -4,6 +4,7 @@ namespace Plugins\SiatexTags\Filament\Resources\SiatexTagResource\Pages;
 
 use App\Models\CmsSetting;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -59,9 +60,9 @@ class ListSiatexTags extends ListRecords
                         ->default(fn() => $this->getSlugTemplate())
                         ->required(),
                 ])
-                ->action(function (array $data) {
-                    $tpl = trim((string) ($data['template'] ?? ''));
-                    $this->setSlugTemplate($tpl);
+                ->action(function (array $data): void {
+                    $template = trim((string) ($data['template'] ?? ''));
+                    $this->setSlugTemplate($template);
 
                     Notification::make()
                         ->title('Slug template saved')
@@ -69,7 +70,6 @@ class ListSiatexTags extends ListRecords
                         ->send();
                 }),
 
-            // ✅ NEW: apply template to existing tags (bulk)
             Action::make('regenerateAllSlugs')
                 ->label('Regenerate All Slugs')
                 ->icon('heroicon-o-arrow-path')
@@ -77,7 +77,7 @@ class ListSiatexTags extends ListRecords
                 ->requiresConfirmation()
                 ->modalHeading('Regenerate all slugs?')
                 ->modalDescription('This will update existing tag slugs using the current template. Conflicting slugs will be skipped.')
-                ->action(function () {
+                ->action(function (): void {
                     $template = trim($this->getSlugTemplate());
 
                     if ($template === '') {
@@ -91,8 +91,9 @@ class ListSiatexTags extends ListRecords
                     $updated = 0;
                     $skipped = 0;
 
-                    // Process in a stable order for repeatability
-                    $tags = SiatexTag::query()->orderBy('id')->get(['id', 'title', 'slug']);
+                    $tags = SiatexTag::query()
+                        ->orderBy('id')
+                        ->get(['id', 'title', 'slug']);
 
                     foreach ($tags as $tag) {
                         $newSlug = $this->makeSlugFromTemplate((string) $tag->title, $template);
@@ -137,15 +138,18 @@ class ListSiatexTags extends ListRecords
                         ->rows(12)
                         ->required(),
                 ])
-                ->action(function (array $data) {
+                ->action(function (array $data): void {
                     $raw = (string) ($data['lines'] ?? '');
 
                     $rows = preg_split("/\r\n|\n|\r/", $raw) ?: [];
-                    $rows = array_map(fn($v) => trim((string) $v), $rows);
-                    $rows = array_values(array_filter($rows, fn($v) => $v !== ''));
+                    $rows = array_map(fn($value) => trim((string) $value), $rows);
+                    $rows = array_values(array_filter($rows, fn($value) => $value !== ''));
 
                     if (empty($rows)) {
-                        Notification::make()->title('Nothing to import')->warning()->send();
+                        Notification::make()
+                            ->title('Nothing to import')
+                            ->warning()
+                            ->send();
                         return;
                     }
 
@@ -183,6 +187,11 @@ class ListSiatexTags extends ListRecords
                         ->success()
                         ->send();
                 }),
+
+            CreateAction::make()
+                ->label('Add Siatex Tag')
+                ->icon('heroicon-o-plus')
+                ->color('info'),
         ];
     }
 }
