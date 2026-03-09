@@ -9,28 +9,95 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
-html { scroll-behavior: smooth; }
 
-/* Hide header cart icon (keep floating cart) */
+/* Base */
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Layout */
+.page-container {
+    max-width: 1140px;
+    margin: auto;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+/* Theme tag links (moved from theme.css) */
+.sc-tag-current {
+    font-weight: 400 !important;
+}
+
+.sc-tag-link {
+    font-weight: 400 !important;
+    text-decoration: none;
+}
+
+.sc-tag-link:hover,
+.sc-tag-link:focus-visible {
+    text-decoration: underline;
+}
+
+/* Header cart icon: hide fixed/header cart, keep floating cart */
 #cf-cart-icon-wrap,
 .cf-cart-icon-wrap,
 #cf-cart-icon,
 .cf-cart-icon {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
+
+/* Products grid */
 .products-grid {
-  grid-template-columns: repeat(var(--cols-mobile, 2), minmax(0, 1fr));
+    display: grid;
+    grid-template-columns: repeat(var(--cols-mobile, 2), minmax(0, 1fr));
 }
 
 @media (min-width: 768px) {
-  .products-grid {
-    grid-template-columns: repeat(var(--cols-md, 4), minmax(0, 1fr));
-  }
+    .products-grid {
+        grid-template-columns: repeat(var(--cols-md, 4), minmax(0, 1fr));
+    }
 }
-.page-container{
-  max-width: 1140px;
-  margin: auto;
-  padding: 0 15px;
+
+/* Branding */
+.logo-img {
+    width: 200px !important;
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Media defaults */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Accessibility helpers */
+:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+/* Motion preference */
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

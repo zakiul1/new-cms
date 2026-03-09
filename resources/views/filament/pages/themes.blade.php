@@ -34,21 +34,24 @@
             @php
                 $m = $t['manifest'] ?? [];
 
+                $cleanSlug = rtrim((string) $slug, '/');
+                $cleanActive = rtrim((string) $active, '/');
+
                 $screenshot = $m['screenshot'] ?? null;
-                $previewUrl = $screenshot ? asset('themes/' . $slug . '/' . ltrim($screenshot, '/')) : null;
+                $previewUrl = $screenshot ? asset('themes/' . $cleanSlug . '/' . ltrim($screenshot, '/')) : null;
 
                 $current = (string) ($m['version'] ?? '');
                 $latest = (string) ($m['latest_version'] ?? '');
                 $hasUpdate = $latest !== '' && $current !== '' && version_compare($latest, $current, '>');
             @endphp
 
-            <div wire:key="theme-{{ $slug }}"
+            <div wire:key="theme-{{ $cleanSlug }}"
                 class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 {{-- Preview --}}
                 <div class="relative aspect-[16/10] bg-gray-100 dark:bg-gray-800">
                     @if ($previewUrl)
                         <img src="{{ $previewUrl }}" class="h-full w-full object-cover"
-                            alt="{{ $m['name'] ?? $slug }}">
+                            alt="{{ $m['name'] ?? $cleanSlug }}">
                     @else
                         <div class="flex h-full w-full items-center justify-center text-sm text-gray-500">
                             No preview
@@ -57,7 +60,7 @@
 
                     {{-- Badges --}}
                     <div class="absolute left-3 top-3 flex items-center gap-2">
-                        @if ($active === $slug)
+                        @if ($cleanActive === $cleanSlug)
                             <x-filament::badge color="success">Active</x-filament::badge>
                         @endif
 
@@ -71,11 +74,11 @@
                 <div class="p-4">
                     <div class="min-w-0">
                         <div class="truncate text-base font-semibold text-gray-900 dark:text-white">
-                            {{ $m['name'] ?? $slug }}
+                            {{ $m['name'] ?? $cleanSlug }}
                         </div>
 
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                            <span class="font-mono">{{ $slug }}</span>
+                            <span class="font-mono">{{ $cleanSlug }}</span>
                             <span>•</span>
                             <span>v{{ $m['version'] ?? '' }}</span>
 
@@ -96,20 +99,20 @@
                     <div class="mt-4 flex items-center justify-between gap-2">
                         <div class="flex items-center gap-2">
                             <x-filament::button size="sm" color="gray" type="button"
-                                wire:click="mountAction('details', { slug: {{ Js::from($slug) }} })">
+                                wire:click="mountAction('details', { slug: {{ Js::from($cleanSlug) }} })">
                                 Details
                             </x-filament::button>
 
                             <x-filament::button size="sm" tag="a" color="gray"
-                                href="{{ url('/customizer?theme=' . $slug) }}">
+                                href="{{ route('cms.customizer', ['theme' => $cleanSlug]) }}">
                                 Customize
                             </x-filament::button>
                         </div>
 
                         <div>
-                            @if ($active !== $slug)
+                            @if ($cleanActive !== $cleanSlug)
                                 <x-filament::button size="sm" type="button"
-                                    wire:click="activateTheme({{ Js::from($slug) }})" wire:loading.attr="disabled"
+                                    wire:click="activateTheme({{ Js::from($cleanSlug) }})" wire:loading.attr="disabled"
                                     wire:target="activateTheme">
                                     Activate
                                 </x-filament::button>

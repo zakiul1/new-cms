@@ -1,65 +1,62 @@
 <?php
 
-use App\Cms\Core\Settings;
 use App\Cms\Hooks\HookPoints;
+use App\Cms\Hooks\Hooks;
 use Filament\Panel;
 use Illuminate\Support\Facades\Route;
 
 require_once __DIR__ . '/ContactFormServiceProvider.php';
 
-// ✅ models / installer
+// models / installer
 require_once __DIR__ . '/src/ContactSubmission.php';
 require_once __DIR__ . '/src/ContactLead.php';
 require_once __DIR__ . '/src/Support/Installer.php';
 
-// ✅ console
+// console
 require_once __DIR__ . '/src/Console/PruneContactSubmissionsCommand.php';
 
-// ✅ services
+// services
 require_once __DIR__ . '/src/Services/EDeskClient.php';
 require_once __DIR__ . '/src/Services/SubmissionSender.php';
 require_once __DIR__ . '/src/Services/IpCountryResolver.php';
 
-// ✅ controllers
+// controllers
 require_once __DIR__ . '/src/ContactFormController.php';
 require_once __DIR__ . '/src/CronController.php';
 
-// ✅ filament pages
+// filament pages
 require_once __DIR__ . '/src/Filament/Pages/ContactConfig.php';
 require_once __DIR__ . '/src/Filament/Pages/ContactSubmissions.php';
 
-// ✅ cart
+// cart
 require_once __DIR__ . '/src/Cart/CartRoutes.php';
 require_once __DIR__ . '/src/Cart/CartAssets.php';
 
 app()->register(\Plugins\ContactForm\ContactFormServiceProvider::class);
 
-// ✅ Admin panel pages
-app(\App\Cms\Hooks\Hooks::class)->addAction(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
+// Admin panel pages
+app(Hooks::class)->addAction(HookPoints::FILAMENT_ADMIN_PANEL, function (Panel $panel) {
     $panel->pages([
         \Plugins\ContactForm\Filament\Pages\ContactConfig::class,
         \Plugins\ContactForm\Filament\Pages\ContactSubmissions::class,
     ]);
 });
 
-// ✅ Template option
+// Template option
 add_filter('cms.page_template_options', function (array $options) {
     $options['contact'] = 'Contact Page (Contact Form)';
     return $options;
 }, 20, 1);
 
 /**
- * ✅ Routes (submit + cron + cart endpoints)
+ * Routes (submit + cron + cart endpoints)
  *
  * IMPORTANT:
- * We still register submit/cron/cart endpoints via Laravel boot cycle.
- * BUT we do NOT register /_contact/cart.js and /_contact/cart.css as routes anymore,
- * because those are now static files in public/_contact/.
+ * /_contact/cart.js and /_contact/cart.css are static files in public/_contact/
+ * so they are NOT registered as Laravel routes.
  */
 app()->booted(function () {
     Route::middleware('web')->group(function () {
-
-        // Avoid duplicates if something registers twice
         if (!Route::has('contact-form.submit')) {
             Route::post('/_contact/submit', [\Plugins\ContactForm\ContactFormController::class, 'submit'])
                 ->name('contact-form.submit');
@@ -70,42 +67,31 @@ app()->booted(function () {
                 ->name('contact-form.cron');
         }
 
-        // ✅ cart related routes (optional extra endpoints)
         if (class_exists(\Plugins\ContactForm\Cart\CartRoutes::class)) {
             \Plugins\ContactForm\Cart\CartRoutes::register();
         }
-
-        // ✅ IMPORTANT: removed CartAssets::registerRoutes()
-        // Because cart.js/cart.css are now static:
-        //   public/_contact/cart.js
-        //   public/_contact/cart.css
     });
 });
 
 /**
- * ✅ Frontend asset enqueue
- * - prevents loading on admin panel
- * - respects cart_enabled setting
+ * IMPORTANT:
+ * Do NOT auto-enqueue cart assets here.
+ *
+ * Reason:
+ * CMS_ENQUEUE_ASSETS runs too early in your CMS lifecycle, before final Blade
+ * output/shortcodes are reliably known. That caused false negatives and the cart
+ * JS stopped loading.
+ *
+ * Cart CSS/JS must be loaded only from the Blade files that actually render
+ * `.cf-get-price` buttons, using:
+ *
+ * @once
+ *     @push('head')
+ *         <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
+ *     @endpush
+ *
+ *     @push('scripts')
+ *         <script src="{{ asset('_contact/cart.js') }}" defer></script>
+ *     @endpush
+ * @endonce
  */
-add_action(HookPoints::CMS_ENQUEUE_ASSETS, function () {
-    // Prevent admin/filament side
-    $path = (string) request()->path();
-    if (str_starts_with($path, 'lara-admin') || str_contains($path, 'filament')) {
-        return;
-    }
-
-    // ✅ Respect setting (optional but recommended)
-    try {
-        $settings = app(Settings::class);
-        $cartEnabled = (bool) $settings->get('cart_enabled', true, 'plugin:contact-form');
-        if (!$cartEnabled) {
-            return;
-        }
-    } catch (\Throwable $e) {
-        // If settings not available, continue safely
-    }
-
-    if (class_exists(\Plugins\ContactForm\Cart\CartAssets::class)) {
-        \Plugins\ContactForm\Cart\CartAssets::enqueue();
-    }
-});

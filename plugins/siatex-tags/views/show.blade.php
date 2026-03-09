@@ -2,13 +2,23 @@
 @extends('layouts.app')
 
 @section('content')
+    @once
+        @push('head')
+            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+            <noscript>
+                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
+            </noscript>
+        @endpush
+
+        @push('scripts')
+            <script src="{{ asset('_contact/cart.js') }}" defer></script>
+        @endpush
+    @endonce
+
     @php
         /** @var \Plugins\SiatexTags\Models\SiatexTag $tag */
         /** @var \Illuminate\Support\Collection|\App\Models\Media[] $mediaItems */
 
-        // -----------------------------
-        // CMS settings
-        // -----------------------------
         $settingsRepo = app(\App\Cms\Core\SettingsRepository::class);
 
         $sloganTag = trim((string) $settingsRepo->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
@@ -26,12 +36,12 @@
             $quoteButtonText = 'Custom Quote';
         }
 
-        // Save like: Get|Custom Quote
-        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
+        $quoteButtonLabel = trim(strip_tags(str_replace('|', ' ', $quoteButtonText)));
+        if ($quoteButtonLabel === '') {
+            $quoteButtonLabel = 'Custom Quote';
+        }
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonLabel)));
 
-        // -----------------------------
-        // Helpers (same style as attachment)
-        // -----------------------------
         $allowedHtml =
             '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
             '<div><span><section><article><header><footer>' .
@@ -80,11 +90,9 @@
             return $text === '';
         };
 
-        // Shortcode parser (CMS)
         $parser = app(\App\Cms\Content\Shortcodes\ShortcodeParser::class);
         $shortcodeCtx = ['siatex_tag' => $tag];
 
-        // Unified helpers using CMS shortcode parser (works everywhere)
         $renderShortcodeText = function ($value) use ($parser, $shortcodeCtx, $removeScriptStyleBlocks): string {
             $value = trim((string) $value);
             if ($value === '') {
@@ -115,27 +123,19 @@
             }
         };
 
-        // URL (no /tag/)
         $tagUrl = function_exists('cms_slug_url')
             ? cms_slug_url((string) $tag->slug)
             : url('/' . trim((string) $tag->slug, '/') . '/');
 
-        // -----------------------------
-        // ✅ Apply tag defaults on frontend (preview + normal)
-        // -----------------------------
         if (function_exists('do_action')) {
             do_action('siatex.tag.defaults.persist', $tag);
         }
 
-        // -----------------------------
-        // Tag data (after defaults applied)
-        // -----------------------------
         $meta = is_array($tag->meta_json ?? null) ? $tag->meta_json : [];
         if (!is_array($meta)) {
             $meta = [];
         }
 
-        // RAW values (may contain shortcodes like [tag])
         $titleRaw = (string) ($tag->title ?? '');
         $subtitleRaw = (string) data_get($meta, 'subtitle', '');
 
@@ -149,12 +149,13 @@
             $contentHtmlRaw = (string) $tag->content_json;
         }
 
-        $title = $renderShortcodeText($titleRaw);
-        $subtitle = $renderShortcodeText($subtitleRaw);
+        $title = trim(strip_tags($renderShortcodeText($titleRaw)));
+        if ($title === '') {
+            $title = 'Tag';
+        }
 
-        // -----------------------------
-        // ✅ Hero H1
-        // -----------------------------
+        $subtitle = trim(strip_tags($renderShortcodeText($subtitleRaw)));
+
         $heroH1 = $title;
 
         try {
@@ -164,7 +165,7 @@
             $defaultH1 = trim((string) $settings->get('default_title', '', 'plugins.tag-defaults'));
 
             if ($defaultH1 !== '') {
-                $heroH1 = $renderShortcodeText($defaultH1);
+                $heroH1 = trim(strip_tags($renderShortcodeText($defaultH1)));
                 if ($heroH1 === '') {
                     $heroH1 = $title;
                 }
@@ -173,25 +174,19 @@
             $heroH1 = $title;
         }
 
-        // -----------------------------
-        // Breadcrumb category
-        // -----------------------------
         $categoryName = '';
         try {
             $termId = (int) ($tag->media_category_term_id ?? 0);
             if ($termId > 0) {
                 $term = \App\Models\Term::query()->find($termId);
                 if ($term && !empty($term->name)) {
-                    $categoryName = trim((string) $term->name);
+                    $categoryName = trim(strip_tags((string) $term->name));
                 }
             }
         } catch (\Throwable $e) {
             $categoryName = '';
         }
 
-        // -----------------------------
-        // SEO
-        // -----------------------------
         if (!isset($seo) || !is_array($seo)) {
             $seo = [];
         }
@@ -211,7 +206,7 @@
         $seoTitleSource = (string) ($seo['title'] ?? ($tagSeo['title'] ?? $titleRaw));
         $seoTitle = $renderShortcodeText($seoTitleSource);
         if ($seoTitle === '') {
-            $seoTitle = $title !== '' ? $title : $renderShortcodeText($titleRaw);
+            $seoTitle = $title;
         }
 
         $seoDescSource = (string) ($seo['description'] ?? ($tagSeo['description'] ?? $fallbackDescText));
@@ -246,9 +241,6 @@
             ]),
         ]);
 
-        // -----------------------------
-        // Media selection
-        // -----------------------------
         $allMedia = collect($mediaItems ?? [])
             ->filter(fn($m) => $m instanceof \App\Models\Media)
             ->values();
@@ -292,17 +284,16 @@
 
         if (($seo['og']['image'] ?? '') === '' && $heroMedia) {
             try {
-                if (method_exists($heroMedia, 'url')) {
-                    $seo['og']['image'] = (string) $heroMedia->url('large');
+                if (method_exists($heroMedia, 'variantUrl')) {
+                    $seo['og']['image'] = (string) ($heroMedia->variantUrl('large') ?: $heroMedia->url());
+                } elseif (method_exists($heroMedia, 'url')) {
+                    $seo['og']['image'] = (string) $heroMedia->url();
                 }
             } catch (\Throwable $e) {
                 // ignore
             }
         }
 
-        // -----------------------------
-        // Hero text
-        // -----------------------------
         $heroTextHtml = '';
         if (trim($contentHtmlRaw) !== '') {
             $heroTextHtml = $renderShortcodeHtml((string) $contentHtmlRaw);
@@ -313,9 +304,8 @@
         $heroTextHtml = $removeScriptStyleBlocks((string) $heroTextHtml);
         $heroTextHtml = strip_tags($heroTextHtml, $allowedHtml);
 
-        // Bottom-left content
         $bottomTitleRaw = (string) data_get($meta, 'subtitle', '');
-        $bottomTitle = $renderShortcodeText($bottomTitleRaw);
+        $bottomTitle = trim(strip_tags($renderShortcodeText($bottomTitleRaw)));
         if ($bottomTitle === '') {
             $bottomTitle = $title;
         }
@@ -332,17 +322,22 @@
 
         $tagImage = '';
         try {
-            if ($heroMedia && method_exists($heroMedia, 'url')) {
-                $tagImage = (string) $heroMedia->url('medium');
+            if ($heroMedia && method_exists($heroMedia, 'variantUrl')) {
+                $tagImage = (string) ($heroMedia->variantUrl('medium') ?: $heroMedia->url());
+            } elseif ($heroMedia && method_exists($heroMedia, 'url')) {
+                $tagImage = (string) $heroMedia->url();
             }
         } catch (\Throwable $e) {
             $tagImage = '';
         }
+
+        $safeTagUrl = trim((string) $tagUrl);
+        $safeTagImage = trim((string) $tagImage);
+        $tagButtonAriaLabel = trim($quoteButtonLabel . ' for ' . $title);
     @endphp
 
-    {{-- Breadcrumb --}}
     <div class="cms-container mx-auto px-4 pt-6">
-        <nav class="text-sm text-slate-500">
+        <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
 
             @if (trim($categoryName) !== '')
@@ -355,18 +350,16 @@
         </nav>
     </div>
 
-    {{-- HERO --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
 
-                {{-- IMAGE --}}
                 <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
                     @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
                         {!! cms_picture(
                             $heroMedia,
                             [
-                                'alt' => e($title),
+                                'alt' => $title,
                                 'class' => 'w-full object-contain',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
@@ -377,11 +370,10 @@
                             ['medium', 'medium_large', 'large'],
                         ) !!}
                     @else
-                        <div class="h-80 w-full bg-slate-100"></div>
+                        <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
                     @endif
                 </div>
 
-                {{-- CONTENT --}}
                 <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
 
@@ -398,25 +390,24 @@
                             {!! $heroTextHtml !!}
                         </div>
                     @endif
-                    <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
-                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
-                        data-item-id="{{ (int) $tag->id }}" data-item-type="tag" data-item-title="{{ e($title) }}"
-                        data-item-url="{{ e($tagUrl) }}" data-item-image="{{ e($tagImage) }}">
+
+                    <button type="button"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                        aria-label="{{ $tagButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
+                        data-item-id="{{ (int) $tag->id }}" data-item-type="tag" data-item-title="{{ $title }}"
+                        data-item-url="{{ $safeTagUrl }}" data-item-image="{{ $safeTagImage }}">
                         {!! $quoteButtonHtml !!}
-                    </a>
+                    </button>
                 </div>
 
             </div>
         </div>
     </section>
 
-    {{-- RELATED GRID + META + RELATED LINKS --}}
     @if ($related->count() || $relatedLinks->count() || trim($bottomTitle) !== '' || trim($bottomDescHtml) !== '')
         <section class="bg-white">
             <div class="page-container mx-auto px-4 py-10">
 
-                {{-- RELATED PRODUCTS GRID --}}
                 @if ($related->count())
                     <div class="my-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -438,36 +429,43 @@
 
                                 $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
 
-                                $rTitle =
+                                $rawRTitle =
                                     (string) ($r->title ?:
                                     ($rMetaTitle !== ''
                                         ? $rMetaTitle
                                         : $r->original_filename ?? ''));
-                                $rTitle = trim($rTitle) !== '' ? trim($rTitle) : 'Attachment';
+                                $rTitle = trim(strip_tags($rawRTitle));
+                                $rTitle = $rTitle !== '' ? $rTitle : 'Attachment';
 
                                 $rUrl = filled($r->slug)
                                     ? (function_exists('cms_slug_url')
                                         ? cms_slug_url((string) $r->slug)
                                         : url('/' . trim((string) $r->slug, '/') . '/'))
                                     : $r->url();
+                                $safeRUrl = trim((string) $rUrl);
 
                                 $rImage = '';
                                 try {
-                                    if (method_exists($r, 'url')) {
-                                        $rImage = (string) $r->url('medium');
+                                    if (method_exists($r, 'variantUrl')) {
+                                        $rImage = (string) ($r->variantUrl('medium') ?: $r->url());
+                                    } elseif (method_exists($r, 'url')) {
+                                        $rImage = (string) $r->url();
                                     }
                                 } catch (\Throwable $e) {
                                     $rImage = '';
                                 }
+                                $safeRImage = trim((string) $rImage);
+
+                                $rButtonAriaLabel = trim($quoteButtonLabel . ' for ' . $rTitle);
                             @endphp
 
                             <div class="group text-center">
-                                <a href="{{ $rUrl }}" class="block">
+                                <a href="{{ $safeRUrl }}" class="block">
                                     <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                         {!! cms_picture(
                                             $r,
                                             [
-                                                'alt' => e($rTitle),
+                                                'alt' => $rTitle,
                                                 'class' => 'h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]',
                                                 'sizes' => '(max-width: 768px) 50vw, 220px',
                                                 'loading' => 'lazy',
@@ -479,22 +477,22 @@
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <div class="text-sm font-medium leading-snug text-slate-500">
-                                            {{ $productStylePrefix }}{{ (int) $r->id }}
+                                        <div class="text-sm font-medium leading-snug text-slate-600">
+                                            {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
-                                        <h3 class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
+                                        <p class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
                                             {{ $rTitle }}
-                                        </h3>
+                                        </p>
                                     </div>
                                 </a>
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
-                                    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    aria-label="{{ $rButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
-                                    data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
-                                    data-item-image="{{ e($rImage) }}">
+                                    data-item-title="{{ $rTitle }}" data-item-url="{{ $safeRUrl }}"
+                                    data-item-image="{{ $safeRImage }}">
                                     {!! $quoteButtonHtml !!}
                                 </button>
                             </div>
@@ -502,7 +500,6 @@
                     </div>
                 @endif
 
-                {{-- META + RELATED LINKS --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
@@ -516,7 +513,6 @@
                         @endif
                     </div>
 
-                    {{-- Hide on mobile --}}
                     <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
                             <div class="text-lg font-semibold text-slate-900">Related Links :</div>
@@ -542,24 +538,26 @@
 
                                             $qMetaTitle = trim((string) data_get($qMeta, 'frontend.meta_title', ''));
 
-                                            $qTitle =
+                                            $rawQTitle =
                                                 (string) ($q->title ?:
                                                 ($qMetaTitle !== ''
                                                     ? $qMetaTitle
                                                     : $q->original_filename ?? ''));
-                                            $qTitle = trim($qTitle) !== '' ? trim($qTitle) : 'Attachment';
+                                            $qTitle = trim(strip_tags($rawQTitle));
+                                            $qTitle = $qTitle !== '' ? $qTitle : 'Attachment';
 
                                             $qUrl = filled($q->slug)
                                                 ? (function_exists('cms_slug_url')
                                                     ? cms_slug_url((string) $q->slug)
                                                     : url('/' . trim((string) $q->slug, '/') . '/'))
                                                 : $q->url();
+                                            $safeQUrl = trim((string) $qUrl);
                                         @endphp
 
                                         <li
                                             class="flex items-start gap-2 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
                                             <span class="mt-[2px] text-slate-500">›</span>
-                                            <a href="{{ $qUrl }}" target="_blank" rel="noopener noreferrer"
+                                            <a href="{{ $safeQUrl }}" target="_blank" rel="noopener noreferrer"
                                                 class="block truncate italic text-slate-700 hover:text-slate-900 hover:underline"
                                                 title="{{ $qTitle }}">
                                                 {{ $qTitle }}

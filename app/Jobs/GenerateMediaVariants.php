@@ -38,13 +38,16 @@ class GenerateMediaVariants implements ShouldQueue
             return;
         }
 
-        $primary = strtolower((string) config('cms-media.variant_format', 'webp')); // usually webp
-        $alsoJpegFallback = true;
+        $primary = strtolower((string) config('cms-media.variant_format', 'webp'));
+        $alsoJpegFallback = (bool) config('cms-media.generate_jpeg_fallback', false);
 
         $formats = [$primary];
+
         if ($alsoJpegFallback && !in_array($primary, ['jpeg', 'jpg'], true)) {
             $formats[] = 'jpeg';
         }
+
+        $formats = array_values(array_unique(array_filter($formats)));
 
         $sourcePath = $media->path();
 
@@ -52,7 +55,6 @@ class GenerateMediaVariants implements ShouldQueue
             return;
         }
 
-        // Read file bytes (simple + portable)
         $bytes = Storage::disk($disk)->get($sourcePath);
         if (!is_string($bytes) || $bytes === '') {
             return;
@@ -81,10 +83,8 @@ class GenerateMediaVariants implements ShouldQueue
                     continue;
                 }
 
-                // WP-like: don't upscale, except thumb if you want
                 $allowUpscale = ($key === 'thumb');
 
-                // If not upscaling and original is already smaller than target -> skip (keeps storage clean)
                 if (!$allowUpscale && $srcW <= $maxWidth) {
                     continue;
                 }
@@ -122,11 +122,12 @@ class GenerateMediaVariants implements ShouldQueue
                     $format = strtolower((string) $format);
 
                     if ($format === 'webp' && !function_exists('imagewebp')) {
-                        Log::warning('WebP requested but GD imagewebp() not available', ['media_id' => $media->id]);
+                        Log::warning('WebP requested but GD imagewebp() not available', [
+                            'media_id' => $media->id,
+                        ]);
                         continue;
                     }
 
-                    // If not forcing, skip existing row
                     if (!$this->force) {
                         $exists = MediaVariant::query()
                             ->where('media_id', $media->id)
@@ -138,7 +139,6 @@ class GenerateMediaVariants implements ShouldQueue
                             continue;
                         }
                     } else {
-                        // Force: delete old record + old file (if any)
                         $existing = MediaVariant::query()
                             ->where('media_id', $media->id)
                             ->where('key', $key)
@@ -167,7 +167,6 @@ class GenerateMediaVariants implements ShouldQueue
                         continue;
                     }
 
-                    // Store to disk
                     $stored = Storage::disk($disk)->putFileAs($variantDir, new File($tmp), $variantName);
                     @unlink($tmp);
 
@@ -179,7 +178,11 @@ class GenerateMediaVariants implements ShouldQueue
                     $storedSize = (int) (Storage::disk($disk)->size($storedPath) ?: 0);
 
                     MediaVariant::query()->updateOrCreate(
-                        ['media_id' => $media->id, 'key' => $key, 'format' => $format],
+                        [
+                            'media_id' => $media->id,
+                            'key' => $key,
+                            'format' => $format,
+                        ],
                         [
                             'disk' => $disk,
                             'directory' => $variantDir,

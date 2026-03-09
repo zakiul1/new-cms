@@ -14,7 +14,9 @@
         "footer-1": "Footer Widgets"
     },
     "assets": {
-        "styles": ["dist/theme.css"],
-        "scripts": [{ "src": "dist/theme.js", "defer": true }]
+        "styles": [],
+        "scripts": [
+            { "src": "dist/theme.js", "defer": true }
+        ]
     }
 }

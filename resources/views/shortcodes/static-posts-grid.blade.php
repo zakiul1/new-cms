@@ -10,11 +10,11 @@
      *  - $class  : string (wrapper class)
      *
      * NEW (from CoreShortcodes):
-     *  - $topTitle : string (from [sp postid="X"])
-     *  - $topContent : string (from [sp postid="X"])
-     *  - $topVariant : string (from [sp top="hybrid"])
-     *  - $topImages : array of first 2 featured image URLs
-     *  - $showLearnMoreBtn : bool (from [sp lmbtn])
+     *  - $topTitle : string
+     *  - $topContent : string
+     *  - $topVariant : string
+     *  - $topMediaItems : Collection of first 2 featured Media items
+     *  - $showLearnMoreBtn : bool
      */
 
     $items = $items ?? collect();
@@ -22,11 +22,10 @@
         $items = collect($items);
     }
 
-    $column = (int) ($column ?? 3);
-    $mobile = (int) ($mobile ?? 1);
+    $column = max(1, min(12, (int) ($column ?? 3)));
+    $mobile = max(1, min(4, (int) ($mobile ?? 1)));
     $img = filter_var($img ?? false, FILTER_VALIDATE_BOOL);
 
-    // ✅ CMS settings
     $settings = app(\App\Cms\Core\SettingsRepository::class);
 
     $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
@@ -34,26 +33,16 @@
         $sloganTag = 'Your Tech-pack, Our production';
     }
 
-    // wrapper class from shortcode (can contain multiple classes)
     $class = trim((string) ($class ?? 'static_posts'));
     $class = $class !== '' ? $class : 'static_posts';
 
-    $column = max(1, min(12, $column));
-    $mobile = max(1, min(4, $mobile));
-
     $gridStyle = "--sp-cols: {$column}; --sp-cols-mobile: {$mobile};";
 
-    /**
-     * ✅ FIX: Prevent duplicate class output
-     * - Use first class token to build slug
-     * - Append slug only if not already in class
-     */
     $firstClass = preg_split('/\s+/', $class, -1, PREG_SPLIT_NO_EMPTY)[0] ?? 'static_posts';
     $firstClass = trim($firstClass) !== '' ? trim($firstClass) : 'static_posts';
-
     $wrapperClass = \Illuminate\Support\Str::slug($firstClass, '-');
 
-    $rootClassAttr = $class;
+    $rootClassAttr = trim('sp-shortcode ' . $class);
     if ($wrapperClass !== '' && !preg_match('/(^|\s)' . preg_quote($wrapperClass, '/') . '(\s|$)/', $rootClassAttr)) {
         $rootClassAttr .= ' ' . $wrapperClass;
     }
@@ -63,34 +52,56 @@
     $showTop = $topTitle !== '' || $topContent !== '';
 
     $topVariant = strtolower(trim((string) ($topVariant ?? '')));
-    $topImages = $topImages ?? [];
-    if (is_array($topImages)) {
-        $topImages = collect($topImages);
-    } else {
-        $topImages = collect();
+
+    $topMediaItems = $topMediaItems ?? collect();
+    if (is_array($topMediaItems)) {
+        $topMediaItems = collect($topMediaItems);
     }
-    $topImages = $topImages->filter(fn($u) => is_string($u) && trim($u) !== '')->values()->take(2);
+
+    $topMediaItems = $topMediaItems->filter(fn($m) => $m instanceof \App\Models\Media)->values()->take(2);
+
+    $topMediaBack = $topMediaItems->get(0);
+    $topMediaFront = $topMediaItems->get(1);
 
     $showLearnMoreBtn = (bool) ($showLearnMoreBtn ?? false);
+
+    $mobileSizeValue = match ($mobile) {
+        1 => '100vw',
+        2 => '50vw',
+        3 => '33.33vw',
+        4 => '25vw',
+        default => '100vw',
+    };
+
+    $desktopSizeValue = match ($column) {
+        1 => '100vw',
+        2 => '50vw',
+        3 => '33.33vw',
+        4 => '25vw',
+        5 => '20vw',
+        6 => '16.66vw',
+        7 => '14.28vw',
+        8 => '12.5vw',
+        9 => '11.11vw',
+        10 => '10vw',
+        11 => '9.09vw',
+        12 => '8.33vw',
+        default => '33.33vw',
+    };
+
+    $gridImageSizes = '(max-width: 767px) ' . $mobileSizeValue . ', ' . $desktopSizeValue;
+    $topHybridSizes = '(max-width: 900px) 100vw, 50vw';
 @endphp
 
 @if ($showTop || $items->count() > 0)
     <div class="page-container">
-        <div class="{{ $rootClassAttr }} ">
+        <div class="{{ $rootClassAttr }}">
 
             {{-- TOP SECTION --}}
             @if ($showTop)
                 @if ($topVariant === 'hybrid')
-                    @php
-                        $img1 = trim((string) ($topImages->get(0) ?? ''));
-                        $img2 = trim((string) ($topImages->get(1) ?? ''));
-                        $has1 = $img1 !== '';
-                        $has2 = $img2 !== '';
-                    @endphp
-
                     <section class="sp-top-hybrid">
                         <div class="sp-top-hybrid__grid">
-                            {{-- LEFT --}}
                             <div class="sp-top-hybrid__left">
                                 <div class="sp-top-hybrid__label">{{ $sloganTag }}</div>
 
@@ -103,26 +114,92 @@
                                 @endif
                             </div>
 
-                            {{-- RIGHT --}}
                             <div class="sp-top-hybrid__right">
-                                @if ($has1 && $has2)
+                                @if ($topMediaBack instanceof \App\Models\Media && $topMediaFront instanceof \App\Models\Media)
                                     <div class="sp-top-hybrid__stack">
                                         <div class="sp-top-hybrid__img sp-top-hybrid__img--back">
-                                            <img src="{{ $img1 }}" alt="" loading="lazy"
-                                                decoding="async">
+                                            @if (function_exists('cms_picture'))
+                                                {!! cms_picture(
+                                                    $topMediaBack,
+                                                    [
+                                                        'alt' => $topTitle !== '' ? $topTitle : 'Featured image',
+                                                        'loading' => 'lazy',
+                                                        'fetchpriority' => 'low',
+                                                        'decoding' => 'async',
+                                                        'sizes' => $topHybridSizes,
+                                                    ],
+                                                    'medium_large',
+                                                    ['medium', 'medium_large', 'large'],
+                                                ) !!}
+                                            @else
+                                                <img src="{{ $topMediaBack->variantUrl('medium_large', 'jpeg') ?: $topMediaBack->variantUrl('medium_large') ?: $topMediaBack->url() }}"
+                                                    alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
+                                                    loading="lazy" fetchpriority="low" decoding="async">
+                                            @endif
                                         </div>
+
                                         <div class="sp-top-hybrid__img sp-top-hybrid__img--front">
-                                            <img src="{{ $img2 }}" alt="" loading="lazy"
-                                                decoding="async">
+                                            @if (function_exists('cms_picture'))
+                                                {!! cms_picture(
+                                                    $topMediaFront,
+                                                    [
+                                                        'alt' => $topTitle !== '' ? $topTitle : 'Featured image',
+                                                        'loading' => 'eager',
+                                                        'fetchpriority' => 'high',
+                                                        'decoding' => 'async',
+                                                        'sizes' => $topHybridSizes,
+                                                    ],
+                                                    'medium_large',
+                                                    ['medium', 'medium_large', 'large'],
+                                                ) !!}
+                                            @else
+                                                <img src="{{ $topMediaFront->variantUrl('medium_large', 'jpeg') ?: $topMediaFront->variantUrl('medium_large') ?: $topMediaFront->url() }}"
+                                                    alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
+                                                    loading="eager" fetchpriority="high" decoding="async">
+                                            @endif
                                         </div>
                                     </div>
-                                @elseif ($has1)
+                                @elseif ($topMediaBack instanceof \App\Models\Media)
                                     <div class="sp-top-hybrid__single">
-                                        <img src="{{ $img1 }}" alt="" loading="lazy" decoding="async">
+                                        @if (function_exists('cms_picture'))
+                                            {!! cms_picture(
+                                                $topMediaBack,
+                                                [
+                                                    'alt' => $topTitle !== '' ? $topTitle : 'Featured image',
+                                                    'loading' => 'eager',
+                                                    'fetchpriority' => 'high',
+                                                    'decoding' => 'async',
+                                                    'sizes' => $topHybridSizes,
+                                                ],
+                                                'medium_large',
+                                                ['medium', 'medium_large', 'large'],
+                                            ) !!}
+                                        @else
+                                            <img src="{{ $topMediaBack->variantUrl('medium_large', 'jpeg') ?: $topMediaBack->variantUrl('medium_large') ?: $topMediaBack->url() }}"
+                                                alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
+                                                loading="eager" fetchpriority="high" decoding="async">
+                                        @endif
                                     </div>
-                                @elseif ($has2)
+                                @elseif ($topMediaFront instanceof \App\Models\Media)
                                     <div class="sp-top-hybrid__single">
-                                        <img src="{{ $img2 }}" alt="" loading="lazy" decoding="async">
+                                        @if (function_exists('cms_picture'))
+                                            {!! cms_picture(
+                                                $topMediaFront,
+                                                [
+                                                    'alt' => $topTitle !== '' ? $topTitle : 'Featured image',
+                                                    'loading' => 'eager',
+                                                    'fetchpriority' => 'high',
+                                                    'decoding' => 'async',
+                                                    'sizes' => $topHybridSizes,
+                                                ],
+                                                'medium_large',
+                                                ['medium', 'medium_large', 'large'],
+                                            ) !!}
+                                        @else
+                                            <img src="{{ $topMediaFront->variantUrl('medium_large', 'jpeg') ?: $topMediaFront->variantUrl('medium_large') ?: $topMediaFront->url() }}"
+                                                alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
+                                                loading="eager" fetchpriority="high" decoding="async">
+                                        @endif
                                     </div>
                                 @endif
                             </div>
@@ -156,14 +233,43 @@
                                         (data_get($item, 'content') ?? (data_get($item, 'excerpt') ?? ''))));
                             $contentHtml = trim($contentHtml);
 
-                            // ✅ Use Media object for responsive variants (cms_picture)
                             $featuredMedia = null;
 
                             if ($img) {
                                 try {
-                                    if (is_object($item) && method_exists($item, 'featuredMediaPivot')) {
+                                    if (
+                                        is_object($item) &&
+                                        method_exists($item, 'relationLoaded') &&
+                                        $item->relationLoaded('featuredMediaPivot') &&
+                                        $item->featuredMediaPivot
+                                    ) {
+                                        $featuredMedia =
+                                            $item->featuredMediaPivot instanceof \Illuminate\Support\Collection
+                                                ? $item->featuredMediaPivot->first()
+                                                : $item->featuredMediaPivot;
+                                    }
+
+                                    if (
+                                        !$featuredMedia &&
+                                        is_object($item) &&
+                                        method_exists($item, 'relationLoaded') &&
+                                        $item->relationLoaded('featuredMedia') &&
+                                        $item->featuredMedia
+                                    ) {
+                                        $featuredMedia =
+                                            $item->featuredMedia instanceof \Illuminate\Support\Collection
+                                                ? $item->featuredMedia->first()
+                                                : $item->featuredMedia;
+                                    }
+
+                                    if (
+                                        !$featuredMedia &&
+                                        is_object($item) &&
+                                        method_exists($item, 'featuredMediaPivot')
+                                    ) {
                                         $featuredMedia = $item->featuredMediaPivot()->first();
                                     }
+
                                     if (!$featuredMedia && is_object($item) && method_exists($item, 'featuredMedia')) {
                                         $featuredMedia = $item->featuredMedia()->first();
                                     }
@@ -172,63 +278,68 @@
                                 }
                             }
 
-                            // Fallback URL (only if cms_picture is unavailable)
                             $imageUrl = '';
-                            if ($img && $featuredMedia) {
+                            if ($img && $featuredMedia instanceof \App\Models\Media) {
                                 try {
-                                    if (method_exists($featuredMedia, 'url')) {
-                                        $imageUrl = (string) $featuredMedia->url('large');
-                                    }
+                                    $imageUrl =
+                                        (string) ($featuredMedia->variantUrl('large', 'jpeg') ?:
+                                        $featuredMedia->variantUrl('large') ?:
+                                        $featuredMedia->url());
                                 } catch (\Throwable $e) {
                                     $imageUrl = '';
                                 }
                             }
 
-                            $learnMoreUrl = (string) data_get($item, 'meta_json.static_posts.learn_more_url', '');
-                            $learnMoreUrl = trim($learnMoreUrl);
-                            $learnMoreUrl = $learnMoreUrl !== '' ? $learnMoreUrl : '#';
+                            $learnMoreUrl = trim((string) data_get($item, 'meta_json.static_posts.learn_more_url', ''));
+                            $learnMoreUrl = $learnMoreUrl !== '' ? $learnMoreUrl : null;
                         @endphp
 
                         <article class="sp-item">
-                            @if ($img && $featuredMedia)
+                            @if ($img && $featuredMedia instanceof \App\Models\Media)
                                 <div class="sp-img">
                                     @if (function_exists('cms_picture'))
                                         {!! cms_picture(
                                             $featuredMedia,
                                             [
-                                                'alt' => e($title),
+                                                'alt' => $title !== '' ? $title : 'Post image',
                                                 'class' => 'w-full h-full object-cover',
-                                                'sizes' => '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw',
+                                                'sizes' => $gridImageSizes,
                                                 'loading' => 'lazy',
+                                                'fetchpriority' => 'low',
                                                 'decoding' => 'async',
                                             ],
                                             'large',
                                             ['medium', 'medium_large', 'large'],
                                         ) !!}
                                     @else
-                                        {{-- fallback --}}
-                                        <img src="{{ $imageUrl }}" alt="{{ e($title) }}" loading="lazy"
-                                            decoding="async">
+                                        <img src="{{ $imageUrl }}"
+                                            alt="{{ e($title !== '' ? $title : 'Post image') }}" loading="lazy"
+                                            fetchpriority="low" decoding="async">
                                     @endif
                                 </div>
                             @elseif ($img && $imageUrl !== '')
                                 <div class="sp-img">
-                                    <img src="{{ $imageUrl }}" alt="{{ e($title) }}" loading="lazy"
-                                        decoding="async">
+                                    <img src="{{ $imageUrl }}"
+                                        alt="{{ e($title !== '' ? $title : 'Post image') }}" loading="lazy"
+                                        fetchpriority="low" decoding="async">
                                 </div>
+                            @elseif ($img)
+                                <div class="sp-img" aria-hidden="true"></div>
                             @endif
 
                             @if ($title !== '')
-                                <h3 class="c-product__title">{{ $title }}</h3>
+                                <p class="c-product__title">{{ $title }}</p>
                             @endif
 
                             @if ($contentHtml !== '')
                                 <div class="sp-content">{!! $contentHtml !!}</div>
                             @endif
 
-                            @if ($showLearnMoreBtn)
-                                <a class="sp-more" href="{{ $learnMoreUrl }}">Learn more <span
-                                        aria-hidden="true">→</span></a>
+                            @if ($showLearnMoreBtn && !empty($learnMoreUrl))
+                                <a class="sp-more focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    href="{{ $learnMoreUrl }}">
+                                    Learn more <span aria-hidden="true">→</span>
+                                </a>
                             @endif
                         </article>
                     @endforeach
@@ -236,23 +347,19 @@
             @endif
 
             <style>
-                /* Base typography / color */
-                .{{ $wrapperClass }} {
+                .sp-shortcode {
                     color: #2c2c2c;
                     font-family: 'Source Sans Pro', sans-serif;
-                    margin: 20px 0px;
+                    margin: 20px 0;
                 }
 
-                /* ---------------------------
-       TOP SECTION - DEFAULT CENTER
-       --------------------------- */
-                .{{ $wrapperClass }} .sp-top {
+                .sp-shortcode .sp-top {
                     text-align: center;
                     max-width: 980px;
                     margin: 0 auto 56px auto;
                 }
 
-                .{{ $wrapperClass }} .sp-top-title {
+                .sp-shortcode .sp-top-title {
                     font-size: 36px;
                     line-height: 1.2;
                     font-weight: 700;
@@ -260,26 +367,23 @@
                     color: #2c2c2c;
                 }
 
-                .{{ $wrapperClass }} .sp-top-content {
+                .sp-shortcode .sp-top-content {
                     font-size: 18px;
                     line-height: 1.7;
                     color: #2c2c2c;
                 }
 
-                .{{ $wrapperClass }} .sp-top-content p {
+                .sp-shortcode .sp-top-content p {
                     margin: 0;
                 }
 
-                /* ---------------------------
-       TOP SECTION - HYBRID VARIANT
-       --------------------------- */
-                .{{ $wrapperClass }} .sp-top-hybrid {
+                .sp-shortcode .sp-top-hybrid {
                     background: #f9f9f9;
                     margin: 0 auto 56px auto;
                     padding: 0;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__grid {
+                .sp-shortcode .sp-top-hybrid__grid {
                     max-width: 1200px;
                     margin: 0 auto;
                     padding: 40px 35px 80px 35px;
@@ -289,18 +393,18 @@
                     align-items: center;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__left {
+                .sp-shortcode .sp-top-hybrid__left {
                     grid-column: span 5;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__right {
+                .sp-shortcode .sp-top-hybrid__right {
                     grid-column: span 7;
                     display: flex;
                     justify-content: center;
                     align-items: center;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__label {
+                .sp-shortcode .sp-top-hybrid__label {
                     font-size: 13px;
                     letter-spacing: .08em;
                     text-transform: uppercase;
@@ -309,17 +413,17 @@
                     position: relative;
                 }
 
-                .{{ $wrapperClass }}.sp-top-hybrid__label::after {
+                .sp-shortcode .sp-top-hybrid__label::after {
                     content: "";
                     position: absolute;
                     top: -17px;
-                    left: 0px;
+                    left: 0;
                     width: 85px;
                     height: 3px;
                     background: #ec2227;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__title {
+                .sp-shortcode .sp-top-hybrid__title {
                     font-size: 48px;
                     line-height: 1.05;
                     font-weight: 800;
@@ -327,24 +431,24 @@
                     color: #111;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__content {
+                .sp-shortcode .sp-top-hybrid__content {
                     line-height: 1.8;
                     color: #111;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__content p {
+                .sp-shortcode .sp-top-hybrid__content p {
                     margin: 0 0 18px 0;
                     text-align: justify;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__single img {
+                .sp-shortcode .sp-top-hybrid__single img {
                     width: 100%;
                     height: auto;
                     display: block;
                     box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__stack {
+                .sp-shortcode .sp-top-hybrid__stack {
                     position: relative;
                     min-height: 520px;
                     padding-top: 22px;
@@ -352,26 +456,26 @@
                     width: 100%;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__img {
+                .sp-shortcode .sp-top-hybrid__img {
                     position: absolute;
                     background: #fff;
                     box-shadow: 0 10px 30px rgba(0, 0, 0, .12);
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__img img {
+                .sp-shortcode .sp-top-hybrid__img img {
                     width: 100%;
                     height: auto;
                     display: block;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__img--back {
+                .sp-shortcode .sp-top-hybrid__img--back {
                     right: 0;
                     top: 22px;
                     width: 55%;
                     z-index: 1;
                 }
 
-                .{{ $wrapperClass }} .sp-top-hybrid__img--front {
+                .sp-shortcode .sp-top-hybrid__img--front {
                     left: 0;
                     top: 80px;
                     width: 60%;
@@ -379,28 +483,28 @@
                 }
 
                 @media (max-width: 900px) {
-                    .{{ $wrapperClass }} .sp-top-hybrid__grid {
+                    .sp-shortcode .sp-top-hybrid__grid {
                         grid-template-columns: 1fr;
                         gap: 28px;
                         padding: 48px 16px;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__left,
-                    .{{ $wrapperClass }} .sp-top-hybrid__right {
+                    .sp-shortcode .sp-top-hybrid__left,
+                    .sp-shortcode .sp-top-hybrid__right {
                         grid-column: span 12;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__right {
+                    .sp-shortcode .sp-top-hybrid__right {
                         order: -1;
                         display: block;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__stack {
+                    .sp-shortcode .sp-top-hybrid__stack {
                         min-height: auto;
                         padding: 0;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__img {
+                    .sp-shortcode .sp-top-hybrid__img {
                         position: relative;
                         left: auto;
                         right: auto;
@@ -409,52 +513,46 @@
                         margin: 0;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__img--back {
+                    .sp-shortcode .sp-top-hybrid__img--back {
                         width: 100%;
                         z-index: 1;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__img--front {
+                    .sp-shortcode .sp-top-hybrid__img--front {
                         width: 92%;
                         margin: -80px auto 0 auto;
                         z-index: 2;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__title {
+                    .sp-shortcode .sp-top-hybrid__title {
                         font-size: 34px;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-hybrid__content {
+                    .sp-shortcode .sp-top-hybrid__content {
                         font-size: 16px;
                     }
                 }
 
-                /* ---------------------------
-       GRID
-       --------------------------- */
-                .{{ $wrapperClass }} .sp-grid {
+                .sp-shortcode .sp-grid {
                     display: grid;
                     gap: 64px;
                     align-items: start;
                 }
 
                 @media (min-width: 768px) {
-                    .{{ $wrapperClass }} .sp-grid {
+                    .sp-shortcode .sp-grid {
                         grid-template-columns: repeat(var(--sp-cols), minmax(0, 1fr)) !important;
                     }
                 }
 
-                /* Image */
-                .{{ $wrapperClass }} .sp-img {
+                .sp-shortcode .sp-img {
                     display: block;
                     width: 100%;
                     margin-bottom: 25px;
                     background: #f9fafb;
                 }
 
-                /* ✅ IMPORTANT:
-                   cms_picture outputs <picture>/<img>, so we style any img inside */
-                .{{ $wrapperClass }} .sp-img img {
+                .sp-shortcode .sp-img img {
                     width: 100%;
                     height: 280px;
                     object-fit: cover;
@@ -462,13 +560,12 @@
                 }
 
                 @media (min-width: 1024px) {
-                    .{{ $wrapperClass }} .sp-img img {
+                    .sp-shortcode .sp-img img {
                         height: 320px;
                     }
                 }
 
-                /* Title design */
-                .{{ $wrapperClass }} .c-product__title {
+                .sp-shortcode .c-product__title {
                     font-size: 24px;
                     font-weight: bold;
                     font-style: normal;
@@ -479,52 +576,52 @@
                     margin: 1rem 0;
                 }
 
-                /* Content text */
-                .{{ $wrapperClass }} .sp-content {
+                .sp-shortcode .sp-content {
                     line-height: 1.7;
                     color: #2c2c2c;
                 }
 
-                .{{ $wrapperClass }} .sp-content p {
+                .sp-shortcode .sp-content p {
                     margin: 0 0 14px 0;
                     text-align: justify;
                 }
 
-                /* Learn more underline + arrow */
-                .{{ $wrapperClass }} .sp-more {
+                .sp-shortcode .sp-more {
                     display: inline-block;
                     margin-top: 12px;
                     font-size: 18px;
-                    color: #2c2c2c;
+                    color: #1f2937;
                     text-decoration: underline;
                     font-weight: 500;
                 }
 
-                /* Mobile tuning */
+                .sp-shortcode .sp-more:hover {
+                    color: #0f4c81;
+                }
+
                 @media (max-width: 767px) {
-                    .{{ $wrapperClass }} .sp-top {
+                    .sp-shortcode .sp-top {
                         margin-bottom: 36px;
                         padding: 0 8px;
                     }
 
-                    .{{ $wrapperClass }} .sp-top-title {
+                    .sp-shortcode .sp-top-title {
                         font-size: 28px;
                     }
 
-                    .{{ $wrapperClass }} .sp-grid {
+                    .sp-shortcode .sp-grid {
                         gap: 36px;
                     }
 
-                    .{{ $wrapperClass }} .sp-img img {
+                    .sp-shortcode .sp-img img {
                         height: 220px;
                     }
 
-                    .{{ $wrapperClass }} .sp-content {
+                    .sp-shortcode .sp-content {
                         font-size: 16px;
                     }
                 }
 
-                /* Make section wide + left aligned like image */
                 .why-siatex .sp-top {
                     max-width: 1400px;
                     margin: 0 auto 56px auto;
@@ -532,7 +629,6 @@
                     padding: 0 20px;
                 }
 
-                /* Big bold heading */
                 .why-siatex .sp-top-title {
                     font-size: 32px;
                     line-height: 1.05;
@@ -542,7 +638,6 @@
                     margin: 0 0 34px 0;
                 }
 
-                /* 3 columns from the 3 <p> tags */
                 .why-siatex .sp-top-content {
                     display: grid;
                     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -550,27 +645,23 @@
                     line-height: 1.7;
                 }
 
-                /* Each <p> is one column */
                 .why-siatex .sp-top-content p {
                     margin: 0;
                     padding: 0 60px 0 0;
                     text-align: left;
                 }
 
-                /* Vertical separators between columns */
                 .why-siatex .sp-top-content p:nth-child(1),
                 .why-siatex .sp-top-content p:nth-child(2) {
                     border-right: 2px solid #0e4f7f;
                 }
 
-                /* Nice spacing between bullet lines made with <br> */
                 .why-siatex .sp-top-content p br {
                     display: block;
                     content: "";
                     margin-top: 22px;
                 }
 
-                /* Responsive: stack on mobile */
                 @media (max-width: 991px) {
                     .why-siatex .sp-top-title {
                         font-size: 40px;

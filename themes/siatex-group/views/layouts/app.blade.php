@@ -86,8 +86,31 @@
         <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
     @endif
 
+    {{-- ✅ Vite assets (production build is minified automatically) --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <link rel="stylesheet" href="{{ asset('themes/siatex-group/dist/theme.css') }}">
+
+    {{-- ✅ Inline tiny theme.css to remove one render-blocking request --}}
+    <style id="theme-inline-css">
+        .page-container {
+            max-width: 1140px;
+            margin: auto;
+            padding: 0 15px;
+        }
+
+        .sc-tag-current {
+            font-weight: 400 !important;
+        }
+
+        .sc-tag-link {
+            font-weight: 400 !important;
+            text-decoration: none;
+        }
+
+        .sc-tag-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+
     {!! theme_customizer_css() !!}
 
     {{-- ✅ IMPORTANT: Render CMS enqueued frontend styles (plugins use this) --}}
@@ -196,7 +219,9 @@
             };
 
             setH();
-            window.addEventListener('resize', setH);
+            window.addEventListener('resize', setH, {
+                passive: true
+            });
         })();
     </script>
 

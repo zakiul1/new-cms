@@ -3,6 +3,8 @@
 namespace App\Filament\Pages\Cms;
 
 use App\Cms\Core\SettingsRepository;
+use App\Jobs\GenerateMediaVariants;
+use App\Models\Media;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -11,7 +13,6 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Facades\Artisan;
 use Throwable;
 use UnitEnum;
 
@@ -27,6 +28,8 @@ class MediaSettings extends Page
 
     /** @var array<string, mixed> | null */
     public ?array $data = [];
+
+    protected int $regenerateBatchSize = 25;
 
     public function mount(SettingsRepository $settings): void
     {
@@ -48,35 +51,35 @@ class MediaSettings extends Page
     protected function getHeaderActions(): array
     {
         return [
-
-
-            Action::make('regenerateAll')
-                ->label('Regenerate All Variants')
+            Action::make('regenerateBatch')
+                ->label('Regenerate Next Batch')
                 ->icon('heroicon-o-arrow-path')
                 ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Regenerate all image variants?')
-                ->modalDescription('This will regenerate variants for all image media using the currently saved size settings.')
+                ->modalHeading('Regenerate next image batch?')
+                ->modalDescription('Processes a small batch of images safely for shared hosting. Click again until all images are processed.')
                 ->action(function () {
                     try {
-                        Artisan::call('media:regenerate', [
-                            '--force' => true,
-                        ]);
+                        $result = $this->regenerateNextBatch();
 
                         Notification::make()
-                            ->title('Variant regeneration completed')
-                            ->body('All image variants were regenerated using the saved media settings.')
+                            ->title('Batch regeneration completed')
+                            ->body(
+                                "Processed {$result['processed']} image(s). "
+                                . ($result['remaining'] > 0
+                                    ? "{$result['remaining']} image(s) still remaining. Click again to continue."
+                                    : 'All pending images are now processed.')
+                            )
                             ->success()
                             ->send();
                     } catch (Throwable $e) {
                         Notification::make()
-                            ->title('Variant regeneration failed')
+                            ->title('Batch regeneration failed')
                             ->body($e->getMessage())
                             ->danger()
                             ->send();
                     }
                 }),
-
 
             Action::make('save')
                 ->label('Save Changes')
@@ -137,8 +140,52 @@ class MediaSettings extends Page
 
         Notification::make()
             ->title('Media settings saved')
-            ->body('If you changed image sizes, regenerate variants so existing images match the new settings.')
+            ->body('If you changed image sizes, regenerate image batches until all pending images are processed.')
             ->success()
             ->send();
+    }
+
+    /**
+     * Process only a safe batch of images per request.
+     *
+     * Targets images that likely still need variants:
+     * - processed_at is null
+     * - or there are no variant records
+     *
+     * Returns:
+     * [
+     *   'processed' => int,
+     *   'remaining' => int,
+     * ]
+     */
+    protected function regenerateNextBatch(): array
+    {
+        $batchSize = max(1, min(100, $this->regenerateBatchSize));
+
+        $baseQuery = Media::query()
+            ->where('mime_type', 'like', 'image/%')
+            ->where(function ($q) {
+                $q->whereNull('processed_at')
+                    ->orWhereDoesntHave('variantRecords');
+            })
+            ->orderBy('id');
+
+        $items = (clone $baseQuery)
+            ->limit($batchSize)
+            ->get();
+
+        $processed = 0;
+
+        foreach ($items as $media) {
+            GenerateMediaVariants::dispatchSync((int) $media->id, false);
+            $processed++;
+        }
+
+        $remaining = (clone $baseQuery)->count();
+
+        return [
+            'processed' => $processed,
+            'remaining' => $remaining,
+        ];
     }
 }

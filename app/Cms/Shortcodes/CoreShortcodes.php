@@ -143,7 +143,6 @@ class CoreShortcodes
                         ->whereRaw("LOWER(terms.name) != 'uncategorized'");
                 };
 
-                // Determine if catid points to a PRIVATE category (explicit allow)
                 $requestedTerm = null;
                 $isPrivateRequested = false;
 
@@ -154,7 +153,7 @@ class CoreShortcodes
                         ->first();
 
                     if (!$requestedTerm) {
-                        return ''; // catid invalid / not in media_category
+                        return '';
                     }
 
                     $isPrivateRequested = strtolower((string) ($requestedTerm->visibility ?? '')) === 'private';
@@ -163,22 +162,18 @@ class CoreShortcodes
                 $query = Media::query();
 
                 if ($isPrivateRequested) {
-                    // ✅ Allow private category items ONLY when explicitly requested by shortcode
-                    // Keep attachments public, but DO NOT apply frontendVisible() because it blocks private categories.
                     $query->where('attachment_public', true);
 
                     $query->whereHas('terms', function ($q) use ($catId) {
                         $q->where('terms.id', $catId);
                     });
                 } else {
-                    // Default behavior (public-only browsing)
                     if (method_exists(Media::class, 'scopeFrontendVisible')) {
                         $query->frontendVisible();
                     } else {
                         $query->where('attachment_public', true);
                     }
 
-                    // Must belong to public media_category terms (exclude uncategorized)
                     $query->whereHas('terms', function ($q) use ($taxonomyId, $excludeUncategorized) {
                         $q->where('terms.taxonomy_id', $taxonomyId)
                             ->where('terms.visibility', 'public');
@@ -186,7 +181,6 @@ class CoreShortcodes
                         $excludeUncategorized($q);
                     });
 
-                    // If specific public catid is requested, filter to it
                     if ($catId > 0) {
                         $catVisibility = strtolower((string) ($requestedTerm->visibility ?? ''));
                         $catSlug = strtolower((string) ($requestedTerm->slug ?? ''));
@@ -201,7 +195,7 @@ class CoreShortcodes
                                 $q->where('terms.id', $catId);
                             });
                         } else {
-                            return ''; // requested cat exists but not allowed under public rules
+                            return '';
                         }
                     }
                 }
@@ -259,7 +253,6 @@ class CoreShortcodes
                     return '';
                 }
 
-                // catid REQUIRED (no error page, just message)
                 if (!array_key_exists('catid', $atts) || trim((string) ($atts['catid'] ?? '')) === '') {
                     return '<!-- [logo] missing required catid -->'
                         . '<div class="text-sm text-red-600 my-4">Please provide <b>catid</b>. Example: <code>[logo catid="5"]</code></div>';
@@ -271,36 +264,30 @@ class CoreShortcodes
                         . '<div class="text-sm text-red-600 my-4">Invalid <b>catid</b>. Example: <code>[logo catid="5"]</code></div>';
                 }
 
-                // columns
                 $columns = (int) ($atts['column'] ?? 4);
                 $columns = max(1, min(12, $columns));
 
-                // mobile columns
                 $mobile = (int) ($atts['mobile'] ?? 2);
                 $mobile = max(1, min(6, $mobile));
 
-                // title (flag or value)
                 $showTitle = false;
                 if (array_key_exists('title', $atts)) {
                     $v = $atts['title'];
                     $showTitle = ($v === null || $v === '') ? true : self::toBool($v);
                 }
 
-                // slider (flag or value)
                 $slider = false;
                 if (array_key_exists('slider', $atts)) {
                     $v = $atts['slider'];
                     $slider = ($v === null || $v === '') ? true : self::toBool($v);
                 }
 
-                // style
                 $style = strtolower(trim((string) ($atts['style'] ?? 'square')));
                 $style = in_array($style, ['square', 'squire', 'round'], true) ? $style : 'square';
                 if ($style === 'squire') {
                     $style = 'square';
                 }
 
-                // order: asc default; if "dec" flag exists OR order="dec"
                 $orderDir = 'asc';
                 if (array_key_exists('dec', $atts)) {
                     $orderDir = 'desc';
@@ -315,14 +302,12 @@ class CoreShortcodes
                     }
                 }
 
-                // load: default all; if set, limit
                 $limit = null;
                 if (array_key_exists('load', $atts) && trim((string) ($atts['load'] ?? '')) !== '') {
                     $limit = (int) $atts['load'];
                     $limit = max(1, min(500, $limit));
                 }
 
-                // class: keep default + append user class
                 $defaultClass = 'logo_grid';
                 $userClass = trim((string) ($atts['class'] ?? ''));
                 $userClass = preg_replace('/[^a-zA-Z0-9\-_ ]/', '', $userClass);
@@ -333,7 +318,6 @@ class CoreShortcodes
                     $class .= ' ' . $userClass;
                 }
 
-                // validate category exists & is media_category (and detect private/public)
                 $term = Term::query()
                     ->whereKey($catId)
                     ->where('taxonomy_id', $taxonomyId)
@@ -348,7 +332,6 @@ class CoreShortcodes
                 $query = Media::query();
 
                 if ($isPrivateCategory) {
-                    // ✅ Allow private category items ONLY when explicitly requested by shortcode
                     $query->where('attachment_public', true);
                 } else {
                     if (method_exists(Media::class, 'scopeFrontendVisible')) {
@@ -358,15 +341,12 @@ class CoreShortcodes
                     }
                 }
 
-                // restrict to category
                 $query->whereHas('terms', function ($q) use ($catId) {
                     $q->where('terms.id', $catId);
                 });
 
-                // order
                 $query->orderBy('id', $orderDir);
 
-                // limit if load provided
                 if ($limit !== null) {
                     $query->limit($limit);
                 }
@@ -426,10 +406,9 @@ class CoreShortcodes
                     return '';
                 }
 
-                // postid (top section)
                 $topTitle = '';
                 $topContent = '';
-                $topImages = [];
+                $topMediaItems = collect();
                 $topVariant = '';
 
                 if (array_key_exists('top', $atts)) {
@@ -457,7 +436,6 @@ class CoreShortcodes
                             ?? ''
                         ));
 
-                        // load top images (first 2 only)
                         try {
                             $mediaItems = collect();
 
@@ -472,30 +450,20 @@ class CoreShortcodes
                                 }
                             }
 
-                            $topImages = $mediaItems
-                                ->map(function ($m) {
-                                    if (is_object($m) && method_exists($m, 'url')) {
-                                        return (string) $m->url();
-                                    }
-                                    if (is_object($m) && property_exists($m, 'url') && is_string($m->url)) {
-                                        return (string) $m->url;
-                                    }
-                                    if (is_object($m) && property_exists($m, 'path') && is_string($m->path)) {
-                                        return (string) $m->path;
-                                    }
-                                    return null;
-                                })
-                                ->filter(fn($u) => is_string($u) && trim($u) !== '')
+                            $topMediaItems = $mediaItems
+                                ->filter(fn($m) => $m instanceof Media)
                                 ->values()
-                                ->take(2)
-                                ->all();
+                                ->take(2);
+
+                            if ($topMediaItems->isNotEmpty()) {
+                                $topMediaItems->loadMissing('variantRecords');
+                            }
                         } catch (\Throwable $e) {
-                            $topImages = [];
+                            $topMediaItems = collect();
                         }
                     }
                 }
 
-                // catid (grid)
                 $hasCatId = array_key_exists('catid', $atts) && trim((string) ($atts['catid'] ?? '')) !== '';
                 $catId = $hasCatId ? (int) $atts['catid'] : 0;
 
@@ -567,10 +535,10 @@ class CoreShortcodes
 
                         $with = [];
                         if (method_exists($staticPostClass, 'featuredMediaPivot')) {
-                            $with[] = 'featuredMediaPivot';
+                            $with[] = 'featuredMediaPivot.variantRecords';
                         }
                         if (method_exists($staticPostClass, 'featuredMedia')) {
-                            $with[] = 'featuredMedia';
+                            $with[] = 'featuredMedia.variantRecords';
                         }
                         if (!empty($with)) {
                             $query->with($with);
@@ -591,7 +559,7 @@ class CoreShortcodes
                         'topTitle' => $topTitle,
                         'topContent' => $topContent,
                         'topVariant' => $topVariant,
-                        'topImages' => $topImages,
+                        'topMediaItems' => $topMediaItems,
 
                         'showLearnMoreBtn' => $showLearnMoreBtn,
                     ])->render();

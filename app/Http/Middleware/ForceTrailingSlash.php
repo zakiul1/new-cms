@@ -26,9 +26,9 @@ class ForceTrailingSlash
             return $next($request);
         }
 
-        // Skip reserved/system prefixes (match your routing exclusions)
+        // Skip reserved/system prefixes
         $trim = ltrim($path, '/');
-        foreach (['_contact', 'lara-admin', 'filament', 'storage', 'api', 'livewire'] as $prefix) {
+        foreach (['_contact', 'lara-admin', 'filament', 'storage', 'api', 'livewire', 'customizer'] as $prefix) {
             if ($trim === $prefix || str_starts_with($trim, $prefix . '/')) {
                 return $next($request);
             }

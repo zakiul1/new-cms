@@ -3,6 +3,18 @@
 
     const STORAGE_KEY = "cf_cart_v1";
     const ADD_BTN_SELECTOR = ".cf-get-price";
+    const OBSERVE_ROOT_SELECTORS = [
+        "main",
+        "#app",
+        ".site-content",
+        ".page-content",
+        ".entry-content",
+        ".products-grid",
+        ".static-posts-grid",
+    ];
+
+    let mutationObserver = null;
+    let toastTimer = null;
 
     // --------------------------------
     // Helpers
@@ -17,13 +29,24 @@
     }
 
     function loadCart() {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        const cart = safeJsonParse(raw || "[]", []);
-        return Array.isArray(cart) ? cart : [];
+        try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            const cart = safeJsonParse(raw || "[]", []);
+            return Array.isArray(cart) ? cart : [];
+        } catch {
+            return [];
+        }
     }
 
     function saveCart(items) {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items || []));
+        try {
+            window.localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify(items || []),
+            );
+        } catch {
+            // ignore storage failures
+        }
         updateBadges();
     }
 
@@ -37,6 +60,7 @@
 
     function addItem(item) {
         const items = loadCart();
+
         if (
             items.some(
                 (x) =>
@@ -46,6 +70,7 @@
         ) {
             return { ok: false, reason: "exists" };
         }
+
         items.push(item);
         saveCart(items);
         return { ok: true };
@@ -59,6 +84,7 @@
                     String(x.type) === String(type)
                 ),
         );
+
         saveCart(items);
     }
 
@@ -78,18 +104,31 @@
 
     function toast(msg, ok) {
         let el = document.getElementById("cf-cart-toast");
+
         if (!el) {
             el = document.createElement("div");
             el.id = "cf-cart-toast";
             el.className = "cf-cart-toast";
+            el.setAttribute("role", "status");
+            el.setAttribute("aria-live", "polite");
             document.body.appendChild(el);
         }
+
         el.textContent = msg;
         el.classList.remove("cf-show", "cf-ok", "cf-bad");
         el.classList.add(ok ? "cf-ok" : "cf-bad");
+
         void el.offsetHeight;
+
         el.classList.add("cf-show");
-        setTimeout(() => el.classList.remove("cf-show"), 1800);
+
+        if (toastTimer) {
+            window.clearTimeout(toastTimer);
+        }
+
+        toastTimer = window.setTimeout(() => {
+            el.classList.remove("cf-show");
+        }, 1800);
     }
 
     function getButtonDefaultLabel(btn) {
@@ -152,23 +191,8 @@
     }
 
     // --------------------------------
-    // UI: Cart icon (header) + floating pill + ONE modal (items + form)
+    // UI: Cart icon + floating pill + ONE modal
     // --------------------------------
-    function ensureAssetsLoaded() {
-        const cssId = "cf-cart-css";
-        if (!document.getElementById(cssId)) {
-            const link = document.createElement("link");
-            link.id = cssId;
-            link.rel = "stylesheet";
-
-            link.href =
-                (window.ContactFormCart && window.ContactFormCart.cssUrl) ||
-                "/_contact/cart.css";
-
-            document.head.appendChild(link);
-        }
-    }
-
     function findHeaderHost() {
         return (
             document.querySelector("[data-cms-header-actions]") ||
@@ -251,9 +275,9 @@
 
         overlay.innerHTML = `
       <div class="cf-cart-modal__backdrop" data-close="1"></div>
-      <div class="cf-cart-modal__panel" role="dialog" aria-modal="true" aria-label="Cart">
+      <div class="cf-cart-modal__panel" role="dialog" aria-modal="true" aria-labelledby="cf-cart-title">
         <div class="cf-cart-modal__head">
-          <div class="cf-cart-modal__title">
+          <div class="cf-cart-modal__title" id="cf-cart-title">
             Selected Items (<span id="cf-cart-count">0</span>)
           </div>
           <button type="button" class="cf-cart-modal__close" data-close="1" aria-label="Close">
@@ -278,16 +302,21 @@
 
             <form class="cf-form" id="cf-cart-form">
               <div class="cf-form__row">
-                <input type="text" name="name" placeholder="Name" required>
-                <input type="text" name="whatsapp" placeholder="WhatsApp">
+                <label class="sr-only" for="cf-cart-name">Name</label>
+                <input id="cf-cart-name" type="text" name="name" placeholder="Name" autocomplete="name" required>
+
+                <label class="sr-only" for="cf-cart-whatsapp">WhatsApp</label>
+                <input id="cf-cart-whatsapp" type="tel" name="whatsapp" placeholder="WhatsApp" autocomplete="tel">
               </div>
 
               <div class="cf-form__row cf-form__row--single">
-                <input type="email" name="email" placeholder="Email" required>
+                <label class="sr-only" for="cf-cart-email">Email</label>
+                <input id="cf-cart-email" type="email" name="email" placeholder="Email" autocomplete="email" required>
               </div>
 
               <div class="cf-form__row cf-form__row--single">
-                <textarea name="message" placeholder="Write your Message Here" rows="7" required></textarea>
+                <label class="sr-only" for="cf-cart-message">Message</label>
+                <textarea id="cf-cart-message" name="message" placeholder="Write your Message Here" rows="7" required></textarea>
               </div>
 
               <input type="hidden" name="subject" value="Custom Quote Request">
@@ -310,7 +339,10 @@
                 e.target && e.target.closest
                     ? e.target.closest('[data-close="1"]')
                     : null;
-            if (closeEl) closeCartModal();
+
+            if (closeEl) {
+                closeCartModal();
+            }
         });
 
         document.body.appendChild(overlay);
@@ -321,7 +353,7 @@
 
         overlay
             .querySelector("#cf-cart-clear")
-            .addEventListener("click", function () {
+            ?.addEventListener("click", function () {
                 clearCart();
                 renderCartModal();
                 updateButtonsState();
@@ -330,15 +362,26 @@
 
         overlay
             .querySelector("#cf-cart-cancel")
-            .addEventListener("click", function () {
+            ?.addEventListener("click", function () {
                 closeCartModal();
             });
 
         overlay
             .querySelector("#cf-cart-form")
-            .addEventListener("submit", submitForm);
+            ?.addEventListener("submit", submitForm);
+
+        document.addEventListener("keydown", handleModalEscape);
 
         return overlay;
+    }
+
+    function handleModalEscape(e) {
+        if (e.key === "Escape") {
+            const overlay = document.getElementById("cf-cart-modal");
+            if (overlay && overlay.classList.contains("cf-open")) {
+                closeCartModal();
+            }
+        }
     }
 
     function submitForm(e) {
@@ -362,7 +405,16 @@
             "";
 
         const sendBtn = document.getElementById("cf-cart-send");
-        if (sendBtn) sendBtn.disabled = true;
+        const hint = document.getElementById("cf-cart-form-hint");
+
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.setAttribute("aria-busy", "true");
+        }
+
+        if (hint) {
+            hint.textContent = "Sending...";
+        }
 
         fetch("/_contact/submit", {
             method: "POST",
@@ -376,9 +428,17 @@
         })
             .then(async (res) => {
                 if (!res.ok) {
+                    if (hint) {
+                        hint.textContent = "Send failed. Please try again.";
+                    }
                     toast("Send failed. Please try again.", false);
                     return;
                 }
+
+                if (hint) {
+                    hint.textContent = "Message sent successfully.";
+                }
+
                 toast("Message sent successfully", true);
                 clearCart();
                 renderCartModal();
@@ -386,23 +446,37 @@
                 closeCartModal();
             })
             .catch(() => {
+                if (hint) {
+                    hint.textContent = "Network error. Please try again.";
+                }
                 toast("Network error. Please try again.", false);
             })
             .finally(() => {
-                if (sendBtn) sendBtn.disabled = false;
+                if (sendBtn) {
+                    sendBtn.disabled = false;
+                    sendBtn.removeAttribute("aria-busy");
+                }
             });
     }
 
     function openCartModal() {
         ensureCartModal();
         renderCartModal();
-        document.getElementById("cf-cart-modal").classList.add("cf-open");
+
+        const overlay = document.getElementById("cf-cart-modal");
+        if (overlay) {
+            overlay.classList.add("cf-open");
+        }
+
         document.body.classList.add("cf-cart-lock");
     }
 
     function closeCartModal() {
         const overlay = document.getElementById("cf-cart-modal");
-        if (overlay) overlay.classList.remove("cf-open");
+        if (overlay) {
+            overlay.classList.remove("cf-open");
+        }
+
         document.body.classList.remove("cf-cart-lock");
     }
 
@@ -414,8 +488,14 @@
         if (!itemsHost) return;
 
         const items = loadCart();
-        if (countEl) countEl.textContent = String(items.length);
-        if (hidden) hidden.value = JSON.stringify(items);
+
+        if (countEl) {
+            countEl.textContent = String(items.length);
+        }
+
+        if (hidden) {
+            hidden.value = JSON.stringify(items);
+        }
 
         if (!items.length) {
             itemsHost.innerHTML = `
@@ -436,7 +516,7 @@
         const rows = items
             .map((it) => {
                 const img = it.image
-                    ? `<img src="${escapeHtml(it.image)}" alt="" class="cf-cart-item__img">`
+                    ? `<img src="${escapeHtml(it.image)}" alt="" class="cf-cart-item__img" loading="lazy" decoding="async">`
                     : `<div class="cf-cart-item__img cf-cart-item__img--ph"></div>`;
 
                 const title = escapeHtml(it.title || "Item");
@@ -450,7 +530,8 @@
           <div class="cf-cart-item__info">
             <a class="cf-cart-item__title" href="${url}" target="_blank" rel="noopener">${title}</a>
           </div>
-          <button type="button"
+          <button
+            type="button"
             class="cf-cart-item__remove"
             title="Remove"
             aria-label="Remove"
@@ -481,20 +562,29 @@
         const count = loadCart().length;
 
         const badge = document.getElementById("cf-cart-badge");
-        if (badge) badge.textContent = String(count);
+        if (badge) {
+            badge.textContent = String(count);
+        }
 
         const pillBadge = document.getElementById("cf-cart-pill-badge");
-        if (pillBadge) pillBadge.textContent = String(count);
+        if (pillBadge) {
+            pillBadge.textContent = String(count);
+        }
 
         const pill = document.getElementById("cf-cart-pill");
         if (pill) {
-            if (count > 0) pill.classList.add("cf-show");
-            else pill.classList.remove("cf-show");
+            if (count > 0) {
+                pill.classList.add("cf-show");
+            } else {
+                pill.classList.remove("cf-show");
+            }
         }
     }
 
-    function updateButtonsState() {
-        document.querySelectorAll(ADD_BTN_SELECTOR).forEach((btn) => {
+    function updateButtonsState(root) {
+        const scope = root || document;
+
+        scope.querySelectorAll(ADD_BTN_SELECTOR).forEach((btn) => {
             const item = readItemFromButton(btn);
             if (!item.id) return;
 
@@ -515,13 +605,14 @@
     function bindAddButtons(root) {
         const scope = root || document;
         const buttons = Array.from(scope.querySelectorAll(ADD_BTN_SELECTOR));
+
         if (!buttons.length) return;
 
         buttons.forEach((btn) => {
             if (btn.getAttribute("data-cf-bound") === "1") return;
+
             btn.setAttribute("data-cf-bound", "1");
 
-            // store original Blade-rendered label once
             if (!btn.getAttribute("data-default-label")) {
                 const initialLabel = (btn.innerHTML || "").trim();
                 if (initialLabel !== "") {
@@ -533,74 +624,105 @@
                 e.preventDefault();
 
                 const item = readItemFromButton(btn);
+
                 if (!item.id) {
                     toast("Item id missing (check blade data-item-id)", false);
                     return;
                 }
 
                 const res = addItem(item);
+
                 if (!res.ok && res.reason === "exists") {
                     toast("Already added", false);
-                    updateButtonsState();
+                    updateButtonsState(document);
                     return;
                 }
 
                 toast("Added to cart", true);
-                updateButtonsState();
+                updateButtonsState(document);
                 updateBadges();
             });
         });
     }
 
-    function init() {
-        ensureAssetsLoaded();
-        ensureCartIcon();
-        ensureFloatingPill();
-        updateBadges();
-        bindAddButtons(document);
-        updateButtonsState();
-
-        let syncing = false;
-        let scheduled = false;
-
-        function scheduleSync() {
-            if (scheduled) return;
-            scheduled = true;
-            requestAnimationFrame(() => {
-                scheduled = false;
-                syncing = true;
-                try {
-                    updateButtonsState();
-                    updateBadges();
-                } finally {
-                    syncing = false;
-                }
-            });
+    function getObserveRoot() {
+        for (const selector of OBSERVE_ROOT_SELECTORS) {
+            const found = document.querySelector(selector);
+            if (found) {
+                return found;
+            }
         }
 
-        const obs = new MutationObserver(function (mutations) {
-            if (syncing) return;
+        return document.body || document.documentElement;
+    }
 
-            let hasNewNodes = false;
+    function startScopedObserver() {
+        const root = getObserveRoot();
+        if (!root || typeof MutationObserver === "undefined") {
+            return;
+        }
+
+        let scheduled = false;
+
+        mutationObserver = new MutationObserver(function (mutations) {
+            let shouldSyncAll = false;
+
             for (const m of mutations) {
-                for (const n of m.addedNodes || []) {
-                    if (n && n.querySelectorAll) {
-                        bindAddButtons(n);
-                        hasNewNodes = true;
+                if (!m.addedNodes || !m.addedNodes.length) {
+                    continue;
+                }
+
+                for (const node of m.addedNodes) {
+                    if (!(node instanceof Element)) {
+                        continue;
+                    }
+
+                    if (node.matches && node.matches(ADD_BTN_SELECTOR)) {
+                        bindAddButtons(node.parentElement || root);
+                        shouldSyncAll = true;
+                        continue;
+                    }
+
+                    if (
+                        node.querySelector &&
+                        node.querySelector(ADD_BTN_SELECTOR)
+                    ) {
+                        bindAddButtons(node);
+                        shouldSyncAll = true;
                     }
                 }
             }
-            if (hasNewNodes) scheduleSync();
+
+            if (!shouldSyncAll || scheduled) {
+                return;
+            }
+
+            scheduled = true;
+
+            window.requestAnimationFrame(() => {
+                scheduled = false;
+                updateButtonsState(root);
+                updateBadges();
+            });
         });
 
-        obs.observe(document.documentElement || document.body, {
+        mutationObserver.observe(root, {
             childList: true,
             subtree: true,
         });
     }
 
+    function init() {
+        ensureCartIcon();
+        ensureFloatingPill();
+        updateBadges();
+        bindAddButtons(document);
+        updateButtonsState(document);
+        startScopedObserver();
+    }
+
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", init);
+        document.addEventListener("DOMContentLoaded", init, { once: true });
     } else {
         init();
     }

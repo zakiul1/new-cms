@@ -40,9 +40,16 @@
         if ($quoteButtonText === '') {
             $quoteButtonText = 'Custom Quote';
         }
-        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 
-        $heroTitle = trim((string) data_get($post->meta_json ?? [], 'slider.title', ''));
+        $quoteButtonLabel = trim(strip_tags(str_replace('|', ' ', $quoteButtonText)));
+        if ($quoteButtonLabel === '') {
+            $quoteButtonLabel = 'Custom Quote';
+        }
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonLabel)));
+
+        $heroTitleRaw = (string) data_get($post->meta_json ?? [], 'slider.title', '');
+        $heroTitle = trim(strip_tags($heroTitleRaw));
+
         $heroRaw = (string) ($post->content_html ?? data_get($post->content_json ?? [], 'html', ''));
         $productRaw = (string) data_get($post->meta_json ?? [], 'product', '');
         $promoRaw = (string) data_get($post->meta_json ?? [], 'sub_description', '');
@@ -79,7 +86,10 @@
             }
 
             if ($featuredMediaItems->isEmpty() && method_exists($post, 'featuredMedia') && $post->featuredMedia) {
-                $featuredMediaItems = collect([$post->featuredMedia]);
+                $featuredMediaItems =
+                    $post->featuredMedia instanceof \Illuminate\Support\Collection
+                        ? $post->featuredMedia
+                        : collect([$post->featuredMedia]);
             }
         } catch (\Throwable $e) {
             $featuredMediaItems = collect();
@@ -89,6 +99,10 @@
             ->filter(fn($m) => $m instanceof \App\Models\Media)
             ->unique(fn($m) => $m->id ?? spl_object_hash($m))
             ->values();
+
+        if ($featuredMediaItems->isNotEmpty()) {
+            $featuredMediaItems->loadMissing('variantRecords');
+        }
 
         $hasHeroMedia = $featuredMediaItems->isNotEmpty();
         $hasHeroText = $heroTitle !== '' || trim(strip_tags($heroHtml)) !== '';
@@ -101,16 +115,24 @@
             filled($post->slug ?? null) && function_exists('cms_slug_url')
                 ? cms_slug_url((string) $post->slug)
                 : url()->current();
+        $safePageUrl = trim((string) $pageUrl);
 
         $productImage = '';
         try {
             $heroMediaForButton = $featuredMediaItems->first();
-            if ($heroMediaForButton && method_exists($heroMediaForButton, 'url')) {
-                $productImage = (string) $heroMediaForButton->url('medium');
+            if ($heroMediaForButton instanceof \App\Models\Media) {
+                $productImage = (string) ($heroMediaForButton->variantUrl('medium') ?: $heroMediaForButton->url());
             }
         } catch (\Throwable $e) {
             $productImage = '';
         }
+        $safeProductImage = trim((string) $productImage);
+
+        $postButtonTitle = trim(strip_tags($heroTitle !== '' ? $heroTitle : (string) ($post->title ?? 'Page')));
+        if ($postButtonTitle === '') {
+            $postButtonTitle = 'Page';
+        }
+        $postButtonAriaLabel = trim($quoteButtonLabel . ' for ' . $postButtonTitle);
 
         $relatedLinks = collect();
 
@@ -197,10 +219,12 @@
 
                         $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
                         $title = trim(
-                            (string) ($media->title ?:
-                            ($metaTitle !== ''
-                                ? $metaTitle
-                                : $media->original_filename ?? '')),
+                            strip_tags(
+                                (string) ($media->title ?:
+                                ($metaTitle !== ''
+                                    ? $metaTitle
+                                    : $media->original_filename ?? '')),
+                            ),
                         );
                         $title = $title !== '' ? $title : 'Attachment';
 
@@ -219,7 +243,7 @@
 
                         return [
                             'title' => $title,
-                            'url' => $url,
+                            'url' => trim((string) $url),
                         ];
                     })
                     ->filter(fn($item) => !empty($item['title']) && !empty($item['url']))
@@ -230,7 +254,10 @@
             }
         }
 
-        $currentTitle = trim((string) ($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page'));
+        $currentTitle = trim(strip_tags((string) ($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page')));
+        if ($currentTitle === '') {
+            $currentTitle = 'Page';
+        }
 
         $breadcrumbParentTitle = null;
         $breadcrumbParentUrl = null;
@@ -257,9 +284,9 @@
                     ->first();
 
                 if ($term) {
-                    $breadcrumbParentTitle = trim((string) ($term->name ?? ($term->title ?? '')));
+                    $breadcrumbParentTitle = trim(strip_tags((string) ($term->name ?? ($term->title ?? ''))));
                     if (filled($term->slug ?? null) && function_exists('cms_slug_url')) {
-                        $breadcrumbParentUrl = cms_slug_url((string) $term->slug);
+                        $breadcrumbParentUrl = trim((string) cms_slug_url((string) $term->slug));
                     }
                 }
             }
@@ -276,21 +303,71 @@
                     $firstCategory = $firstMedia->categories()->where('terms.visibility', 'public')->first();
 
                     if ($firstCategory) {
-                        $breadcrumbParentTitle = trim((string) ($firstCategory->name ?? ($firstCategory->title ?? '')));
+                        $breadcrumbParentTitle = trim(
+                            strip_tags((string) ($firstCategory->name ?? ($firstCategory->title ?? ''))),
+                        );
                         if (filled($firstCategory->slug ?? null) && function_exists('cms_slug_url')) {
-                            $breadcrumbParentUrl = cms_slug_url((string) $firstCategory->slug);
+                            $breadcrumbParentUrl = trim((string) cms_slug_url((string) $firstCategory->slug));
                         }
                     }
                 }
             } catch (\Throwable $e) {
             }
         }
+
+        $heroPreloadMedia = $featuredMediaItems->first();
+        $heroPreloadHref = null;
+
+        if ($heroPreloadMedia && method_exists($heroPreloadMedia, 'isImage') && $heroPreloadMedia->isImage()) {
+            try {
+                if (method_exists($heroPreloadMedia, 'variantUrl')) {
+                    $heroPreloadHref = $heroPreloadMedia->variantUrl('large') ?: $heroPreloadMedia->url();
+                } elseif (method_exists($heroPreloadMedia, 'url')) {
+                    $heroPreloadHref = $heroPreloadMedia->url();
+                }
+            } catch (\Throwable $e) {
+                $heroPreloadHref = null;
+            }
+        }
+        $heroPreloadHref = $heroPreloadHref ? trim((string) $heroPreloadHref) : null;
+
+        $shouldLoadCartAssets = !$isHomepage && $showCustomHero;
     @endphp
+
+    @if ($shouldLoadCartAssets)
+        @once
+            @push('head')
+                <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style"
+                    onload="this.onload=null;this.rel='stylesheet'">
+                <noscript>
+                    <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
+                </noscript>
+            @endpush
+
+            @push('scripts')
+                <script src="{{ asset('_contact/cart.js') }}" defer></script>
+            @endpush
+        @endonce
+    @endif
+
+    @if ($showCustomHero)
+        @push('head')
+            @if ($heroPreloadHref)
+                <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 50vw">
+            @endif
+
+            @if ($isHomepage)
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=Ropa+Sans&display=swap" rel="stylesheet">
+            @endif
+        @endpush
+    @endif
 
     @if (!$isHomepage)
         <div class="cms-container mx-auto px-4 pt-6">
             <nav aria-label="Breadcrumb" class="text-sm text-slate-600">
-                <ol class="flex flex-wrap items-center gap-1">
+                <ol class="flex flex-wrap items-center gap-1 breadcrumb-list">
                     <li>
                         <a href="{{ url('/') }}" class="text-slate-700 hover:underline">Home</a>
                     </li>
@@ -298,7 +375,13 @@
                     @if (!empty($breadcrumbParentTitle))
                         <li class="text-slate-400">/</li>
                         <li>
-                            <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
+                            @if (!empty($breadcrumbParentUrl))
+                                <a href="{{ $breadcrumbParentUrl }}" class="text-slate-700 hover:underline">
+                                    {{ $breadcrumbParentTitle }}
+                                </a>
+                            @else
+                                <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
+                            @endif
                         </li>
                     @endif
 
@@ -312,12 +395,6 @@
     @endif
 
     @if ($showCustomHero)
-        @if ($isHomepage)
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Ropa+Sans&display=swap" rel="stylesheet">
-        @endif
-
         <section class="mt-5 bg-white">
             <div class="cms-container mx-auto px-4">
                 <div class="bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 xl:px-12 xl:py-12">
@@ -333,10 +410,11 @@
                                         {!! cms_picture(
                                             $heroMedia,
                                             [
-                                                'alt' => e($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page'),
+                                                'alt' => $postButtonTitle,
                                                 'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
                                                 'sizes' => '(max-width: 1024px) 100vw, 50vw',
-                                                'loading' => 'lazy',
+                                                'loading' => 'eager',
+                                                'fetchpriority' => 'high',
                                                 'decoding' => 'async',
                                             ],
                                             'large',
@@ -353,15 +431,20 @@
                                     class="relative w-full overflow-visible bg-white px-8 sm:px-10">
                                     <div class="relative overflow-hidden">
                                         @foreach ($featuredMediaItems as $index => $heroMedia)
-                                            <div class="page-featured-slide {{ $index === 0 ? 'block' : 'hidden' }}">
+                                            @php
+                                                $isFirstSlide = $index === 0;
+                                            @endphp
+
+                                            <div class="page-featured-slide {{ $isFirstSlide ? 'block' : 'hidden' }}">
                                                 @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
                                                     {!! cms_picture(
                                                         $heroMedia,
                                                         [
-                                                            'alt' => e($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page'),
+                                                            'alt' => $postButtonTitle,
                                                             'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
                                                             'sizes' => '(max-width: 1024px) 100vw, 50vw',
-                                                            'loading' => 'lazy',
+                                                            'loading' => $isFirstSlide ? 'eager' : 'lazy',
+                                                            'fetchpriority' => $isFirstSlide ? 'high' : 'low',
                                                             'decoding' => 'async',
                                                         ],
                                                         'large',
@@ -453,14 +536,15 @@
 
                                 @if (!$isHomepage)
                                     <div class="mt-8">
-                                        <a href="#"
-                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#194f7f]"
-                                            data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+                                        <button type="button"
+                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                            aria-label="{{ $postButtonAriaLabel }}"
+                                            data-default-label="{{ $quoteButtonLabel }}"
                                             data-item-id="{{ (int) $post->id }}" data-item-type="post"
-                                            data-item-title="{{ e($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page') }}"
-                                            data-item-url="{{ e($pageUrl) }}" data-item-image="{{ e($productImage) }}">
+                                            data-item-title="{{ $postButtonTitle }}" data-item-url="{{ $safePageUrl }}"
+                                            data-item-image="{{ $safeProductImage }}">
                                             {!! $quoteButtonHtml !!}
-                                        </a>
+                                        </button>
                                     </div>
                                 @endif
                             </div>
@@ -499,11 +583,12 @@
 
                                     <div class="flex flex-col">
                                         @foreach ($relatedLinks as $item)
-                                            <a href="{{ $item['url'] }}"
+                                            <a href="{{ trim((string) $item['url']) }}"
                                                 class="flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] text-[16px] italic leading-[1.35] text-[#555] first:border-t-0">
                                                 <span class="text-[20px] leading-none text-[#777]">›</span>
-                                                <span class="block truncate hover:underline" title="{{ $item['title'] }}">
-                                                    {{ $item['title'] }}
+                                                <span class="block truncate hover:underline"
+                                                    title="{{ trim(strip_tags((string) $item['title'])) }}">
+                                                    {{ trim(strip_tags((string) $item['title'])) }}
                                                 </span>
                                             </a>
                                         @endforeach

@@ -5,7 +5,7 @@ use App\Cms\Hooks\HookPoints;
 use Filament\Panel;
 
 /**
- * ✅ Read HTML from editor value safely.
+ * Read HTML from editor value safely.
  */
 if (!function_exists('media_defaults_html_value')) {
     function media_defaults_html_value($value): string
@@ -40,7 +40,7 @@ if (!function_exists('media_defaults_html_is_empty')) {
         }
 
         $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = str_replace("\xc2\xa0", ' ', $text); // NBSP char
+        $text = str_replace("\xc2\xa0", ' ', $text);
         $text = trim(strip_tags($text));
 
         return $text === '';
@@ -89,7 +89,7 @@ if (!function_exists('media_defaults_sanitize_html')) {
 }
 
 /**
- * ✅ Get media category term id for a media record.
+ * Get media category term id for a media record.
  */
 if (!function_exists('media_defaults_get_media_category_id')) {
     function media_defaults_get_media_category_id($media): ?int
@@ -123,7 +123,8 @@ if (!function_exists('media_defaults_get_media_category_id')) {
 }
 
 /**
- * ✅ Resolve defaults for a given media record (category-wise with global fallback)
+ * Resolve defaults for a given media record.
+ * JSON is category-only now. No global JSON fallback.
  */
 if (!function_exists('media_defaults_resolve_for_media')) {
     function media_defaults_resolve_for_media($media): array
@@ -146,14 +147,9 @@ if (!function_exists('media_defaults_resolve_for_media')) {
         $globalSubTitle = trim((string) $settings->get('default_sub_title', '', $group));
         $globalSubDescRaw = (string) $settings->get('default_sub_description', '', $group);
 
-        // Optional plugin-level assets
         $globalCss = (string) $settings->get('default_assets_css', '', $group);
         $globalJs = (string) $settings->get('default_assets_js', '', $group);
 
-        // ✅ Default JSON (array|null), global fallback
-        $globalCustomJson = $settings->get('default_custom_json', null, $group);
-
-        // ✅ Global SEO defaults
         $globalSeoTitle = trim((string) $settings->get('default_seo_title', '', $group));
         $globalSeoDesc = trim((string) $settings->get('default_seo_description', '', $group));
         $globalSeoCanonical = trim((string) $settings->get('default_seo_canonical', '', $group));
@@ -168,10 +164,13 @@ if (!function_exists('media_defaults_resolve_for_media')) {
         $desc = media_defaults_sanitize_html(media_defaults_normalize_to_html($descRaw));
         $subDesc = media_defaults_sanitize_html(media_defaults_normalize_to_html($subDescRaw));
 
-        // ✅ category-wise json, fallback to global
-        $defaultCustomJson = $cat['default_custom_json'] ?? $globalCustomJson;
+        /**
+         * IMPORTANT CHANGE:
+         * JSON is category-only.
+         * No fallback to global default_custom_json.
+         */
+        $defaultCustomJson = $cat['default_custom_json'] ?? null;
 
-        // ✅ category-wise SEO, fallback to global SEO
         $defaultSeo = [
             'title' => trim((string) ($cat['default_seo_title'] ?? $globalSeoTitle)),
             'description' => trim((string) ($cat['default_seo_description'] ?? $globalSeoDesc)),
@@ -186,20 +185,16 @@ if (!function_exists('media_defaults_resolve_for_media')) {
             'default_description' => $desc,
             'default_sub_title' => $subTitleRaw,
             'default_sub_description' => $subDesc,
-
             'default_assets_css' => (string) $globalCss,
             'default_assets_js' => (string) $globalJs,
-
-            'default_custom_json' => $defaultCustomJson, // array|null
-
-            // ✅ NEW
+            'default_custom_json' => $defaultCustomJson,
             'default_seo' => $defaultSeo,
         ];
     }
 }
 
 /**
- * ✅ Helper: apply SEO defaults into $meta['seo'] only when empty
+ * Helper: apply SEO defaults into $meta['seo'] only when empty
  */
 if (!function_exists('media_defaults_apply_seo_defaults')) {
     function media_defaults_apply_seo_defaults(array &$meta, array $seoDefaults): void
@@ -239,7 +234,7 @@ if (!function_exists('media_defaults_apply_seo_defaults')) {
 }
 
 /**
- * ✅ Frontend-only defaults application (NO DB SAVE)
+ * Frontend-only defaults application (NO DB SAVE)
  */
 add_action('media.attachment.defaults.persist', function ($media): void {
     if (!$media) {
@@ -248,7 +243,7 @@ add_action('media.attachment.defaults.persist', function ($media): void {
 
     $isPreview = request()->query('md_preview') === '1';
 
-    // ✅ PREVIEW MODE (session-driven)
+    // Preview mode
     if ($isPreview) {
         $state = session()->get('media_defaults_preview_state');
 
@@ -256,19 +251,16 @@ add_action('media.attachment.defaults.persist', function ($media): void {
             $data = $state['data'] ?? null;
             $data = is_array($data) ? $data : [];
 
-            // Title column
             if (!filled($media->title ?? null) && filled($data['default_title'] ?? null)) {
                 $media->title = (string) $data['default_title'];
             }
 
-            // Description column (HTML editor)
             if (media_defaults_html_is_empty($media->description ?? null) && filled($data['default_description'] ?? null)) {
                 $media->description = media_defaults_sanitize_html(
                     media_defaults_normalize_to_html((string) $data['default_description'])
                 );
             }
 
-            // Meta fields
             $meta = $media->meta ?? [];
             if (!is_array($meta)) {
                 $meta = [];
@@ -287,18 +279,17 @@ add_action('media.attachment.defaults.persist', function ($media): void {
                 data_set($meta, 'frontend.meta_description', $sub);
             }
 
-            // Optional preview CSS/JS
             $css = (string) ($data['default_assets_css'] ?? '');
             $js = (string) ($data['default_assets_js'] ?? '');
 
             if ($css !== '') {
                 data_set($meta, 'assets.css', $css);
             }
+
             if ($js !== '') {
                 data_set($meta, 'assets.js', $js);
             }
 
-            // Custom JSON fallback
             $existingJson = data_get($meta, 'custom_json', null);
             $legacyJson = data_get($meta, 'frontend.custom_json', null);
 
@@ -306,7 +297,6 @@ add_action('media.attachment.defaults.persist', function ($media): void {
                 data_set($meta, 'custom_json', $data['default_custom_json']);
             }
 
-            // ✅ SEO defaults in preview mode
             $seoDefaultsPreview = [
                 'title' => trim((string) ($data['default_seo_title'] ?? '')),
                 'description' => trim((string) ($data['default_seo_description'] ?? '')),
@@ -314,16 +304,16 @@ add_action('media.attachment.defaults.persist', function ($media): void {
                 'robots' => trim((string) ($data['default_seo_robots'] ?? '')),
                 'og_image' => trim((string) ($data['default_seo_og_image'] ?? '')),
             ];
+
             media_defaults_apply_seo_defaults($meta, $seoDefaultsPreview);
 
             $media->meta = $meta;
 
-            return; // ✅ stop here in preview mode
+            return;
         }
-        // if session missing, fall through
     }
 
-    // ✅ NORMAL MODE (resolve from settings)
+    // Normal mode
     $defaults = media_defaults_resolve_for_media($media);
 
     if (!filled($media->title ?? null) && filled($defaults['default_title'] ?? null)) {
@@ -349,7 +339,6 @@ add_action('media.attachment.defaults.persist', function ($media): void {
         data_set($meta, 'frontend.meta_description', (string) $defaults['default_sub_description']);
     }
 
-    // Custom JSON fallback
     $existingJson = data_get($meta, 'custom_json', null);
     $legacyJson = data_get($meta, 'frontend.custom_json', null);
 
@@ -357,12 +346,10 @@ add_action('media.attachment.defaults.persist', function ($media): void {
         data_set($meta, 'custom_json', $defaults['default_custom_json']);
     }
 
-    // ✅ SEO defaults in normal mode
     $seoDefaults = $defaults['default_seo'] ?? [];
     media_defaults_apply_seo_defaults($meta, is_array($seoDefaults) ? $seoDefaults : []);
 
     $media->meta = $meta;
-
 }, 20, 1);
 
 /**

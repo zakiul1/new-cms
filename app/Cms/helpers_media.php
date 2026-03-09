@@ -12,7 +12,7 @@ if (!function_exists('cms_picture')) {
      * @param Media|int|null $media
      * @param array<string,mixed> $attrs
      * @param string $srcKey Which key to use as default src (medium)
-     * @param array<string> $keys variant keys to include
+     * @param array<string> $keys Variant keys to include
      */
     function cms_picture($media, array $attrs = [], string $srcKey = 'medium', array $keys = ['thumb', 'medium', 'large']): string
     {
@@ -32,16 +32,20 @@ if (!function_exists('cms_picture')) {
 
         $renderAttrs = function (array $a): string {
             $out = '';
+
             foreach ($a as $k => $v) {
                 if ($v === null || $v === false) {
                     continue;
                 }
+
                 if ($v === true) {
                     $out .= ' ' . e($k);
                     continue;
                 }
+
                 $out .= ' ' . e($k) . '="' . e((string) $v) . '"';
             }
+
             return $out;
         };
 
@@ -66,9 +70,11 @@ if (!function_exists('cms_picture')) {
 
             foreach ($items as $v) {
                 $w = (int) $v->width;
+
                 if ($w <= 0 || isset($seenW[$w])) {
                     continue;
                 }
+
                 $seenW[$w] = true;
                 $parts[] = $v->url() . ' ' . $w . 'w';
             }
@@ -77,7 +83,6 @@ if (!function_exists('cms_picture')) {
             if ($includeOriginal && (int) ($media->width ?? 0) > 0) {
                 $ow = (int) $media->width;
 
-                // only add if not already present at same width
                 if (!isset($seenW[$ow])) {
                     $parts[] = $media->url() . ' ' . $ow . 'w';
                 }
@@ -89,10 +94,12 @@ if (!function_exists('cms_picture')) {
         $webpSrcset = $buildSrcset(['webp'], false);
         $jpegSrcset = $buildSrcset(['jpeg', 'jpg'], true);
 
-        // Choose <img src> (jpeg preferred)
+        // Choose <img src> and intrinsic dimensions
         $imgSrc = null;
+        $imgWidth = null;
+        $imgHeight = null;
 
-        // prefer jpeg srcKey
+        // Prefer jpeg for fallback <img>
         $jpegPreferred = $variants->first(function ($v) use ($srcKey) {
             return (string) ($v->key ?? '') === $srcKey
                 && in_array(strtolower((string) ($v->format ?? '')), ['jpeg', 'jpg'], true);
@@ -100,10 +107,27 @@ if (!function_exists('cms_picture')) {
 
         if ($jpegPreferred) {
             $imgSrc = $jpegPreferred->url();
+            $imgWidth = (int) ($jpegPreferred->width ?? 0) ?: null;
+            $imgHeight = (int) ($jpegPreferred->height ?? 0) ?: null;
         } else {
-            // fallback: any srcKey variant (maybe webp) or original
             $any = $variants->firstWhere('key', $srcKey);
-            $imgSrc = $any?->url() ?: $media->url();
+
+            if ($any) {
+                $imgSrc = $any->url();
+                $imgWidth = (int) ($any->width ?? 0) ?: null;
+                $imgHeight = (int) ($any->height ?? 0) ?: null;
+            } else {
+                $imgSrc = $media->url();
+            }
+        }
+
+        // Fallback to original dimensions when variant dimensions are unavailable
+        if (!$imgWidth && (int) ($media->width ?? 0) > 0) {
+            $imgWidth = (int) $media->width;
+        }
+
+        if (!$imgHeight && (int) ($media->height ?? 0) > 0) {
+            $imgHeight = (int) $media->height;
         }
 
         $alt = (string) Arr::get($attrs, 'alt', (string) ($media->alt ?? $media->title ?? ''));
@@ -114,6 +138,14 @@ if (!function_exists('cms_picture')) {
             'loading' => Arr::get($attrs, 'loading', 'lazy'),
             'decoding' => Arr::get($attrs, 'decoding', 'async'),
         ], $attrs);
+
+        if ($imgWidth) {
+            $imgAttrs['width'] = $imgWidth;
+        }
+
+        if ($imgHeight) {
+            $imgAttrs['height'] = $imgHeight;
+        }
 
         // Put jpeg srcset on <img> fallback if available
         if ($jpegSrcset !== '') {

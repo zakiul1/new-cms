@@ -2,20 +2,28 @@
 @extends('layouts.app')
 
 @section('content')
+    @once
+        @push('head')
+            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+            <noscript>
+                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
+            </noscript>
+        @endpush
+
+        @push('scripts')
+            <script src="{{ asset('_contact/cart.js') }}" defer></script>
+        @endpush
+    @endonce
+
     @php
         /** @var \App\Models\Media $media */
 
-        // ✅ Admin edit URL should come from controller.
-        // If not provided, generate safely (no override if already set).
         $adminEditUrl =
             $adminEditUrl ??
             (class_exists(\App\Filament\Resources\MediaResource::class)
                 ? \App\Filament\Resources\MediaResource::getUrl('edit', ['record' => $media])
                 : url('/lara-admin'));
 
-        // -----------------------------
-        // Helpers
-        // -----------------------------
         $allowedHtml =
             '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
             '<div><span><section><article><header><footer>' .
@@ -29,7 +37,6 @@
             return $html;
         };
 
-        // ✅ Always work with meta as array (sometimes it may come as JSON string)
         $meta = $media->meta ?? [];
         if (is_string($meta) && trim($meta) !== '') {
             $decoded = json_decode($meta, true);
@@ -39,9 +46,6 @@
             $meta = [];
         }
 
-        // -----------------------------
-        // ✅ CMS settings
-        // -----------------------------
         $settings = app(\App\Cms\Core\SettingsRepository::class);
 
         $sloganTag = trim((string) $settings->get('core', 'slogan_tag', 'Your Tech-pack, Our production'));
@@ -59,16 +63,12 @@
             $quoteButtonText = 'Custom Quote';
         }
 
-        // Save value like: Get|Custom Quote
-        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
+        $quoteButtonLabel = trim(strip_tags(str_replace('|', ' ', $quoteButtonText)));
+        if ($quoteButtonLabel === '') {
+            $quoteButtonLabel = 'Custom Quote';
+        }
+        $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonLabel)));
 
-        /**
-         * ✅ Read editor HTML safely:
-         * - string => return it
-         * - array  => return ['html'] or ['value'] if present
-         * - object => try same via cast
-         * - anything else => ''
-         */
         $htmlValue = function ($value): string {
             if ($value === null) {
                 return '';
@@ -90,25 +90,6 @@
             }
 
             return '';
-        };
-
-        $sanitizeRichHtml = function ($value) use ($allowedHtml, $htmlValue, $removeScriptStyleBlocks): string {
-            $html = trim($htmlValue($value));
-            if ($html === '') {
-                return '';
-            }
-
-            if (function_exists('do_shortcode')) {
-                try {
-                    $html = do_shortcode($html, ['media' => $GLOBALS['media'] ?? null]);
-                } catch (\Throwable $e) {
-                    // ignore
-                }
-            }
-
-            $html = $removeScriptStyleBlocks((string) $html);
-
-            return strip_tags($html, $allowedHtml);
         };
 
         $textValue = function ($value): string {
@@ -147,9 +128,6 @@
             return '<p>' . nl2br(e($value)) . '</p>';
         };
 
-        // ------------------------------------------------------------------
-        // ✅ APPLY DEFAULTS ON FRONTEND (ALWAYS, not only preview)
-        // ------------------------------------------------------------------
         if (function_exists('do_action')) {
             if (request()->query('md_preview') === '1') {
                 $previewState = session('media_defaults_preview_state', null);
@@ -208,15 +186,11 @@
             }
         }
 
-        // -----------------------------
-        // ✅ Frontend meta (from meta.frontend.*)
-        // -----------------------------
         $metaTitleRaw = (string) data_get($meta, 'frontend.meta_title', '');
         if (function_exists('do_shortcode')) {
             try {
                 $metaTitleRaw = do_shortcode($metaTitleRaw, ['media' => $media]);
             } catch (\Throwable $e) {
-                // ignore
             }
         }
         $metaTitleRaw = $removeScriptStyleBlocks((string) $metaTitleRaw);
@@ -227,30 +201,26 @@
             try {
                 $metaDescRaw = do_shortcode($metaDescRaw, ['media' => $media]);
             } catch (\Throwable $e) {
-                // ignore
             }
         }
         $metaDescRaw = $removeScriptStyleBlocks((string) $metaDescRaw);
         $metaDescHtml = strip_tags($metaDescRaw, $allowedHtml);
 
-        // -----------------------------
-        // Base title + hero text
-        // -----------------------------
-        $title = (string) ($media->title ?: $media->original_filename ?? '');
-        $title = trim($title) !== '' ? trim($title) : 'Attachment';
+        $rawTitle = (string) ($media->title ?: $media->original_filename ?? '');
+        $title = trim(strip_tags($rawTitle));
+        $title = $title !== '' ? $title : 'Attachment';
 
         $heroDescRaw = (string) ($media->description ?? '');
         if (function_exists('do_shortcode')) {
             try {
                 $heroDescRaw = do_shortcode($heroDescRaw, ['media' => $media]);
             } catch (\Throwable $e) {
-                // ignore
             }
         }
         $heroDescRaw = $removeScriptStyleBlocks((string) $heroDescRaw);
         $heroDescHtml = strip_tags($heroDescRaw, $allowedHtml);
 
-        $heroCaption = trim($textValue($media->caption ?? ''));
+        $heroCaption = trim(strip_tags($textValue($media->caption ?? '')));
 
         $heroHtml = '';
         if ($heroDescHtml !== '') {
@@ -265,16 +235,19 @@
         $productImage = '';
 
         try {
-            if (method_exists($media, 'url')) {
-                $productImage = (string) $media->url('medium');
+            if (method_exists($media, 'variantUrl')) {
+                $productImage = (string) ($media->variantUrl('medium') ?: $media->url());
+            } elseif (method_exists($media, 'url')) {
+                $productImage = (string) $media->url();
             }
         } catch (\Throwable $e) {
             $productImage = '';
         }
 
-        // -----------------------------
-        // Breadcrumb taxonomy
-        // -----------------------------
+        $safeProductUrl = trim((string) $productUrl);
+        $safeProductImage = trim((string) $productImage);
+        $buttonAriaLabel = trim($quoteButtonLabel . ' for ' . $title);
+
         $mediaCategoryTerm = null;
         $mediaCategoryTaxId = null;
         $mediaCategoryIds = [];
@@ -320,10 +293,11 @@
         }
 
         $breadcrumbTerm = $mediaCategoryTerm ?: $postCategory;
+        $breadcrumbTermUrl = null;
+        if ($breadcrumbTerm && filled($breadcrumbTerm->slug ?? null) && function_exists('cms_slug_url')) {
+            $breadcrumbTermUrl = cms_slug_url((string) $breadcrumbTerm->slug);
+        }
 
-        // -----------------------------
-        // ✅ STRICT SAME-CATEGORY RELATED (RANDOM)
-        // -----------------------------
         $related = collect();
         $relatedLinks = collect();
 
@@ -382,9 +356,6 @@
             }
         }
 
-        // -----------------------------
-        // ✅ Custom JSON (WP-like) loader
-        // -----------------------------
         $customJsonRaw = data_get($meta, 'custom_json', null);
         if ($customJsonRaw === null || $customJsonRaw === '') {
             $customJsonRaw = data_get($meta, 'frontend.custom_json', null);
@@ -425,14 +396,19 @@
         $printJsonLdHere = false;
     @endphp
 
-    {{-- Breadcrumb --}}
     <div class="cms-container mx-auto px-4 pt-6">
-        <nav class="text-sm text-slate-500">
+        <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
             <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
 
             @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
-                <span class="text-slate-600"> {{ $breadcrumbTerm->name }}</span>
+                @if ($breadcrumbTermUrl)
+                    <a class="text-slate-600 hover:underline" href="{{ $breadcrumbTermUrl }}">
+                        {{ $breadcrumbTerm->name }}
+                    </a>
+                @else
+                    <span class="text-slate-600">{{ $breadcrumbTerm->name }}</span>
+                @endif
             @endif
 
             <span class="mx-2 text-slate-300">/</span>
@@ -440,18 +416,16 @@
         </nav>
     </div>
 
-    {{-- HERO --}}
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
-                {{-- IMAGE (sticky on desktop) --}}
                 <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
                     @if ($media->isImage())
                         {!! cms_picture(
                             $media,
                             [
-                                'alt' => e($title),
-                                'class' => 'w-full object-contain ',
+                                'alt' => $title,
+                                'class' => 'w-full object-contain',
                                 'sizes' => '(max-width: 1024px) 100vw, 420px',
                                 'loading' => 'eager',
                                 'decoding' => 'async',
@@ -461,11 +435,10 @@
                             ['medium', 'medium_large', 'large'],
                         ) !!}
                     @else
-                        <div class="h-80 w-full bg-slate-100"></div>
+                        <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
                     @endif
                 </div>
 
-                {{-- CONTENT --}}
                 <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
                     <div class="mt-4 text-sm font-semibold text-slate-700">
@@ -482,24 +455,22 @@
                         </div>
                     @endif
 
-                    <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
-                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
-                        data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ e($title) }}"
-                        data-item-url="{{ e($productUrl) }}" data-item-image="{{ e($productImage) }}">
+                    <button type="button"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                        aria-label="{{ $buttonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
+                        data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ $title }}"
+                        data-item-url="{{ $safeProductUrl }}" data-item-image="{{ $safeProductImage }}">
                         {!! $quoteButtonHtml !!}
-                    </a>
+                    </button>
                 </div>
             </div>
         </div>
     </section>
 
-    {{-- RELATED GRID + META + RELATED LINKS --}}
     @if ($related->count() || $relatedLinks->count() || $metaTitle !== '' || $metaDescHtml !== '')
         <section class="bg-white">
             <div class="page-container mx-auto px-4 py-10">
 
-                {{-- RELATED GRID --}}
                 @if ($related->count())
                     <div class="my-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -521,23 +492,25 @@
 
                                 $rMetaTitle = trim((string) data_get($rMeta, 'frontend.meta_title', ''));
 
-                                $rTitle =
+                                $rawRTitle =
                                     (string) ($r->title ?:
                                     ($rMetaTitle !== ''
                                         ? $rMetaTitle
                                         : $r->original_filename ?? ''));
-                                $rTitle = trim($rTitle) !== '' ? trim($rTitle) : 'Attachment';
+                                $rTitle = trim(strip_tags($rawRTitle));
+                                $rTitle = $rTitle !== '' ? $rTitle : 'Attachment';
 
                                 $rUrl = filled($r->slug) ? cms_slug_url((string) $r->slug) : $r->url();
+                                $safeRUrl = trim((string) $rUrl);
                             @endphp
 
                             <div class="group text-center">
-                                <a href="{{ $rUrl }}" class="block">
+                                <a href="{{ $safeRUrl }}" class="block">
                                     <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                         {!! cms_picture(
                                             $r,
                                             [
-                                                'alt' => e($rTitle),
+                                                'alt' => $rTitle,
                                                 'class' => 'h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]',
                                                 'sizes' => '(max-width: 768px) 50vw, 220px',
                                                 'loading' => 'lazy',
@@ -549,33 +522,38 @@
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <div class="text-sm font-medium leading-snug text-slate-500">
-                                            {{ $productStylePrefix }}{{ (int) $r->id }}
+                                        <div class="text-sm font-medium leading-snug text-slate-600">
+                                            {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
-                                        <h3 class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
+                                        <p class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
                                             {{ $rTitle }}
-                                        </h3>
+                                        </p>
                                     </div>
                                 </a>
 
                                 @php
                                     $rImage = '';
                                     try {
-                                        if (method_exists($r, 'url')) {
-                                            $rImage = (string) $r->url('medium');
+                                        if (method_exists($r, 'variantUrl')) {
+                                            $rImage = (string) ($r->variantUrl('medium') ?: $r->url());
+                                        } elseif (method_exists($r, 'url')) {
+                                            $rImage = (string) $r->url();
                                         }
                                     } catch (\Throwable $e) {
                                         $rImage = '';
                                     }
+
+                                    $safeRImage = trim((string) $rImage);
+                                    $rButtonAriaLabel = trim($quoteButtonLabel . ' for ' . $rTitle);
                                 @endphp
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f]"
-                                    data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    aria-label="{{ $rButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
-                                    data-item-title="{{ e($rTitle) }}" data-item-url="{{ e($rUrl) }}"
-                                    data-item-image="{{ e($rImage) }}">
+                                    data-item-title="{{ $rTitle }}" data-item-url="{{ $safeRUrl }}"
+                                    data-item-image="{{ $safeRImage }}">
                                     {!! $quoteButtonHtml !!}
                                 </button>
                             </div>
@@ -583,7 +561,6 @@
                     </div>
                 @endif
 
-                {{-- META + RELATED LINKS --}}
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
                         <h2 class="text-2xl font-semibold leading-tight text-slate-900">
@@ -622,20 +599,22 @@
 
                                             $qMetaTitle = trim((string) data_get($qMeta, 'frontend.meta_title', ''));
 
-                                            $qTitle =
+                                            $rawQTitle =
                                                 (string) ($q->title ?:
                                                 ($qMetaTitle !== ''
                                                     ? $qMetaTitle
                                                     : $q->original_filename ?? ''));
-                                            $qTitle = trim($qTitle) !== '' ? trim($qTitle) : 'Attachment';
+                                            $qTitle = trim(strip_tags($rawQTitle));
+                                            $qTitle = $qTitle !== '' ? $qTitle : 'Attachment';
 
                                             $qUrl = filled($q->slug) ? cms_slug_url((string) $q->slug) : $q->url();
+                                            $safeQUrl = trim((string) $qUrl);
                                         @endphp
 
                                         <li
                                             class="flex items-start gap-2 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
                                             <span class="mt-[2px] text-slate-500">›</span>
-                                            <a href="{{ $qUrl }}" target="_blank" rel="noopener noreferrer"
+                                            <a href="{{ $safeQUrl }}"
                                                 class="block truncate italic text-slate-700 hover:text-slate-900 hover:underline"
                                                 title="{{ $qTitle }}">
                                                 {{ $qTitle }}

@@ -32,7 +32,6 @@ Route::get('/sitemap.xml', [SitemapController::class, 'index'])->name('cms.sitem
  * Only allow safe filename characters. Controller should still check file exists.
  */
 Route::get('/{name}.xml', [SitemapController::class, 'file'])
-    // name like "post", "page", "siatex-tags", "siatex-tags-2"
     ->where('name', '[A-Za-z0-9\-_]+(?:-\d+)?')
     ->name('cms.sitemap.file');
 
@@ -92,9 +91,7 @@ Route::get('/blog/{slug}', [ContentRouterController::class, 'show'])
  *
  * ✅ CRITICAL FIX:
  * Exclude reserved prefixes so plugin/system endpoints are NOT captured.
- * This prevents /_contact/cart.js being routed to ContentRouterController@show.
  */
 Route::get('/{slug}', [ContentRouterController::class, 'show'])
-    // Exclude: _contact, lara-admin, filament, storage, api (add/remove as you need)
-    ->where('slug', '^(?!_contact/)(?!lara-admin/)(?!filament/)(?!storage/)(?!api/).+')
+    ->where('slug', '^(?!_contact(?:/|$))(?!lara-admin(?:/|$))(?!filament(?:/|$))(?!storage(?:/|$))(?!api(?:/|$))(?!livewire(?:/|$))(?!customizer(?:/|$)).+')
     ->name('cms.catchall');

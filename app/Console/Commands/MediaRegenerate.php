@@ -31,8 +31,13 @@ class MediaRegenerate extends Command
         }
 
         $chunk = (int) $this->option('chunk');
-        if ($chunk <= 0)
+        if ($chunk <= 0) {
             $chunk = 200;
+        }
+
+        $queueEnabled = $forceQueue || (bool) config('cms-media.queue.enabled', true);
+        $connection = (string) config('cms-media.queue.connection', config('queue.default'));
+        $queue = (string) config('cms-media.queue.queue', 'media');
 
         $query = Media::query()
             ->where('mime_type', 'like', 'image/%');
@@ -48,31 +53,28 @@ class MediaRegenerate extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Found {$total} images. Regenerating variants" . ($force ? ' (force)' : '') . '...');
+        $this->info(
+            "Found {$total} images. Regenerating variants"
+            . ($force ? ' (force)' : '')
+            . ($queueEnabled ? ' via queue' : ' synchronously')
+            . '...'
+        );
+
+        if ($onlyKeys !== null) {
+            $this->warn('--only is currently parsed but not yet applied inside GenerateMediaVariants job.');
+        }
 
         $bar = $this->output->createProgressBar($total);
         $bar->start();
 
-        $query->orderBy('id')->chunkById($chunk, function ($items) use ($force, $forceQueue, $onlyKeys, $bar) {
+        $query->orderBy('id')->chunkById($chunk, function ($items) use ($force, $queueEnabled, $connection, $queue, $bar) {
             foreach ($items as $media) {
-                // If you implemented multi-format/keys support inside the job later,
-                // you can pass keys via config/context. For now, job uses config sizes.
-                // We still keep --only for future expansion.
-
-                $pending = GenerateMediaVariants::dispatch($media->id, $force);
-
-                // If user forces queue, put on configured queue/connection
-                if ($forceQueue) {
-                    $connection = (string) config('cms-media.queue.connection', config('queue.default'));
-                    $queue = (string) config('cms-media.queue.queue', 'media');
-
-                    $pending->onConnection($connection)->onQueue($queue);
+                if ($queueEnabled) {
+                    GenerateMediaVariants::dispatch($media->id, $force)
+                        ->onConnection($connection)
+                        ->onQueue($queue);
                 } else {
-                    // Respect cms-media.queue.enabled
-                    if (!(bool) config('cms-media.queue.enabled', true)) {
-                        // run sync if queue disabled
-                        GenerateMediaVariants::dispatchSync($media->id, $force);
-                    }
+                    GenerateMediaVariants::dispatchSync($media->id, $force);
                 }
 
                 $bar->advance();

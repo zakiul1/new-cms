@@ -41,7 +41,7 @@ return [
         'thumb' => 300,
         'medium' => 768,
 
-        // ✅ NEW (WP-like): between medium and large
+        // WP-like: between medium and large
         'medium_large' => 1024,
 
         'large' => 1600,
@@ -51,12 +51,19 @@ return [
     |--------------------------------------------------------------------------
     | Generated formats
     |--------------------------------------------------------------------------
-    | WP outputs jpeg/png sizes, but modern systems use WebP/AVIF.
-    | We'll generate variants in the selected format.
-    |
-    | Supported (recommended): webp, avif
+    | Main output format for generated variants.
+    | Recommended: webp
     */
     'variant_format' => env('CMS_MEDIA_VARIANT_FORMAT', 'webp'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Optional JPEG fallback
+    |--------------------------------------------------------------------------
+    | false = generate only the primary format (for example only webp)
+    | true  = also generate jpeg fallback variants
+    */
+    'generate_jpeg_fallback' => env('CMS_MEDIA_GENERATE_JPEG_FALLBACK', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -82,7 +89,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Queue Processing (strong system)
+    | Queue Processing
     |--------------------------------------------------------------------------
     | true = upload returns fast, variants generated in background.
     | false = generate variants synchronously during upload.
@@ -110,10 +117,8 @@ return [
     | but replacement output should use exactly the string here.
     */
     'filename_keyword_canonical' => [
-        // --- Region / abbreviations ---
         'EU',
 
-        // --- Common words (as provided) ---
         'of',
         'for',
         'the',
@@ -145,17 +150,14 @@ return [
         'then',
         'once',
 
-        // --- Countries / regions ---
         'USA',
         'UK',
         'UAE',
 
-        // --- Product terms ---
         'T-shirt',
         'T-shirts',
         'v-neck',
 
-        // --- US States / territories (as provided) ---
         'AL',
         'AK',
         'AZ',
@@ -209,11 +211,9 @@ return [
         'PR',
         'US',
 
-        // --- Phrases ---
         'Made in',
         'in Bangladesh',
 
-        // --- Business terms ---
         'OEM',
     ],
 
@@ -222,7 +222,7 @@ return [
     | Keyword separators
     |--------------------------------------------------------------------------
     | Treat these characters as equivalent separators while matching keywords.
-    | e.g. v neck / v-neck / v_neck should all match "v-neck" if configured.
+    | Example: v neck / v-neck / v_neck => matches "v-neck"
     */
     'filename_keyword_separators' => [' ', '-', '_'],
 ];

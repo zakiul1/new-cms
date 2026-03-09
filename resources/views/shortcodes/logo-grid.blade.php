@@ -7,7 +7,7 @@
      *  - $column    : int (desktop columns) default 4  (used for GRID mode)
      *  - $mobile    : int (mobile columns) default 2  (used for GRID mode, and per-view on mobile in SLIDER mode)
      *  - $showTitle : bool (show media title under image)
-     *  - $style     : string 'square'|'round' (default 'square')
+     *  *  - $style     : string 'square'|'round' (default 'square')
      *  - $class     : string wrapper class (optional)
      *  - $slider    : bool if true => swipe carousel (6 per view on desktop, $mobile per view on mobile)
      */
@@ -21,22 +21,17 @@
     $mobile = max(1, min(6, (int) ($mobile ?? 2)));
 
     $showTitle = (bool) ($showTitle ?? false);
-
-    // slider flag
     $slider = (bool) ($slider ?? false);
 
-    // Accept "squire" typo too
     $style = strtolower(trim((string) ($style ?? 'square')));
     if ($style === 'squire') {
         $style = 'square';
     }
     $style = in_array($style, ['square', 'round'], true) ? $style : 'square';
 
-    // Class from shortcode (can contain multiple classes)
     $class = trim((string) ($class ?? 'logo_grid'));
     $class = $class !== '' ? $class : 'logo_grid';
 
-    // ✅ Unique scope class per render to avoid conflicts & duplicates
     $scopeClass =
         'logo-scope-' .
         substr(
@@ -57,32 +52,153 @@
             10,
         );
 
-    // Final class attribute (NO duplication)
     $rootClassAttr = trim($class . ' ' . $scopeClass);
 
-    // CSS variables for dynamic grid cols (GRID mode)
     $gridStyle = "--lg-cols: {$column}; --sm-cols: {$mobile};";
-
-    // SLIDER mode: fixed 6 per view on desktop, $mobile per view on mobile
     $sliderStyle = "--per-view-lg: 6; --per-view-sm: {$mobile};";
-
-    // ✅ Unique id for JS to bind safely per render
     $carouselId = 'logo-carousel-' . substr(md5($scopeClass), 0, 10);
+
+    $mobileSizeValue = match ($mobile) {
+        1 => '100vw',
+        2 => '50vw',
+        3 => '33.33vw',
+        4 => '25vw',
+        5 => '20vw',
+        6 => '16.66vw',
+        default => '50vw',
+    };
+
+    $desktopGridSizeValue = match ($column) {
+        1 => '100vw',
+        2 => '50vw',
+        3 => '33.33vw',
+        4 => '25vw',
+        5 => '20vw',
+        6 => '16.66vw',
+        7 => '14.28vw',
+        8 => '12.5vw',
+        9 => '11.11vw',
+        10 => '10vw',
+        11 => '9.09vw',
+        12 => '8.33vw',
+        default => '25vw',
+    };
+
+    $gridImageSizes = '(max-width: 767px) ' . $mobileSizeValue . ', ' . $desktopGridSizeValue;
+    $sliderImageSizes = '(max-width: 767px) ' . $mobileSizeValue . ', 16.66vw';
 @endphp
 
 @if ($items->count() > 0)
-    <div class="{{ $rootClassAttr }} ">
+    <div class="{{ $rootClassAttr }}">
         @if ($slider)
-            {{-- SLIDER MODE (same look like uploaded image, no arrows, smooth rolling swipe) --}}
+            {{-- SLIDER MODE --}}
             <div class="logo-carousel-wrap">
                 <div class="logo-carousel" id="{{ $carouselId }}" style="{{ $sliderStyle }}">
                     @foreach ($items as $item)
                         @php
                             $title = trim((string) data_get($item, 'title', ''));
+                            $alt = $title !== '' ? $title : 'logo';
 
-                            // Resolve image URL (support common shapes used in your CMS)
+                            $isMediaImage = false;
+                            try {
+                                $isMediaImage =
+                                    is_object($item) &&
+                                    method_exists($item, 'isImage') &&
+                                    method_exists($item, 'url') &&
+                                    $item->isImage();
+                            } catch (\Throwable $e) {
+                                $isMediaImage = false;
+                            }
+
                             $imgUrl = '';
                             try {
+                                if (!$isMediaImage) {
+                                    if (is_object($item) && method_exists($item, 'url')) {
+                                        $imgUrl = (string) $item->url();
+                                    } elseif (
+                                        is_object($item) &&
+                                        property_exists($item, 'url') &&
+                                        is_string($item->url)
+                                    ) {
+                                        $imgUrl = (string) $item->url;
+                                    } elseif (
+                                        is_object($item) &&
+                                        property_exists($item, 'path') &&
+                                        is_string($item->path)
+                                    ) {
+                                        $imgUrl = (string) $item->path;
+                                    } elseif (is_string(data_get($item, 'url'))) {
+                                        $imgUrl = (string) data_get($item, 'url');
+                                    } elseif (is_string(data_get($item, 'path'))) {
+                                        $imgUrl = (string) data_get($item, 'path');
+                                    }
+                                }
+                            } catch (\Throwable $e) {
+                                $imgUrl = '';
+                            }
+
+                            if (!$isMediaImage && trim($imgUrl) === '') {
+                                continue;
+                            }
+                        @endphp
+
+                        <div class="logo-slide">
+                            <div class="logo-item logo-item--{{ $style }}">
+                                <div class="logo-imgwrap logo-imgwrap--{{ $style }}">
+                                    @if ($isMediaImage && function_exists('cms_picture'))
+                                        {!! cms_picture(
+                                            $item,
+                                            [
+                                                'alt' => $alt,
+                                                'class' => $style === 'round' ? 'h-full w-full object-contain' : 'h-auto w-full object-cover',
+                                                'sizes' => $sliderImageSizes,
+                                                'loading' => 'lazy',
+                                                'fetchpriority' => 'low',
+                                                'decoding' => 'async',
+                                                'draggable' => 'false',
+                                            ],
+                                            'medium',
+                                            ['thumb', 'medium', 'medium_large'],
+                                        ) !!}
+                                    @else
+                                        <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"
+                                            fetchpriority="low" decoding="async" draggable="false" />
+                                    @endif
+                                </div>
+
+                                @if ($showTitle && $title !== '')
+                                    <div class="logo-title logo-title--{{ $style }}">
+                                        {{ $title }}
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @else
+            {{-- GRID MODE --}}
+            <div class="logo-grid"
+                style="{{ $gridStyle }} grid-template-columns: repeat(var(--sm-cols), minmax(0, 1fr));">
+                @foreach ($items as $item)
+                    @php
+                        $title = trim((string) data_get($item, 'title', ''));
+                        $alt = $title !== '' ? $title : 'logo';
+
+                        $isMediaImage = false;
+                        try {
+                            $isMediaImage =
+                                is_object($item) &&
+                                method_exists($item, 'isImage') &&
+                                method_exists($item, 'url') &&
+                                $item->isImage();
+                        } catch (\Throwable $e) {
+                            $isMediaImage = false;
+                        }
+
+                        $imgUrl = '';
+                        try {
+                            if (!$isMediaImage) {
                                 if (is_object($item) && method_exists($item, 'url')) {
                                     $imgUrl = (string) $item->url();
                                 } elseif (is_object($item) && property_exists($item, 'url') && is_string($item->url)) {
@@ -98,77 +214,38 @@
                                 } elseif (is_string(data_get($item, 'path'))) {
                                     $imgUrl = (string) data_get($item, 'path');
                                 }
-                            } catch (\Throwable $e) {
-                                $imgUrl = '';
-                            }
-
-                            if (trim($imgUrl) === '') {
-                                continue;
-                            }
-
-                            $alt = $title !== '' ? $title : 'logo';
-                        @endphp
-
-                        <div class="logo-slide">
-                            <div class="logo-item logo-item--{{ $style }}">
-                                {{-- Image --}}
-                                <div class="logo-imgwrap logo-imgwrap--{{ $style }}">
-                                    <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"
-                                        decoding="async" draggable="false" />
-                                </div>
-
-                                {{-- Title --}}
-                                @if ($showTitle && $title !== '')
-                                    <div class="logo-title logo-title--{{ $style }}">
-                                        {{ $title }}
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        @else
-            {{-- GRID MODE (current behavior) --}}
-            <div class="logo-grid"
-                style="{{ $gridStyle }} grid-template-columns: repeat(var(--sm-cols), minmax(0, 1fr));">
-                @foreach ($items as $item)
-                    @php
-                        $title = trim((string) data_get($item, 'title', ''));
-
-                        // Resolve image URL (support common shapes used in your CMS)
-                        $imgUrl = '';
-                        try {
-                            if (is_object($item) && method_exists($item, 'url')) {
-                                $imgUrl = (string) $item->url();
-                            } elseif (is_object($item) && property_exists($item, 'url') && is_string($item->url)) {
-                                $imgUrl = (string) $item->url;
-                            } elseif (is_object($item) && property_exists($item, 'path') && is_string($item->path)) {
-                                $imgUrl = (string) $item->path;
-                            } elseif (is_string(data_get($item, 'url'))) {
-                                $imgUrl = (string) data_get($item, 'url');
-                            } elseif (is_string(data_get($item, 'path'))) {
-                                $imgUrl = (string) data_get($item, 'path');
                             }
                         } catch (\Throwable $e) {
                             $imgUrl = '';
                         }
 
-                        if (trim($imgUrl) === '') {
+                        if (!$isMediaImage && trim($imgUrl) === '') {
                             continue;
                         }
-
-                        $alt = $title !== '' ? $title : 'logo';
                     @endphp
 
                     <div class="logo-item logo-item--{{ $style }}">
-                        {{-- Image --}}
                         <div class="logo-imgwrap logo-imgwrap--{{ $style }}">
-                            <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"
-                                decoding="async" />
+                            @if ($isMediaImage && function_exists('cms_picture'))
+                                {!! cms_picture(
+                                    $item,
+                                    [
+                                        'alt' => $alt,
+                                        'class' => $style === 'round' ? 'h-full w-full object-contain' : 'h-auto w-full object-cover',
+                                        'sizes' => $gridImageSizes,
+                                        'loading' => 'lazy',
+                                        'fetchpriority' => 'low',
+                                        'decoding' => 'async',
+                                    ],
+                                    'medium',
+                                    ['thumb', 'medium', 'medium_large'],
+                                ) !!}
+                            @else
+                                <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"
+                                    fetchpriority="low" decoding="async" />
+                            @endif
                         </div>
 
-                        {{-- Title --}}
                         @if ($showTitle && $title !== '')
                             <div class="logo-title logo-title--{{ $style }}">
                                 {{ $title }}
@@ -180,10 +257,6 @@
         @endif
 
         <style>
-            /* ----------------------------
-             * Shared base styles
-             * ---------------------------- */
-
             .{{ $scopeClass }} .logo-item {
                 width: 100%;
                 display: flex;
@@ -194,7 +267,6 @@
                 user-select: none;
             }
 
-            /* Hover scale (requested) */
             .{{ $scopeClass }} .logo-imgwrap {
                 transition: transform 220ms ease;
                 will-change: transform;
@@ -204,7 +276,6 @@
                 transform: scale(1.06);
             }
 
-            /* SQUARE */
             .{{ $scopeClass }} .logo-item--square {
                 background: #f9f9f9;
                 padding: 5px;
@@ -215,24 +286,21 @@
                 background: transparent;
                 border-radius: 0;
                 overflow: hidden;
-                /* ✅ same like screenshot tiles */
                 display: block;
             }
 
-            .{{ $scopeClass }} .logo-imgwrap--square img {
+            .{{ $scopeClass }} .logo-imgwrap--square img,
+            .{{ $scopeClass }} .logo-imgwrap--square picture img {
                 width: 100%;
                 height: auto;
                 display: block;
                 object-fit: cover;
-                /* ✅ tile look like screenshot */
                 -webkit-user-drag: none;
                 user-drag: none;
                 user-select: none;
                 pointer-events: none;
-                /* important for drag-scroll */
             }
 
-            /* ROUND */
             .{{ $scopeClass }} .logo-item--round {
                 background: transparent !important;
                 padding: 0 !important;
@@ -249,7 +317,8 @@
                 justify-content: center;
             }
 
-            .{{ $scopeClass }} .logo-imgwrap--round img {
+            .{{ $scopeClass }} .logo-imgwrap--round img,
+            .{{ $scopeClass }} .logo-imgwrap--round picture img {
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
@@ -260,7 +329,6 @@
                 pointer-events: none;
             }
 
-            /* Title */
             .{{ $scopeClass }} .logo-title {
                 margin-top: 14px;
                 font-size: 16px;
@@ -275,9 +343,6 @@
                 font-size: 15px;
             }
 
-            /* ----------------------------
-             * GRID MODE (existing)
-             * ---------------------------- */
             .{{ $scopeClass }} .logo-grid {
                 display: grid;
                 gap: 20px;
@@ -291,13 +356,6 @@
                     grid-template-columns: repeat(var(--lg-cols), minmax(0, 1fr)) !important;
                 }
             }
-
-            /* ----------------------------
-             * SLIDER MODE (same like screenshot)
-             * - no arrows
-             * - 6 per view on desktop
-             * - smooth rolling swipe with momentum
-             * ---------------------------- */
 
             .{{ $scopeClass }} .logo-carousel-wrap {
                 margin-top: 20px;
@@ -328,7 +386,6 @@
 
             .{{ $scopeClass }} .logo-slide {
                 flex: 0 0 auto;
-
                 width: calc((100% - (22px * (var(--per-view-sm) - 1))) / var(--per-view-sm));
             }
 
@@ -338,7 +395,6 @@
                 }
             }
 
-            /* Tiles same like screenshot */
             .{{ $scopeClass }} .logo-carousel .logo-item--square {
                 background: transparent;
                 padding: 0;
@@ -348,9 +404,7 @@
                 background: #efefef;
             }
 
-            /* Mobile tweaks */
             @media (max-width: 767px) {
-
                 .{{ $scopeClass }} .logo-grid {
                     gap: 16px;
                     margin-top: 35px;
@@ -384,7 +438,6 @@
                     if (el.dataset.dragBound === '1') return;
                     el.dataset.dragBound = '1';
 
-                    // Smooth "rolling" inertia drag (like a real slider)
                     let isDown = false;
                     let startX = 0;
                     let lastX = 0;
@@ -407,16 +460,14 @@
                     const runInertia = () => {
                         stopInertia();
                         const step = () => {
-                            // friction
                             velocity *= 0.95;
 
-                            // stop threshold
                             if (Math.abs(velocity) < 0.05) {
                                 stopInertia();
                                 return;
                             }
 
-                            el.scrollLeft -= velocity * 16; // approx per frame
+                            el.scrollLeft -= velocity * 16;
                             rafId = requestAnimationFrame(step);
                         };
                         rafId = requestAnimationFrame(step);
@@ -444,10 +495,7 @@
                         const dx = x - lastX;
                         const dt = Math.max(1, t - lastTime);
 
-                        // update scroll
                         el.scrollLeft -= dx;
-
-                        // velocity px/ms -> scale to feel like slider
                         velocity = (dx / dt) * 60;
 
                         lastX = x;
@@ -458,19 +506,15 @@
                         if (!isDown) return;
                         isDown = false;
                         el.classList.remove('is-dragging');
-
-                        // inertia roll
                         runInertia();
                     };
 
-                    // Mouse
                     el.addEventListener('mousedown', onDown);
                     window.addEventListener('mousemove', onMove, {
                         passive: false
                     });
                     window.addEventListener('mouseup', onUp);
 
-                    // Touch
                     el.addEventListener('touchstart', onDown, {
                         passive: true
                     });
@@ -480,14 +524,10 @@
                     el.addEventListener('touchend', onUp);
                     el.addEventListener('touchcancel', onUp);
 
-                    // If pointer leaves the carousel while dragging
                     el.addEventListener('mouseleave', onUp);
 
-                    // Wheel horizontal support (trackpad)
                     el.addEventListener('wheel', function(e) {
-                        // allow natural trackpad scroll, but don't scroll the page vertically
                         if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-                        // convert vertical wheel to horizontal for mouse wheel users
                         e.preventDefault();
                         el.scrollLeft += e.deltaY;
                     }, {
