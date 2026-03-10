@@ -23,6 +23,11 @@
         // Save like: Get|Custom Quote
         $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 
+        $quoteButtonLabel = trim(strip_tags(str_replace('|', ' ', $quoteButtonText)));
+        if ($quoteButtonLabel === '') {
+            $quoteButtonLabel = 'Custom Quote';
+        }
+
         // Admin edit url (multipage)
         if (!isset($adminEditUrl)) {
             if (class_exists(\Plugins\MultiPage\Filament\Resources\MultiPageResource::class)) {
@@ -131,6 +136,39 @@
                 ->first();
         }
 
+        $productUrl = '';
+        try {
+            $productUrl = (string) cms_slug_url((string) $post->slug);
+        } catch (\Throwable $e) {
+            $productUrl = url()->current();
+        }
+        $safeProductUrl = trim((string) $productUrl);
+
+        $productImageUrl = '';
+        $heroPreloadHref = '';
+
+        try {
+            if ($productImage) {
+                if (method_exists($productImage, 'variantUrl')) {
+                    $productImageUrl = (string) ($productImage->variantUrl('medium') ?: $productImage->url());
+                    $heroPreloadHref =
+                        (string) ($productImage->variantUrl('hero_sm') ?:
+                        $productImage->variantUrl('medium') ?:
+                        $productImage->url());
+                } elseif (method_exists($productImage, 'url')) {
+                    $productImageUrl = (string) $productImage->url('medium');
+                    $heroPreloadHref = (string) $productImage->url();
+                }
+            }
+        } catch (\Throwable $e) {
+            $productImageUrl = '';
+            $heroPreloadHref = '';
+        }
+
+        $safeProductImage = trim((string) $productImageUrl);
+        $heroPreloadHref = trim((string) $heroPreloadHref);
+        $buttonAriaLabel = trim($quoteButtonLabel . ' for ' . $title);
+
         // ✅ Company info (shortcodes supported)
         $companyInfo = '';
         if (class_exists(\Plugins\MultiPage\Support\MultiPageSettings::class)) {
@@ -140,10 +178,20 @@
         $companyInfoHtml = $sanitizeRichHtml($companyInfo, $ctx);
     @endphp
 
+    @push('head')
+        @if ($heroPreloadHref !== '')
+            <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 420px"
+                fetchpriority="high">
+        @endif
+    @endpush
+
     {{-- Breadcrumb --}}
     <div class="cms-container mx-auto px-4 pt-6">
-        <nav class="text-sm text-slate-500">
-            <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
+        <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
+            <a class="text-[#1f5f99] underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                href="{{ url('/') }}">
+                Home
+            </a>
             <span class="mx-2 text-slate-300">/</span>
             <span class="text-slate-600">{{ $title }}</span>
         </nav>
@@ -167,11 +215,11 @@
                                 'decoding' => 'async',
                                 'fetchpriority' => 'high',
                             ],
-                            'large',
-                            ['medium', 'medium_large', 'large'],
+                            'hero_sm',
+                            ['hero_sm', 'medium', 'medium_large'],
                         ) !!}
                     @else
-                        <div class="h-80 w-full bg-slate-100"></div>
+                        <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
                     @endif
                 </div>
 
@@ -194,11 +242,11 @@
                     @endif
 
                     <a href="#"
-                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f]"
-                        data-default-label="{{ strip_tags(str_replace('|', ' ', $quoteButtonText)) }}"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                        aria-label="{{ $buttonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                         data-item-id="{{ (int) $post->id }}" data-item-type="multipage"
-                        data-item-title="{{ e($title) }}" data-item-url="{{ e(cms_slug_url((string) $post->slug)) }}"
-                        data-item-image="{{ $productImage ? e((string) $productImage->url('medium')) : '' }}">
+                        data-item-title="{{ e($title) }}" data-item-url="{{ $safeProductUrl }}"
+                        data-item-image="{{ $safeProductImage }}">
                         {!! $quoteButtonHtml !!}
                     </a>
                 </div>

@@ -15,6 +15,9 @@
 
     let mutationObserver = null;
     let toastTimer = null;
+    let toastHideTimer = null;
+    let cartCache = null;
+    let isCartModalBound = false;
 
     // --------------------------------
     // Helpers
@@ -28,31 +31,41 @@
         }
     }
 
-    function loadCart() {
+    function cloneCart(items) {
+        return Array.isArray(items) ? items.map((x) => ({ ...x })) : [];
+    }
+
+    function loadCart(force = false) {
+        if (!force && Array.isArray(cartCache)) {
+            return cloneCart(cartCache);
+        }
+
         try {
             const raw = window.localStorage.getItem(STORAGE_KEY);
             const cart = safeJsonParse(raw || "[]", []);
-            return Array.isArray(cart) ? cart : [];
+            cartCache = Array.isArray(cart) ? cart : [];
+            return cloneCart(cartCache);
         } catch {
+            cartCache = [];
             return [];
         }
     }
 
     function saveCart(items) {
+        cartCache = Array.isArray(items) ? cloneCart(items) : [];
+
         try {
-            window.localStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(items || []),
-            );
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cartCache));
         } catch {
             // ignore storage failures
         }
-        updateBadges();
+
+        syncCartUi();
     }
 
-    function cartHas(id, type) {
-        const items = loadCart();
-        return items.some(
+    function cartHas(id, type, items) {
+        const list = Array.isArray(items) ? items : loadCart();
+        return list.some(
             (x) =>
                 String(x.id) === String(id) && String(x.type) === String(type),
         );
@@ -118,17 +131,23 @@
         el.classList.remove("cf-show", "cf-ok", "cf-bad");
         el.classList.add(ok ? "cf-ok" : "cf-bad");
 
-        void el.offsetHeight;
-
-        el.classList.add("cf-show");
-
         if (toastTimer) {
-            window.clearTimeout(toastTimer);
+            window.cancelAnimationFrame(toastTimer);
+            toastTimer = null;
         }
 
-        toastTimer = window.setTimeout(() => {
-            el.classList.remove("cf-show");
-        }, 1800);
+        if (toastHideTimer) {
+            window.clearTimeout(toastHideTimer);
+            toastHideTimer = null;
+        }
+
+        toastTimer = window.requestAnimationFrame(() => {
+            el.classList.add("cf-show");
+
+            toastHideTimer = window.setTimeout(() => {
+                el.classList.remove("cf-show");
+            }, 1800);
+        });
     }
 
     function getButtonDefaultLabel(btn) {
@@ -154,12 +173,6 @@
         btn.textContent = "Added";
     }
 
-    // --------------------------------
-    // Read item payload from button
-    // Supports BOTH:
-    //   new: data-item-*
-    //   old: data-title/data-url/data-image/data-type
-    // --------------------------------
     function readItemFromButton(btn) {
         const id =
             btn.getAttribute("data-item-id") ||
@@ -267,7 +280,12 @@
 
     function ensureCartModal() {
         let overlay = document.getElementById("cf-cart-modal");
-        if (overlay) return overlay;
+        if (overlay) {
+            if (!isCartModalBound) {
+                bindCartModalEvents(overlay);
+            }
+            return overlay;
+        }
 
         overlay = document.createElement("div");
         overlay.id = "cf-cart-modal";
@@ -334,6 +352,15 @@
       </div>
     `;
 
+        document.body.appendChild(overlay);
+        bindCartModalEvents(overlay);
+
+        return overlay;
+    }
+
+    function bindCartModalEvents(overlay) {
+        if (!overlay || isCartModalBound) return;
+
         overlay.addEventListener("click", function (e) {
             const closeEl =
                 e.target && e.target.closest
@@ -342,21 +369,31 @@
 
             if (closeEl) {
                 closeCartModal();
+                return;
+            }
+
+            const removeBtn =
+                e.target && e.target.closest
+                    ? e.target.closest('[data-remove="1"]')
+                    : null;
+
+            if (removeBtn) {
+                removeItem(
+                    removeBtn.getAttribute("data-id"),
+                    removeBtn.getAttribute("data-type"),
+                );
+                renderCartModal();
+                updateButtonsState(document);
+                toast("Removed", true);
             }
         });
-
-        document.body.appendChild(overlay);
-
-        overlay
-            .querySelector(".cf-cart-modal__close")
-            ?.addEventListener("click", closeCartModal);
 
         overlay
             .querySelector("#cf-cart-clear")
             ?.addEventListener("click", function () {
                 clearCart();
                 renderCartModal();
-                updateButtonsState();
+                updateButtonsState(document);
                 toast("Cart cleared", true);
             });
 
@@ -371,8 +408,7 @@
             ?.addEventListener("submit", submitForm);
 
         document.addEventListener("keydown", handleModalEscape);
-
-        return overlay;
+        isCartModalBound = true;
     }
 
     function handleModalEscape(e) {
@@ -442,7 +478,7 @@
                 toast("Message sent successfully", true);
                 clearCart();
                 renderCartModal();
-                updateButtonsState();
+                updateButtonsState(document);
                 closeCartModal();
             })
             .catch(() => {
@@ -460,24 +496,24 @@
     }
 
     function openCartModal() {
-        ensureCartModal();
+        const overlay = ensureCartModal();
         renderCartModal();
 
-        const overlay = document.getElementById("cf-cart-modal");
-        if (overlay) {
+        window.requestAnimationFrame(() => {
             overlay.classList.add("cf-open");
-        }
-
-        document.body.classList.add("cf-cart-lock");
+            document.body.classList.add("cf-cart-lock");
+        });
     }
 
     function closeCartModal() {
         const overlay = document.getElementById("cf-cart-modal");
-        if (overlay) {
-            overlay.classList.remove("cf-open");
-        }
 
-        document.body.classList.remove("cf-cart-lock");
+        window.requestAnimationFrame(() => {
+            if (overlay) {
+                overlay.classList.remove("cf-open");
+            }
+            document.body.classList.remove("cf-cart-lock");
+        });
     }
 
     function renderCartModal() {
@@ -544,22 +580,10 @@
             .join("");
 
         itemsHost.innerHTML = `<div class="cf-cart-list">${rows}</div>`;
-
-        itemsHost.querySelectorAll('[data-remove="1"]').forEach((btn) => {
-            btn.addEventListener("click", function () {
-                removeItem(
-                    btn.getAttribute("data-id"),
-                    btn.getAttribute("data-type"),
-                );
-                renderCartModal();
-                updateButtonsState();
-                toast("Removed", true);
-            });
-        });
     }
 
-    function updateBadges() {
-        const count = loadCart().length;
+    function updateBadges(items) {
+        const count = Array.isArray(items) ? items.length : loadCart().length;
 
         const badge = document.getElementById("cf-cart-badge");
         if (badge) {
@@ -581,14 +605,15 @@
         }
     }
 
-    function updateButtonsState(root) {
+    function updateButtonsState(root, items) {
         const scope = root || document;
+        const list = Array.isArray(items) ? items : loadCart();
 
         scope.querySelectorAll(ADD_BTN_SELECTOR).forEach((btn) => {
             const item = readItemFromButton(btn);
             if (!item.id) return;
 
-            const inCart = cartHas(item.id, item.type);
+            const inCart = cartHas(item.id, item.type, list);
 
             if (inCart) {
                 btn.classList.add("cf-added");
@@ -600,6 +625,12 @@
                 setButtonDefaultLabel(btn);
             }
         });
+    }
+
+    function syncCartUi(root) {
+        const items = loadCart();
+        updateBadges(items);
+        updateButtonsState(root || document, items);
     }
 
     function bindAddButtons(root) {
@@ -634,13 +665,12 @@
 
                 if (!res.ok && res.reason === "exists") {
                     toast("Already added", false);
-                    updateButtonsState(document);
+                    syncCartUi(document);
                     return;
                 }
 
                 toast("Added to cart", true);
-                updateButtonsState(document);
-                updateBadges();
+                syncCartUi(document);
             });
         });
     }
@@ -663,23 +693,17 @@
         }
 
         let scheduled = false;
+        const pendingRoots = new Set();
 
         mutationObserver = new MutationObserver(function (mutations) {
-            let shouldSyncAll = false;
-
             for (const m of mutations) {
-                if (!m.addedNodes || !m.addedNodes.length) {
-                    continue;
-                }
+                if (!m.addedNodes || !m.addedNodes.length) continue;
 
                 for (const node of m.addedNodes) {
-                    if (!(node instanceof Element)) {
-                        continue;
-                    }
+                    if (!(node instanceof Element)) continue;
 
                     if (node.matches && node.matches(ADD_BTN_SELECTOR)) {
-                        bindAddButtons(node.parentElement || root);
-                        shouldSyncAll = true;
+                        pendingRoots.add(node.parentElement || root);
                         continue;
                     }
 
@@ -687,22 +711,27 @@
                         node.querySelector &&
                         node.querySelector(ADD_BTN_SELECTOR)
                     ) {
-                        bindAddButtons(node);
-                        shouldSyncAll = true;
+                        pendingRoots.add(node);
                     }
                 }
             }
 
-            if (!shouldSyncAll || scheduled) {
+            if (!pendingRoots.size || scheduled) {
                 return;
             }
 
             scheduled = true;
 
             window.requestAnimationFrame(() => {
+                pendingRoots.forEach((pendingRoot) => {
+                    bindAddButtons(pendingRoot);
+                    updateButtonsState(pendingRoot, loadCart());
+                });
+
+                pendingRoots.clear();
+                updateBadges(loadCart());
+
                 scheduled = false;
-                updateButtonsState(root);
-                updateBadges();
             });
         });
 
@@ -715,10 +744,17 @@
     function init() {
         ensureCartIcon();
         ensureFloatingPill();
-        updateBadges();
         bindAddButtons(document);
-        updateButtonsState(document);
+        syncCartUi(document);
         startScopedObserver();
+
+        window.addEventListener("storage", function (e) {
+            if (e.key === STORAGE_KEY) {
+                cartCache = null;
+                syncCartUi(document);
+                renderCartModal();
+            }
+        });
     }
 
     if (document.readyState === "loading") {

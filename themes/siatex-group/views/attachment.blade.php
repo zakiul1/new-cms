@@ -3,16 +3,9 @@
 
 @section('content')
     @once
-        @push('head')
-            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-            <noscript>
-                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
-            </noscript>
-        @endpush
 
-        @push('scripts')
-            <script src="{{ asset('_contact/cart.js') }}" defer></script>
-        @endpush
+
+
     @endonce
 
     @php
@@ -233,19 +226,26 @@
 
         $productUrl = filled($media->slug) ? cms_slug_url((string) $media->slug) : url()->current();
         $productImage = '';
+        $heroPreloadHref = '';
 
         try {
             if (method_exists($media, 'variantUrl')) {
-                $productImage = (string) ($media->variantUrl('medium') ?: $media->url());
+                $productImage =
+                    (string) ($media->variantUrl('hero_sm') ?: $media->variantUrl('large') ?: $media->url());
+                $heroPreloadHref =
+                    (string) ($media->variantUrl('hero_sm') ?: $media->variantUrl('large') ?: $media->url());
             } elseif (method_exists($media, 'url')) {
                 $productImage = (string) $media->url();
+                $heroPreloadHref = (string) $media->url();
             }
         } catch (\Throwable $e) {
             $productImage = '';
+            $heroPreloadHref = '';
         }
 
         $safeProductUrl = trim((string) $productUrl);
         $safeProductImage = trim((string) $productImage);
+        $heroPreloadHref = trim((string) $heroPreloadHref);
         $buttonAriaLabel = trim($quoteButtonLabel . ' for ' . $title);
 
         $mediaCategoryTerm = null;
@@ -396,14 +396,26 @@
         $printJsonLdHere = false;
     @endphp
 
+    @push('head')
+        @if ($heroPreloadHref !== '')
+            <link rel="preload" as="image" href="{{ $heroPreloadHref }}"
+                imagesizes="(max-width: 575px) 275px, (max-width: 767px) 370px, (max-width: 991px) 575px, 1000px"
+                fetchpriority="high">
+        @endif
+    @endpush
+
     <div class="cms-container mx-auto px-4 pt-6">
         <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-            <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
+            <a class=" underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                href="{{ url('/') }}">
+                Home
+            </a>
 
             @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
                 @if ($breadcrumbTermUrl)
-                    <a class="text-slate-600 hover:underline" href="{{ $breadcrumbTermUrl }}">
+                    <a class="underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                        href="{{ $breadcrumbTermUrl }}">
                         {{ $breadcrumbTerm->name }}
                     </a>
                 @else
@@ -426,13 +438,13 @@
                             [
                                 'alt' => $title,
                                 'class' => 'w-full object-contain',
-                                'sizes' => '(max-width: 1024px) 100vw, 420px',
+                                'sizes' => '(max-width: 575px) 275px, (max-width: 767px) 370px, (max-width: 991px) 575px, 1000px',
                                 'loading' => 'eager',
                                 'decoding' => 'async',
                                 'fetchpriority' => 'high',
                             ],
-                            'large',
-                            ['medium', 'medium_large', 'large'],
+                            'hero_sm',
+                            ['thumb', 'small', 'hero_sm', 'large'],
                         ) !!}
                     @else
                         <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
@@ -505,7 +517,9 @@
                             @endphp
 
                             <div class="group text-center">
-                                <a href="{{ $safeRUrl }}" class="block">
+                                <a href="{{ $safeRUrl }}"
+                                    class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    aria-label="{{ $rTitle }}">
                                     <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                         {!! cms_picture(
                                             $r,
@@ -516,17 +530,19 @@
                                                 'loading' => 'lazy',
                                                 'decoding' => 'async',
                                             ],
-                                            'medium',
-                                            ['thumb', 'medium', 'medium_large'],
+                                            'small',
+                                            ['thumb', 'small', 'hero_sm'],
                                         ) !!}
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <div class="text-sm font-medium leading-snug text-slate-600">
+                                        <div
+                                            class="text-sm font-medium leading-snug text-slate-600 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
-                                        <p class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
+                                        <p
+                                            class="mt-1 text-sm font-semibold leading-snug line-clamp-2 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ $rTitle }}
                                         </p>
                                     </div>
@@ -536,7 +552,10 @@
                                     $rImage = '';
                                     try {
                                         if (method_exists($r, 'variantUrl')) {
-                                            $rImage = (string) ($r->variantUrl('medium') ?: $r->url());
+                                            $rImage =
+                                                (string) ($r->variantUrl('small') ?:
+                                                $r->variantUrl('thumb') ?:
+                                                $r->url());
                                         } elseif (method_exists($r, 'url')) {
                                             $rImage = (string) $r->url();
                                         }
@@ -615,7 +634,7 @@
                                             class="flex items-start gap-2 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
                                             <span class="mt-[2px] text-slate-500">›</span>
                                             <a href="{{ $safeQUrl }}"
-                                                class="block truncate italic text-slate-700 hover:text-slate-900 hover:underline"
+                                                class="block truncate italic text-slate-700 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                                                 title="{{ $qTitle }}">
                                                 {{ $qTitle }}
                                             </a>

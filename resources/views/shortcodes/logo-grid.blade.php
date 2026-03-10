@@ -7,7 +7,7 @@
      *  - $column    : int (desktop columns) default 4  (used for GRID mode)
      *  - $mobile    : int (mobile columns) default 2  (used for GRID mode, and per-view on mobile in SLIDER mode)
      *  - $showTitle : bool (show media title under image)
-     *  *  - $style     : string 'square'|'round' (default 'square')
+     *  - $style     : string 'square'|'round' (default 'square')
      *  - $class     : string wrapper class (optional)
      *  - $slider    : bool if true => swipe carousel (6 per view on desktop, $mobile per view on mobile)
      */
@@ -157,8 +157,8 @@
                                                 'decoding' => 'async',
                                                 'draggable' => 'false',
                                             ],
-                                            'medium',
-                                            ['thumb', 'medium', 'medium_large'],
+                                            'thumb',
+                                            ['thumb', 'hero_sm', 'medium'],
                                         ) !!}
                                     @else
                                         <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"
@@ -237,8 +237,8 @@
                                         'fetchpriority' => 'low',
                                         'decoding' => 'async',
                                     ],
-                                    'medium',
-                                    ['thumb', 'medium', 'medium_large'],
+                                    'thumb',
+                                    ['thumb', 'hero_sm', 'medium'],
                                 ) !!}
                             @else
                                 <img src="{{ $imgUrl }}" alt="{{ e($alt) }}" loading="lazy"

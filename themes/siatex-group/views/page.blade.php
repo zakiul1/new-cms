@@ -41,7 +41,10 @@
             $quoteButtonText = 'Custom Quote';
         }
         $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
-        $quoteButtonLabel = strip_tags(str_replace('|', ' ', $quoteButtonText));
+        $quoteButtonLabel = trim(strip_tags(str_replace('|', ' ', $quoteButtonText)));
+        if ($quoteButtonLabel === '') {
+            $quoteButtonLabel = 'Custom Quote';
+        }
 
         $heroTitle = trim((string) data_get($post->meta_json ?? [], 'slider.title', ''));
         $heroRaw = (string) ($post->content_html ?? data_get($post->content_json ?? [], 'html', ''));
@@ -205,10 +208,12 @@
 
                         $metaTitle = trim((string) data_get($meta, 'frontend.meta_title', ''));
                         $title = trim(
-                            (string) ($media->title ?:
-                            ($metaTitle !== ''
-                                ? $metaTitle
-                                : $media->original_filename ?? '')),
+                            strip_tags(
+                                (string) ($media->title ?:
+                                ($metaTitle !== ''
+                                    ? $metaTitle
+                                    : $media->original_filename ?? '')),
+                            ),
                         );
                         $title = $title !== '' ? $title : 'Attachment';
 
@@ -300,7 +305,10 @@
         if ($heroPreloadMedia && method_exists($heroPreloadMedia, 'isImage') && $heroPreloadMedia->isImage()) {
             try {
                 if (method_exists($heroPreloadMedia, 'variantUrl')) {
-                    $heroPreloadHref = $heroPreloadMedia->variantUrl('large') ?: $heroPreloadMedia->url();
+                    $heroPreloadHref =
+                        $heroPreloadMedia->variantUrl('hero_sm') ?:
+                        $heroPreloadMedia->variantUrl('medium') ?:
+                        $heroPreloadMedia->url();
                 } elseif (method_exists($heroPreloadMedia, 'url')) {
                     $heroPreloadHref = $heroPreloadMedia->url();
                 }
@@ -314,24 +322,16 @@
 
     @if ($shouldLoadCartAssets)
         @once
-            @push('head')
-                <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style"
-                    onload="this.onload=null;this.rel='stylesheet'">
-                <noscript>
-                    <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
-                </noscript>
-            @endpush
 
-            @push('scripts')
-                <script src="{{ asset('_contact/cart.js') }}" defer></script>
-            @endpush
+
         @endonce
     @endif
 
     @if ($showCustomHero)
         @push('head')
             @if ($heroPreloadHref)
-                <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 50vw">
+                <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 50vw"
+                    fetchpriority="high">
             @endif
 
             @if ($isHomepage)
@@ -347,18 +347,22 @@
             <nav aria-label="Breadcrumb" class="text-sm text-slate-600">
                 <ol class="flex flex-wrap items-center gap-1">
                     <li>
-                        <a href="{{ url('/') }}" class="text-slate-700 hover:underline">Home</a>
+                        <a href="{{ url('/') }}"
+                            class="  focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
+                            Home
+                        </a>
                     </li>
 
                     @if (!empty($breadcrumbParentTitle))
                         <li class="text-slate-400">/</li>
                         <li>
                             @if (!empty($breadcrumbParentUrl))
-                                <a href="{{ $breadcrumbParentUrl }}" class="text-slate-700 hover:underline">
+                                <a href="{{ $breadcrumbParentUrl }}"
+                                    class="decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
                                     {{ $breadcrumbParentTitle }}
                                 </a>
                             @else
-                                <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
+                                <span class="">{{ $breadcrumbParentTitle }}</span>
                             @endif
                         </li>
                     @endif
@@ -395,8 +399,8 @@
                                                 'fetchpriority' => 'high',
                                                 'decoding' => 'async',
                                             ],
-                                            'large',
-                                            ['medium', 'medium_large', 'large'],
+                                            'hero_sm',
+                                            ['hero_sm', 'medium', 'medium_large'],
                                         ) !!}
                                     </div>
                                 @endif
@@ -407,13 +411,33 @@
 
                                 <div id="{{ $sliderId }}"
                                     class="relative w-full overflow-visible bg-white px-8 sm:px-10">
-                                    <div class="relative overflow-hidden">
+                                    <style>
+                                        #{{ $sliderId }} .page-featured-slider-track {
+                                            position: relative;
+                                        }
+
+                                        #{{ $sliderId }} .page-featured-slide {
+                                            position: absolute;
+                                            inset: 0;
+                                            opacity: 0;
+                                            pointer-events: none;
+                                            transition: opacity .25s ease;
+                                        }
+
+                                        #{{ $sliderId }} .page-featured-slide.is-active {
+                                            position: relative;
+                                            opacity: 1;
+                                            pointer-events: auto;
+                                        }
+                                    </style>
+
+                                    <div class="page-featured-slider-track relative overflow-hidden">
                                         @foreach ($featuredMediaItems as $index => $heroMedia)
                                             @php
                                                 $isFirstSlide = $index === 0;
                                             @endphp
 
-                                            <div class="page-featured-slide {{ $isFirstSlide ? 'block' : 'hidden' }}">
+                                            <div class="page-featured-slide {{ $isFirstSlide ? 'is-active' : '' }}">
                                                 @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
                                                     {!! cms_picture(
                                                         $heroMedia,
@@ -425,8 +449,8 @@
                                                             'fetchpriority' => $isFirstSlide ? 'high' : 'low',
                                                             'decoding' => 'async',
                                                         ],
-                                                        'large',
-                                                        ['medium', 'medium_large', 'large'],
+                                                        'hero_sm',
+                                                        ['hero_sm', 'medium', 'medium_large'],
                                                     ) !!}
                                                 @endif
                                             </div>
@@ -434,20 +458,20 @@
                                     </div>
 
                                     <button type="button"
-                                        class="page-featured-prev absolute left-0 top-1/2 z-10 inline-flex h-12 w-8 -translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 sm:-translate-x-8"
+                                        class="page-featured-prev absolute left-0 top-1/2 z-10 inline-flex h-12 w-8 -translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 sm:-translate-x-8"
                                         aria-label="Previous image">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
-                                            viewBox="0 0 14 28" fill="none">
+                                            viewBox="0 0 14 28" fill="none" aria-hidden="true">
                                             <path d="M11.5 2.5L2.5 14L11.5 25.5" stroke="currentColor" stroke-width="1.4"
                                                 stroke-linecap="round" stroke-linejoin="round" />
                                         </svg>
                                     </button>
 
                                     <button type="button"
-                                        class="page-featured-next absolute right-0 top-1/2 z-10 inline-flex h-12 w-8 translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 sm:translate-x-8"
+                                        class="page-featured-next absolute right-0 top-1/2 z-10 inline-flex h-12 w-8 translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 sm:translate-x-8"
                                         aria-label="Next image">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
-                                            viewBox="0 0 14 28" fill="none">
+                                            viewBox="0 0 14 28" fill="none" aria-hidden="true">
                                             <path d="M2.5 2.5L11.5 14L2.5 25.5" stroke="currentColor" stroke-width="1.4"
                                                 stroke-linecap="round" stroke-linejoin="round" />
                                         </svg>
@@ -466,13 +490,19 @@
                                         if (!slides.length) return;
 
                                         let current = 0;
+                                        let ticking = false;
 
                                         const showSlide = (index) => {
                                             current = (index + slides.length) % slides.length;
 
-                                            slides.forEach((slide, i) => {
-                                                slide.classList.toggle('hidden', i !== current);
-                                                slide.classList.toggle('block', i === current);
+                                            if (ticking) return;
+                                            ticking = true;
+
+                                            requestAnimationFrame(() => {
+                                                slides.forEach((slide, i) => {
+                                                    slide.classList.toggle('is-active', i === current);
+                                                });
+                                                ticking = false;
                                             });
                                         };
 
@@ -516,7 +546,7 @@
                                     <div class="mt-8">
                                         <button type="button"
                                             class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
-                                            aria-label="{{ $quoteButtonLabel }}"
+                                            aria-label="{{ trim($quoteButtonLabel . ' for ' . ($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page')) }}"
                                             data-default-label="{{ $quoteButtonLabel }}"
                                             data-item-id="{{ (int) $post->id }}" data-item-type="post"
                                             data-item-title="{{ e($heroTitle !== '' ? $heroTitle : $post->title ?? 'Page') }}"
@@ -562,9 +592,9 @@
                                     <div class="flex flex-col">
                                         @foreach ($relatedLinks as $item)
                                             <a href="{{ $item['url'] }}"
-                                                class="flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] text-[16px] italic leading-[1.35] text-[#555] first:border-t-0">
+                                                class="flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] text-[16px] italic leading-[1.35] text-[#555] underline underline-offset-4 decoration-[1.5px] first:border-t-0 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
                                                 <span class="text-[20px] leading-none text-[#777]">›</span>
-                                                <span class="block truncate hover:underline" title="{{ $item['title'] }}">
+                                                <span class="block truncate" title="{{ $item['title'] }}">
                                                     {{ $item['title'] }}
                                                 </span>
                                             </a>

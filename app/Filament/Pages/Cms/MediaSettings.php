@@ -13,6 +13,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Builder;
 use Throwable;
 use UnitEnum;
 
@@ -35,15 +36,15 @@ class MediaSettings extends Page
     {
         $defaultSizes = (array) config('cms-media.image_variants', []);
 
-        $thumbDefault = (int) ($defaultSizes['thumb'] ?? 300);
-        $mediumDefault = (int) ($defaultSizes['medium'] ?? 768);
-        $mediumLargeDefault = (int) ($defaultSizes['medium_large'] ?? 1024);
-        $largeDefault = (int) ($defaultSizes['large'] ?? 1600);
+        $thumbDefault = (int) ($defaultSizes['thumb'] ?? 275);
+        $smallDefault = (int) ($defaultSizes['small'] ?? 370);
+        $heroSmDefault = (int) ($defaultSizes['hero_sm'] ?? 575);
+        $largeDefault = (int) ($defaultSizes['large'] ?? 1000);
 
         $this->form->fill([
             'thumbnail_width' => (int) $settings->get('core', 'media_thumbnail_width', $thumbDefault),
-            'medium_width' => (int) $settings->get('core', 'media_medium_width', $mediumDefault),
-            'medium_large_width' => (int) $settings->get('core', 'media_medium_large_width', $mediumLargeDefault),
+            'small_width' => (int) $settings->get('core', 'media_small_width', $smallDefault),
+            'hero_sm_width' => (int) $settings->get('core', 'media_hero_sm_width', $heroSmDefault),
             'large_width' => (int) $settings->get('core', 'media_large_width', $largeDefault),
         ]);
     }
@@ -97,28 +98,32 @@ class MediaSettings extends Page
             ->components([
                 Form::make([
                     Section::make('Image sizes')
-                        ->description('The sizes listed below determine the maximum dimensions in pixels to use when generating image variants. Width values drive actual variant generation.')
+                        ->description('The sizes below control generated image variants. Canonical variants are: thumb, small, hero_sm, and large.')
                         ->schema([
                             TextInput::make('thumbnail_width')
-                                ->label('Thumbnail Width')
+                                ->label('Thumbnail Width (thumb)')
+                                ->helperText('Used for tiny thumbnails and grid previews.')
                                 ->numeric()
                                 ->required()
                                 ->minValue(1),
 
-                            TextInput::make('medium_width')
-                                ->label('Medium Max Width')
+                            TextInput::make('small_width')
+                                ->label('Small Width (small)')
+                                ->helperText('Compact cards and small content images.')
                                 ->numeric()
                                 ->required()
                                 ->minValue(1),
 
-                            TextInput::make('medium_large_width')
-                                ->label('Medium Large Max Width')
+                            TextInput::make('hero_sm_width')
+                                ->label('Hero Small Width (hero_sm)')
+                                ->helperText('Mobile hero and LCP-friendly image size.')
                                 ->numeric()
                                 ->required()
                                 ->minValue(1),
 
                             TextInput::make('large_width')
-                                ->label('Large Max Width')
+                                ->label('Large Width (large)')
+                                ->helperText('Large desktop content and hero images.')
                                 ->numeric()
                                 ->required()
                                 ->minValue(1),
@@ -133,40 +138,50 @@ class MediaSettings extends Page
     {
         $data = $this->form->getState();
 
-        $settings->set('core', 'media_thumbnail_width', max(1, (int) ($data['thumbnail_width'] ?? 300)));
-        $settings->set('core', 'media_medium_width', max(1, (int) ($data['medium_width'] ?? 768)));
-        $settings->set('core', 'media_medium_large_width', max(1, (int) ($data['medium_large_width'] ?? 1024)));
-        $settings->set('core', 'media_large_width', max(1, (int) ($data['large_width'] ?? 1600)));
+        $thumb = max(1, (int) ($data['thumbnail_width'] ?? 275));
+        $small = max(1, (int) ($data['small_width'] ?? 370));
+        $heroSm = max(1, (int) ($data['hero_sm_width'] ?? 575));
+        $large = max(1, (int) ($data['large_width'] ?? 1000));
+
+        $settings->set('core', 'media_thumbnail_width', $thumb);
+        $settings->set('core', 'media_small_width', $small);
+        $settings->set('core', 'media_hero_sm_width', $heroSm);
+        $settings->set('core', 'media_large_width', $large);
+
+        config()->set('cms-media.image_variants', [
+            'thumb' => $thumb,
+            'small' => $small,
+            'hero_sm' => $heroSm,
+            'large' => $large,
+        ]);
 
         Notification::make()
             ->title('Media settings saved')
-            ->body('If you changed image sizes, regenerate image batches until all pending images are processed.')
+            ->body('Image variant sizes were updated to thumb, small, hero_sm, and large. Regenerate image batches until all images are processed.')
             ->success()
             ->send();
     }
 
-    /**
-     * Process only a safe batch of images per request.
-     *
-     * Targets images that likely still need variants:
-     * - processed_at is null
-     * - or there are no variant records
-     *
-     * Returns:
-     * [
-     *   'processed' => int,
-     *   'remaining' => int,
-     * ]
-     */
     protected function regenerateNextBatch(): array
     {
         $batchSize = max(1, min(100, $this->regenerateBatchSize));
 
+        $requiredVariants = array_keys((array) config('cms-media.image_variants', []));
+
         $baseQuery = Media::query()
             ->where('mime_type', 'like', 'image/%')
-            ->where(function ($q) {
+            ->where(function (Builder $q) use ($requiredVariants) {
                 $q->whereNull('processed_at')
-                    ->orWhereDoesntHave('variantRecords');
+                    ->orWhereDoesntHave('variantRecords')
+                    ->orWhereHas('variantRecords', function (Builder $vq) {
+                        $vq->whereIn('key', ['medium', 'medium_large']);
+                    });
+
+                foreach ($requiredVariants as $variant) {
+                    $q->orWhereDoesntHave('variantRecords', function (Builder $vq) use ($variant) {
+                        $vq->where('key', $variant);
+                    });
+                }
             })
             ->orderBy('id');
 

@@ -80,7 +80,7 @@ class CmsServiceProvider extends ServiceProvider
         $this->app->singleton(ShortcodeRegistry::class);
         $this->app->singleton(ShortcodeParser::class);
 
-        // Phase 6: Menus & Widgets services
+        // Menus & Widgets services
         $this->app->singleton(MenuRegistry::class);
         $this->app->singleton(MenuRenderer::class);
 
@@ -149,9 +149,13 @@ class CmsServiceProvider extends ServiceProvider
     /**
      * Apply saved media settings to runtime config.
      *
-     * Option A:
-     * - UI stores width/height/crop values
-     * - actual variant generation uses width values only
+     * Canonical keys only:
+     * - thumb
+     * - small
+     * - hero_sm
+     * - large
+     *
+     * No fallback to old medium / medium_large keys.
      */
     private function applyMediaRuntimeSettings(): void
     {
@@ -160,15 +164,34 @@ class CmsServiceProvider extends ServiceProvider
 
         $defaults = (array) config('cms-media.image_variants', []);
 
-        $thumb = (int) $settings->get('core', 'media_thumbnail_width', (int) ($defaults['thumb'] ?? 300));
-        $medium = (int) $settings->get('core', 'media_medium_width', (int) ($defaults['medium'] ?? 768));
-        $mediumLarge = (int) $settings->get('core', 'media_medium_large_width', (int) ($defaults['medium_large'] ?? 1024));
-        $large = (int) $settings->get('core', 'media_large_width', (int) ($defaults['large'] ?? 1600));
+        $thumb = (int) $settings->get(
+            'core',
+            'media_thumbnail_width',
+            (int) ($defaults['thumb'] ?? 275)
+        );
+
+        $small = (int) $settings->get(
+            'core',
+            'media_small_width',
+            (int) ($defaults['small'] ?? 370)
+        );
+
+        $heroSm = (int) $settings->get(
+            'core',
+            'media_hero_sm_width',
+            (int) ($defaults['hero_sm'] ?? 575)
+        );
+
+        $large = (int) $settings->get(
+            'core',
+            'media_large_width',
+            (int) ($defaults['large'] ?? 1000)
+        );
 
         config()->set('cms-media.image_variants', [
             'thumb' => max(1, $thumb),
-            'medium' => max(1, $medium),
-            'medium_large' => max(1, $mediumLarge),
+            'small' => max(1, $small),
+            'hero_sm' => max(1, $heroSm),
             'large' => max(1, $large),
         ]);
     }

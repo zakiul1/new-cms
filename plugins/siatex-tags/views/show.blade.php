@@ -3,12 +3,7 @@
 
 @section('content')
     @once
-        @push('head')
-            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
-            <noscript>
-                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
-            </noscript>
-        @endpush
+
 
         @push('scripts')
             <script src="{{ asset('_contact/cart.js') }}" defer></script>
@@ -321,24 +316,42 @@
         $bottomDescHtml = strip_tags($bottomDescHtml, $allowedHtml);
 
         $tagImage = '';
+        $heroPreloadHref = '';
         try {
             if ($heroMedia && method_exists($heroMedia, 'variantUrl')) {
                 $tagImage = (string) ($heroMedia->variantUrl('medium') ?: $heroMedia->url());
+                $heroPreloadHref =
+                    (string) ($heroMedia->variantUrl('hero_sm') ?:
+                    $heroMedia->variantUrl('medium') ?:
+                    $heroMedia->url());
             } elseif ($heroMedia && method_exists($heroMedia, 'url')) {
                 $tagImage = (string) $heroMedia->url();
+                $heroPreloadHref = (string) $heroMedia->url();
             }
         } catch (\Throwable $e) {
             $tagImage = '';
+            $heroPreloadHref = '';
         }
 
         $safeTagUrl = trim((string) $tagUrl);
         $safeTagImage = trim((string) $tagImage);
+        $heroPreloadHref = trim((string) $heroPreloadHref);
         $tagButtonAriaLabel = trim($quoteButtonLabel . ' for ' . $title);
     @endphp
 
+    @push('head')
+        @if ($heroPreloadHref !== '')
+            <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 420px"
+                fetchpriority="high">
+        @endif
+    @endpush
+
     <div class="cms-container mx-auto px-4 pt-6">
         <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-            <a class="text-[#1f5f99] hover:underline" href="{{ url('/') }}">Home</a>
+            <a class="   decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                href="{{ url('/') }}">
+                Home
+            </a>
 
             @if (trim($categoryName) !== '')
                 <span class="mx-2 text-slate-300">/</span>
@@ -366,8 +379,8 @@
                                 'decoding' => 'async',
                                 'fetchpriority' => 'high',
                             ],
-                            'large',
-                            ['medium', 'medium_large', 'large'],
+                            'hero_sm',
+                            ['hero_sm', 'medium', 'medium_large'],
                         ) !!}
                     @else
                         <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
@@ -460,7 +473,9 @@
                             @endphp
 
                             <div class="group text-center">
-                                <a href="{{ $safeRUrl }}" class="block">
+                                <a href="{{ $safeRUrl }}"
+                                    class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    aria-label="{{ $rTitle }}">
                                     <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                         {!! cms_picture(
                                             $r,
@@ -477,11 +492,13 @@
                                     </div>
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                        <div class="text-sm font-medium leading-snug text-slate-600">
+                                        <div
+                                            class="text-sm font-medium leading-snug text-slate-600 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
-                                        <p class="mt-1 text-sm font-semibold leading-snug line-clamp-2">
+                                        <p
+                                            class="mt-1 text-sm font-semibold leading-snug line-clamp-2 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ $rTitle }}
                                         </p>
                                     </div>
@@ -558,7 +575,7 @@
                                             class="flex items-start gap-2 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
                                             <span class="mt-[2px] text-slate-500">›</span>
                                             <a href="{{ $safeQUrl }}" target="_blank" rel="noopener noreferrer"
-                                                class="block truncate italic text-slate-700 hover:text-slate-900 hover:underline"
+                                                class="block truncate italic text-slate-700 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                                                 title="{{ $qTitle }}">
                                                 {{ $qTitle }}
                                             </a>

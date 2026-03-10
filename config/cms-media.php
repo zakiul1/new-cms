@@ -17,8 +17,7 @@ return [
     |--------------------------------------------------------------------------
     | Originals
     |--------------------------------------------------------------------------
-    | WordPress keeps originals, and generates sizes.
-    | Keep this enabled for best UX + future re-generation.
+    | Keep original uploads so variants can be regenerated later.
     */
     'keep_original' => env('CMS_MEDIA_KEEP_ORIGINAL', true),
 
@@ -26,8 +25,6 @@ return [
     |--------------------------------------------------------------------------
     | Duplicate detection
     |--------------------------------------------------------------------------
-    | If enabled, we compute sha1 and avoid storing duplicates
-    | (or you can decide to allow duplicates but reuse file).
     */
     'dedupe' => env('CMS_MEDIA_DEDUPE', true),
 
@@ -37,22 +34,24 @@ return [
     |--------------------------------------------------------------------------
     */
     'image_variants' => [
-        // width in px (height auto)
-        'thumb' => 300,
-        'medium' => 768,
+        // Small cards / logos / tiny grids
+        'thumb' => 275,
 
-        // WP-like: between medium and large
-        'medium_large' => 1024,
+        // Small content / compact cards
+        'small' => 370,
 
-        'large' => 1600,
+        // Better for mobile hero/LCP images
+        'hero_sm' => 575,
+
+        // Large desktop content image / hero
+        'large' => 1000,
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Generated formats
     |--------------------------------------------------------------------------
-    | Main output format for generated variants.
-    | Recommended: webp
+    | Main generated format for image variants.
     */
     'variant_format' => env('CMS_MEDIA_VARIANT_FORMAT', 'webp'),
 
@@ -60,14 +59,16 @@ return [
     |--------------------------------------------------------------------------
     | Optional JPEG fallback
     |--------------------------------------------------------------------------
-    | false = generate only the primary format (for example only webp)
     | true  = also generate jpeg fallback variants
+    | false = generate only the primary format
+    |
+    | Set default true so both webp + jpg are generated even if env is missing.
     */
-    'generate_jpeg_fallback' => env('CMS_MEDIA_GENERATE_JPEG_FALLBACK', false),
+    'generate_jpeg_fallback' => env('CMS_MEDIA_GENERATE_JPEG_FALLBACK', true),
 
     /*
     |--------------------------------------------------------------------------
-    | Optional: Generate AVIF too (best compression, slower)
+    | Optional: Generate AVIF too
     |--------------------------------------------------------------------------
     */
     'generate_avif' => env('CMS_MEDIA_GENERATE_AVIF', false),
@@ -78,10 +79,10 @@ return [
     |--------------------------------------------------------------------------
     */
     'quality' => [
-        'webp' => (int) env('CMS_MEDIA_WEBP_QUALITY', 82),
-        'avif' => (int) env('CMS_MEDIA_AVIF_QUALITY', 50),
-        'jpeg' => (int) env('CMS_MEDIA_JPEG_QUALITY', 85),
-        'png' => (int) env('CMS_MEDIA_PNG_QUALITY', 90),
+        'webp' => (int) env('CMS_MEDIA_WEBP_QUALITY', 76),
+        'avif' => (int) env('CMS_MEDIA_AVIF_QUALITY', 45),
+        'jpeg' => (int) env('CMS_MEDIA_JPEG_QUALITY', 80),
+        'png' => (int) env('CMS_MEDIA_PNG_QUALITY', 85),
     ],
 
     // Removes EXIF (camera gps etc) from processed variants
@@ -104,8 +105,6 @@ return [
     |--------------------------------------------------------------------------
     | Taxonomy integration for folders
     |--------------------------------------------------------------------------
-    | We'll store "folders" as terms under this taxonomy key.
-    | (hierarchical like WP)
     */
     'folder_taxonomy_key' => env('CMS_MEDIA_FOLDER_TAXONOMY_KEY', 'media_folder'),
 
@@ -113,8 +112,6 @@ return [
     |--------------------------------------------------------------------------
     | Filename / Title Keyword Canonicalization
     |--------------------------------------------------------------------------
-    | One canonical keyword per entry. Matching should be case-insensitive,
-    | but replacement output should use exactly the string here.
     */
     'filename_keyword_canonical' => [
         'EU',
@@ -221,8 +218,6 @@ return [
     |--------------------------------------------------------------------------
     | Keyword separators
     |--------------------------------------------------------------------------
-    | Treat these characters as equivalent separators while matching keywords.
-    | Example: v neck / v-neck / v_neck => matches "v-neck"
     */
     'filename_keyword_separators' => [' ', '-', '_'],
 ];

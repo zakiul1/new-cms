@@ -50,6 +50,10 @@
         }
     }
 
+    $logoSizes = $logoWidth . 'px';
+    $logoVariantKey = 'thumb';
+    $logoVariantKeys = ['thumb', 'hero_sm', 'medium'];
+
     // Favicon
     $faviconId = (int) ($o['favicon_media_id'] ?? 0);
     $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
@@ -58,12 +62,32 @@
 
 <header id="site-header" class="bg-white">
     <div class="cms-container mx-auto px-4">
-        <div class="flex items-center justify-between gap-4 py-7">
-            <a href="{{ url('/') }}" class="flex items-center gap-3" aria-label="Home">
-                @if ($logoUrl)
+        <div class="flex items-center justify-between gap-4 pt-12 pb-8">
+            <a href="{{ url('/') }}"
+                class="no-link-affordance flex items-center gap-3 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                aria-label="Home">
+                @if ($logo instanceof \App\Models\Media)
+                    {!! cms_picture(
+                        $logo,
+                        [
+                            'alt' => config('app.name', 'Siatex'),
+                            'class' => 'logo-img',
+                            'style' => 'width: ' . $logoWidth . 'px; height:auto;',
+                            'width' => $logoWidth,
+                            'height' => $logoHeight,
+                            'sizes' => $logoSizes,
+                            'loading' => 'eager',
+                            'fetchpriority' => 'high',
+                            'decoding' => 'async',
+                        ],
+                        $logoVariantKey,
+                        $logoVariantKeys,
+                    ) !!}
+                @elseif ($logoUrl)
                     <img class="logo-img" src="{{ $logoUrl }}" alt="{{ config('app.name', 'Siatex') }}"
                         width="{{ $logoWidth }}" height="{{ $logoHeight }}"
-                        style="width: {{ $logoWidth }}px; height:auto;" decoding="async">
+                        style="width: {{ $logoWidth }}px; height:auto;" loading="eager" fetchpriority="high"
+                        decoding="async">
                 @else
                     <span class="text-xl font-extrabold tracking-tight">{{ config('app.name', 'Siatex') }}</span>
                 @endif
@@ -78,7 +102,7 @@
 
                 @if ($phone !== '')
                     <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}"
-                        class="hidden items-center gap-2 hover:text-slate-900 md:flex">
+                        class="hidden items-center gap-2 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
                         <span aria-hidden="true">📞</span>
                         <span class="font-medium">{{ $phone }}</span>
                     </a>
@@ -86,7 +110,7 @@
 
                 @if ($email !== '')
                     <a href="mailto:{{ $email }}"
-                        class="hidden items-center gap-2 hover:text-slate-900 md:flex">
+                        class="hidden items-center gap-2 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
                         <span aria-hidden="true">✉️</span>
                         <span class="font-medium">{{ $email }}</span>
                     </a>

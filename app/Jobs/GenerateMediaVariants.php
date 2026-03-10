@@ -40,11 +40,16 @@ class GenerateMediaVariants implements ShouldQueue
 
         $primary = strtolower((string) config('cms-media.variant_format', 'webp'));
         $alsoJpegFallback = (bool) config('cms-media.generate_jpeg_fallback', false);
+        $alsoAvif = (bool) config('cms-media.generate_avif', false);
 
         $formats = [$primary];
 
         if ($alsoJpegFallback && !in_array($primary, ['jpeg', 'jpg'], true)) {
             $formats[] = 'jpeg';
+        }
+
+        if ($alsoAvif && $primary !== 'avif') {
+            $formats[] = 'avif';
         }
 
         $formats = array_values(array_unique(array_filter($formats)));
@@ -128,6 +133,13 @@ class GenerateMediaVariants implements ShouldQueue
                         continue;
                     }
 
+                    if ($format === 'avif' && !function_exists('imageavif')) {
+                        Log::warning('AVIF requested but GD imageavif() not available', [
+                            'media_id' => $media->id,
+                        ]);
+                        continue;
+                    }
+
                     if (!$this->force) {
                         $exists = MediaVariant::query()
                             ->where('media_id', $media->id)
@@ -151,7 +163,11 @@ class GenerateMediaVariants implements ShouldQueue
                         }
                     }
 
-                    $ext = ($format === 'jpeg') ? 'jpg' : $format;
+                    $ext = match ($format) {
+                        'jpeg' => 'jpg',
+                        default => $format,
+                    };
+
                     $variantName = "{$baseName}-{$key}.{$ext}";
 
                     $tmp = tempnam(sys_get_temp_dir(), 'cmsv_');
@@ -215,6 +231,10 @@ class GenerateMediaVariants implements ShouldQueue
             ? (bool) @imagewebp($gd, $path, $this->clamp($quality, 1, 100))
             : false,
 
+            'avif' => function_exists('imageavif')
+            ? (bool) @imageavif($gd, $path, $this->clamp($quality, 1, 100))
+            : false,
+
             'jpeg', 'jpg' => (bool) @imagejpeg($gd, $path, $this->clamp($quality, 1, 100)),
 
             'png' => (bool) @imagepng($gd, $path, 6),
@@ -227,6 +247,7 @@ class GenerateMediaVariants implements ShouldQueue
     {
         return match ($format) {
             'webp' => (int) (config('cms-media.quality.webp') ?? 82),
+            'avif' => (int) (config('cms-media.quality.avif') ?? 45),
             'jpeg', 'jpg' => (int) (config('cms-media.quality.jpeg') ?? 85),
             'png' => (int) (config('cms-media.quality.png') ?? 90),
             default => 82,
@@ -239,6 +260,7 @@ class GenerateMediaVariants implements ShouldQueue
             'jpeg', 'jpg' => 'image/jpeg',
             'png' => 'image/png',
             'webp' => 'image/webp',
+            'avif' => 'image/avif',
             default => 'application/octet-stream',
         };
     }

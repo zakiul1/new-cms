@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import "./cart.css";
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -64,6 +65,18 @@ body {
     .products-grid {
         grid-template-columns: repeat(var(--cols-md, 4), minmax(0, 1fr));
     }
+}
+
+/* Default text links should not rely on color only */
+a[href]:not(.btn):not(.button):not(.no-link-affordance):not(.cf-get-price) {
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+    text-decoration: none;
+}
+
+a[href]:not(.btn):not(.button):not(.no-link-affordance):not(.cf-get-price):hover,
+a[href]:not(.btn):not(.button):not(.no-link-affordance):not(.cf-get-price):focus-visible {
+    text-decoration-thickness: 2px;
 }
 
 /* Branding */

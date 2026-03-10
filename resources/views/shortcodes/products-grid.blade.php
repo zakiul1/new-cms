@@ -6,17 +6,6 @@
 
 @if ($shouldLoadCartAssets)
     @once
-        @push('head')
-            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style"
-                onload="this.onload=null;this.rel='stylesheet'">
-            <noscript>
-                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
-            </noscript>
-        @endpush
-
-        @push('scripts')
-            <script src="{{ asset('_contact/cart.js') }}" defer></script>
-        @endpush
     @endonce
 @endif
 
@@ -99,7 +88,10 @@
                     $productImage = '';
                     try {
                         if ($media instanceof \App\Models\Media) {
-                            $productImage = (string) ($media->variantUrl('medium') ?: $media->url());
+                            $productImage =
+                                (string) ($media->variantUrl('hero_sm') ?:
+                                $media->variantUrl('medium') ?:
+                                $media->url());
                         }
                     } catch (\Throwable $e) {
                         $productImage = '';
@@ -118,7 +110,8 @@
                 <div class="group text-center">
                     @if ($safeUrl !== '')
                         <a href="{{ $safeUrl }}"
-                            class="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]">
+                            class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                            aria-label="{{ $title }}">
                             <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                 @if ($media instanceof \App\Models\Media && method_exists($media, 'isImage') && $media->isImage())
                                     @if (function_exists('cms_picture'))
@@ -132,8 +125,8 @@
                                                 'fetchpriority' => 'low',
                                                 'decoding' => 'async',
                                             ],
-                                            'medium',
-                                            ['thumb', 'medium', 'medium_large'],
+                                            'thumb',
+                                            ['thumb', 'hero_sm', 'medium'],
                                         ) !!}
                                     @elseif ($safeProductImage !== '')
                                         <img src="{{ $safeProductImage }}" alt="{{ $title }}"
@@ -172,8 +165,8 @@
                                                 'fetchpriority' => 'low',
                                                 'decoding' => 'async',
                                             ],
-                                            'medium',
-                                            ['thumb', 'medium', 'medium_large'],
+                                            'thumb',
+                                            ['thumb', 'hero_sm', 'medium'],
                                         ) !!}
                                     @elseif ($safeProductImage !== '')
                                         <img src="{{ $safeProductImage }}" alt="{{ $title }}"

@@ -128,11 +128,11 @@
                                                         'decoding' => 'async',
                                                         'sizes' => $topHybridSizes,
                                                     ],
-                                                    'medium_large',
-                                                    ['medium', 'medium_large', 'large'],
+                                                    'hero_sm',
+                                                    ['hero_sm', 'medium', 'medium_large'],
                                                 ) !!}
                                             @else
-                                                <img src="{{ $topMediaBack->variantUrl('medium_large', 'jpeg') ?: $topMediaBack->variantUrl('medium_large') ?: $topMediaBack->url() }}"
+                                                <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
                                                     alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                     loading="lazy" fetchpriority="low" decoding="async">
                                             @endif
@@ -149,11 +149,11 @@
                                                         'decoding' => 'async',
                                                         'sizes' => $topHybridSizes,
                                                     ],
-                                                    'medium_large',
-                                                    ['medium', 'medium_large', 'large'],
+                                                    'hero_sm',
+                                                    ['hero_sm', 'medium', 'medium_large'],
                                                 ) !!}
                                             @else
-                                                <img src="{{ $topMediaFront->variantUrl('medium_large', 'jpeg') ?: $topMediaFront->variantUrl('medium_large') ?: $topMediaFront->url() }}"
+                                                <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
                                                     alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                     loading="eager" fetchpriority="high" decoding="async">
                                             @endif
@@ -171,11 +171,11 @@
                                                     'decoding' => 'async',
                                                     'sizes' => $topHybridSizes,
                                                 ],
-                                                'medium_large',
-                                                ['medium', 'medium_large', 'large'],
+                                                'hero_sm',
+                                                ['hero_sm', 'medium', 'medium_large'],
                                             ) !!}
                                         @else
-                                            <img src="{{ $topMediaBack->variantUrl('medium_large', 'jpeg') ?: $topMediaBack->variantUrl('medium_large') ?: $topMediaBack->url() }}"
+                                            <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
                                                 alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                 loading="eager" fetchpriority="high" decoding="async">
                                         @endif
@@ -192,11 +192,11 @@
                                                     'decoding' => 'async',
                                                     'sizes' => $topHybridSizes,
                                                 ],
-                                                'medium_large',
-                                                ['medium', 'medium_large', 'large'],
+                                                'hero_sm',
+                                                ['hero_sm', 'medium', 'medium_large'],
                                             ) !!}
                                         @else
-                                            <img src="{{ $topMediaFront->variantUrl('medium_large', 'jpeg') ?: $topMediaFront->variantUrl('medium_large') ?: $topMediaFront->url() }}"
+                                            <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
                                                 alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                 loading="eager" fetchpriority="high" decoding="async">
                                         @endif
@@ -282,8 +282,9 @@
                             if ($img && $featuredMedia instanceof \App\Models\Media) {
                                 try {
                                     $imageUrl =
-                                        (string) ($featuredMedia->variantUrl('large', 'jpeg') ?:
-                                        $featuredMedia->variantUrl('large') ?:
+                                        (string) ($featuredMedia->variantUrl('hero_sm', 'jpeg') ?:
+                                        $featuredMedia->variantUrl('hero_sm') ?:
+                                        $featuredMedia->variantUrl('medium') ?:
                                         $featuredMedia->url());
                                 } catch (\Throwable $e) {
                                     $imageUrl = '';
@@ -308,8 +309,8 @@
                                                 'fetchpriority' => 'low',
                                                 'decoding' => 'async',
                                             ],
-                                            'large',
-                                            ['medium', 'medium_large', 'large'],
+                                            'thumb',
+                                            ['thumb', 'hero_sm', 'medium'],
                                         ) !!}
                                     @else
                                         <img src="{{ $imageUrl }}"
@@ -591,7 +592,6 @@
                     margin-top: 12px;
                     font-size: 18px;
                     color: #1f2937;
-                    text-decoration: underline;
                     font-weight: 500;
                 }
 

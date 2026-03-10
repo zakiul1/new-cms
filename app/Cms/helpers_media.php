@@ -5,13 +5,14 @@ use Illuminate\Support\Arr;
 
 if (!function_exists('cms_picture')) {
     /**
-     * WP-like <picture> output:
+     * WebP-first <picture> output:
+     * - <source type="image/avif" srcset="..."> (if avif variants exist)
      * - <source type="image/webp" srcset="..."> (if webp variants exist)
-     * - <img> fallback uses jpeg srcset + src (or original)
+     * - <img> fallback prefers webp, then avif, then jpeg/jpg, then original
      *
      * @param Media|int|null $media
      * @param array<string,mixed> $attrs
-     * @param string $srcKey Which key to use as default src (medium)
+     * @param string $srcKey Which key to use as default src
      * @param array<string> $keys Variant keys to include
      */
     function cms_picture($media, array $attrs = [], string $srcKey = 'medium', array $keys = ['thumb', 'medium', 'large']): string
@@ -50,7 +51,9 @@ if (!function_exists('cms_picture')) {
         };
 
         /**
-         * Build width-based srcset for a set of formats (e.g. ['webp'] or ['jpeg','jpg']).
+         * Build width-based srcset for a set of formats.
+         *
+         * @param array<int,string> $formats
          */
         $buildSrcset = function (array $formats, bool $includeOriginal = false) use ($variants, $keys, $media): string {
             $formats = array_map(fn($f) => strtolower((string) $f), $formats);
@@ -79,7 +82,6 @@ if (!function_exists('cms_picture')) {
                 $parts[] = $v->url() . ' ' . $w . 'w';
             }
 
-            // Optionally include the original as the largest candidate (WP-like)
             if ($includeOriginal && (int) ($media->width ?? 0) > 0) {
                 $ow = (int) $media->width;
 
@@ -91,26 +93,40 @@ if (!function_exists('cms_picture')) {
             return implode(', ', $parts);
         };
 
+        $avifSrcset = $buildSrcset(['avif'], false);
         $webpSrcset = $buildSrcset(['webp'], false);
-        $jpegSrcset = $buildSrcset(['jpeg', 'jpg'], true);
+        $jpegSrcset = $buildSrcset(['jpeg', 'jpg'], false);
 
         // Choose <img src> and intrinsic dimensions
         $imgSrc = null;
         $imgWidth = null;
         $imgHeight = null;
 
-        // Prefer jpeg for fallback <img>
-        $jpegPreferred = $variants->first(function ($v) use ($srcKey) {
+        // Prefer webp for fallback <img>
+        $webpPreferred = $variants->first(function ($v) use ($srcKey) {
             return (string) ($v->key ?? '') === $srcKey
-                && in_array(strtolower((string) ($v->format ?? '')), ['jpeg', 'jpg'], true);
+                && strtolower((string) ($v->format ?? '')) === 'webp';
         });
 
-        if ($jpegPreferred) {
-            $imgSrc = $jpegPreferred->url();
-            $imgWidth = (int) ($jpegPreferred->width ?? 0) ?: null;
-            $imgHeight = (int) ($jpegPreferred->height ?? 0) ?: null;
+        if ($webpPreferred) {
+            $imgSrc = $webpPreferred->url();
+            $imgWidth = (int) ($webpPreferred->width ?? 0) ?: null;
+            $imgHeight = (int) ($webpPreferred->height ?? 0) ?: null;
         } else {
-            $any = $variants->firstWhere('key', $srcKey);
+            $any = $variants
+                ->where('key', $srcKey)
+                ->sortBy(function ($v) {
+                    $fmt = strtolower((string) ($v->format ?? ''));
+
+                    return match ($fmt) {
+                        'webp' => 0,
+                        'avif' => 1,
+                        'jpeg', 'jpg' => 2,
+                        'png' => 3,
+                        default => 4,
+                    };
+                })
+                ->first();
 
             if ($any) {
                 $imgSrc = $any->url();
@@ -121,7 +137,6 @@ if (!function_exists('cms_picture')) {
             }
         }
 
-        // Fallback to original dimensions when variant dimensions are unavailable
         if (!$imgWidth && (int) ($media->width ?? 0) > 0) {
             $imgWidth = (int) $media->width;
         }
@@ -147,8 +162,14 @@ if (!function_exists('cms_picture')) {
             $imgAttrs['height'] = $imgHeight;
         }
 
-        // Put jpeg srcset on <img> fallback if available
-        if ($jpegSrcset !== '') {
+        // Prefer webp srcset on <img> too, so rendered HTML stays webp-first
+        if ($webpSrcset !== '') {
+            $imgAttrs['srcset'] = $webpSrcset;
+            $imgAttrs['sizes'] = is_string($sizes) && $sizes !== '' ? $sizes : $defaultSizes;
+        } elseif ($avifSrcset !== '') {
+            $imgAttrs['srcset'] = $avifSrcset;
+            $imgAttrs['sizes'] = is_string($sizes) && $sizes !== '' ? $sizes : $defaultSizes;
+        } elseif ($jpegSrcset !== '') {
             $imgAttrs['srcset'] = $jpegSrcset;
             $imgAttrs['sizes'] = is_string($sizes) && $sizes !== '' ? $sizes : $defaultSizes;
         } elseif (is_string($sizes) && $sizes !== '') {
@@ -159,14 +180,20 @@ if (!function_exists('cms_picture')) {
 
         $html = '<picture>';
 
+        if ($avifSrcset !== '') {
+            $html .= '<source' . $renderAttrs([
+                'type' => 'image/avif',
+                'srcset' => $avifSrcset,
+                'sizes' => is_string($sizes) && $sizes !== '' ? $sizes : $defaultSizes,
+            ]) . '>';
+        }
+
         if ($webpSrcset !== '') {
-            $sourceAttrs = [
+            $html .= '<source' . $renderAttrs([
                 'type' => 'image/webp',
                 'srcset' => $webpSrcset,
                 'sizes' => is_string($sizes) && $sizes !== '' ? $sizes : $defaultSizes,
-            ];
-
-            $html .= '<source' . $renderAttrs($sourceAttrs) . '>';
+            ]) . '>';
         }
 
         $html .= '<img' . $renderAttrs($imgAttrs) . '>';
