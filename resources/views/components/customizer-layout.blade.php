@@ -8,11 +8,16 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
+    @stack('head')
 </head>
 
-<body class="m-0">
-    {{ $slot }}
+<body class="m-0 min-h-screen overflow-hidden bg-[#dcdcdd] antialiased">
+    <div id="customizer-app" class="min-h-screen">
+        {{ $slot }}
+    </div>
+
     @livewireScripts
+    @stack('scripts')
 </body>
 
 </html>

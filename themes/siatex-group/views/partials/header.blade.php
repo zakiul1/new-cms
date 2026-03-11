@@ -6,14 +6,14 @@
 
     $o = theme_options();
 
-    $logoId = (int) ($o['logo_media_id'] ?? 0);
-    $logo = $logoId ? \App\Models\Media::query()->whereKey($logoId)->first() : null;
-    $logoUrl = $logo ? $logo->url() : null;
+    $siteTitle = theme_site_title();
+    $tagline = theme_tagline();
 
-    $logoWidth = (int) ($o['logo_width'] ?? 200);
-    if ($logoWidth <= 0) {
-        $logoWidth = 200;
-    }
+    $logoId = (int) data_get($o, 'site_identity.logo_media_id', 0);
+    $logo = $logoId ? \App\Models\Media::query()->with('variantRecords')->whereKey($logoId)->first() : null;
+
+    $logoUrl = theme_logo_url();
+    $logoWidth = theme_logo_width();
 
     $logoNaturalWidth = 0;
     $logoNaturalHeight = 0;
@@ -54,23 +54,28 @@
     $logoVariantKey = 'thumb';
     $logoVariantKeys = ['thumb', 'hero_sm', 'medium'];
 
-    // Favicon
-    $faviconId = (int) ($o['favicon_media_id'] ?? 0);
-    $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
-    $faviconUrl = $favicon ? $favicon->url() : null;
+    $faviconUrl = theme_favicon_url();
 @endphp
+
+@if ($faviconUrl)
+    @push('head')
+        <link rel="icon" href="{{ $faviconUrl }}">
+        <link rel="shortcut icon" href="{{ $faviconUrl }}">
+        <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
+    @endpush
+@endif
 
 <header id="site-header" class="bg-white">
     <div class="cms-container mx-auto px-4">
         <div class="flex items-center justify-between gap-4 pt-12 pb-8">
             <a href="{{ url('/') }}"
                 class="no-link-affordance flex items-center gap-3 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
-                aria-label="Home">
+                aria-label="{{ $siteTitle }}">
                 @if ($logo instanceof \App\Models\Media)
                     {!! cms_picture(
                         $logo,
                         [
-                            'alt' => config('app.name', 'Siatex'),
+                            'alt' => $siteTitle,
                             'class' => 'logo-img',
                             'style' => 'width: ' . $logoWidth . 'px; height:auto;',
                             'width' => $logoWidth,
@@ -84,25 +89,30 @@
                         $logoVariantKeys,
                     ) !!}
                 @elseif ($logoUrl)
-                    <img class="logo-img" src="{{ $logoUrl }}" alt="{{ config('app.name', 'Siatex') }}"
+                    <img class="logo-img" src="{{ $logoUrl }}" alt="{{ $siteTitle }}"
                         width="{{ $logoWidth }}" height="{{ $logoHeight }}"
                         style="width: {{ $logoWidth }}px; height:auto;" loading="eager" fetchpriority="high"
                         decoding="async">
                 @else
-                    <span class="text-xl font-extrabold tracking-tight">{{ config('app.name', 'Siatex') }}</span>
+                    <div class="flex flex-col">
+                        <span class="text-xl font-extrabold tracking-tight">{{ $siteTitle }}</span>
+                        @if ($tagline !== '')
+                            <span class="text-sm opacity-80">{{ $tagline }}</span>
+                        @endif
+                    </div>
                 @endif
             </a>
 
-            <div class="flex items-center gap-6 text-sm text-slate-700 data-cms-header-actions">
+            <div class="data-cms-header-actions flex items-center gap-6 text-sm">
                 @if ($status !== '')
-                    <div class="hidden text-slate-600 md:block">
+                    <div class="hidden opacity-80 md:block">
                         {{ $status }}
                     </div>
                 @endif
 
                 @if ($phone !== '')
                     <a href="tel:{{ preg_replace('/\s+/', '', $phone) }}"
-                        class="hidden items-center gap-2 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
+                        class="hidden items-center gap-2 underline decoration-[1.5px] underline-offset-4 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
                         <span aria-hidden="true">📞</span>
                         <span class="font-medium">{{ $phone }}</span>
                     </a>
@@ -110,7 +120,7 @@
 
                 @if ($email !== '')
                     <a href="mailto:{{ $email }}"
-                        class="hidden items-center gap-2 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
+                        class="hidden items-center gap-2 underline decoration-[1.5px] underline-offset-4 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99] md:flex">
                         <span aria-hidden="true">✉️</span>
                         <span class="font-medium">{{ $email }}</span>
                     </a>

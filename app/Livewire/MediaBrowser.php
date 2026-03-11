@@ -6,6 +6,7 @@ use App\Cms\Media\MediaUploader;
 use App\Models\Media;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\UploadedFile;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -17,7 +18,6 @@ class MediaBrowser extends Component
     use WithFileUploads;
 
     public bool $multiple = false;
-
     public ?int $maxItems = null;
 
     /** @var array<int,int> */
@@ -31,12 +31,55 @@ class MediaBrowser extends Component
     /** @var array<int, UploadedFile> */
     public array $uploads = [];
 
-    public function mount(bool $multiple = false, ?int $maxItems = null, array $selectedIds = [], string $eventName = 'media-picker-selected'): void
-    {
+    public ?string $targetKey = null;
+    public ?string $source = null;
+    public string $type = 'all'; // all|image
+
+    public bool $isOpen = false;
+    public bool $autoConfirmSingle = true;
+
+    public function mount(
+        bool $multiple = false,
+        ?int $maxItems = null,
+        array $selectedIds = [],
+        string $eventName = 'media-picker-selected',
+        ?string $targetKey = null,
+        ?string $source = null,
+        string $type = 'all'
+    ): void {
         $this->multiple = $multiple;
         $this->maxItems = $maxItems;
         $this->selectedIds = array_values(array_unique(array_filter(array_map('intval', $selectedIds))));
         $this->eventName = $eventName;
+        $this->targetKey = $targetKey;
+        $this->source = $source;
+        $this->type = in_array($type, ['all', 'image'], true) ? $type : 'all';
+    }
+
+    #[On('cms-media-browser-open')]
+    public function openFromCustomizer(
+        ?string $targetKey = null,
+        ?string $type = 'image',
+        ?string $source = null,
+        ?bool $multiple = false,
+        ?int $maxItems = null
+    ): void {
+        $this->isOpen = true;
+        $this->targetKey = $targetKey;
+        $this->source = $source ?: 'theme-customizer';
+        $this->type = in_array($type, ['all', 'image'], true) ? $type : 'all';
+        $this->multiple = (bool) $multiple;
+        $this->maxItems = $maxItems;
+        $this->selectedIds = [];
+        $this->resetPage();
+
+        $this->dispatch('cms-media-browser-visibility', open: true);
+    }
+
+    public function close(): void
+    {
+        $this->isOpen = false;
+        $this->dispatch('cms-media-browser-visibility', open: false);
     }
 
     public function updatingSearch(): void
@@ -48,6 +91,11 @@ class MediaBrowser extends Component
     {
         if (!$this->multiple) {
             $this->selectedIds = [$id];
+
+            if ($this->autoConfirmSingle) {
+                $this->confirm();
+            }
+
             return;
         }
 
@@ -66,7 +114,38 @@ class MediaBrowser extends Component
 
     public function confirm(): void
     {
-        $this->dispatch($this->eventName, ids: $this->selectedIds);
+        if ($this->multiple) {
+            $this->dispatch(
+                $this->eventName,
+                ids: $this->selectedIds,
+                targetKey: $this->targetKey,
+                source: $this->source
+            );
+
+            $this->close();
+            return;
+        }
+
+        $selectedId = $this->selectedIds[0] ?? null;
+        if (!$selectedId) {
+            return;
+        }
+
+        $this->dispatch(
+            $this->eventName,
+            ids: [$selectedId],
+            targetKey: $this->targetKey,
+            source: $this->source
+        );
+
+        $this->dispatch(
+            'cms-media-selected',
+            mediaId: (int) $selectedId,
+            targetKey: $this->targetKey,
+            source: $this->source
+        );
+
+        $this->close();
     }
 
     public function upload(): void
@@ -78,26 +157,39 @@ class MediaBrowser extends Component
         /** @var MediaUploader $uploader */
         $uploader = app(MediaUploader::class);
 
+        $lastUploadedId = null;
+
         foreach ($this->uploads as $file) {
             if (!$file instanceof UploadedFile) {
                 continue;
             }
 
             $media = $uploader->upload($file);
+            $lastUploadedId = (int) $media->id;
 
-            // auto-select newly uploaded
             $this->toggle((int) $media->id);
         }
 
         $this->uploads = [];
         $this->resetPage();
+
+        if (!$this->multiple && $lastUploadedId && $this->autoConfirmSingle) {
+            $this->selectedIds = [$lastUploadedId];
+            $this->confirm();
+        }
     }
 
     public function render(): View
     {
         $q = Media::query()
-            ->with('variantRecords')   // ✅ IMPORTANT: prevents N+1 in thumbnail grid
+            ->with('variantRecords')
             ->orderByDesc('id');
+
+        if ($this->type === 'image') {
+            $q->where(function ($qq) {
+                $qq->where('mime_type', 'like', 'image/%');
+            });
+        }
 
         if (trim($this->search) !== '') {
             $s = trim($this->search);

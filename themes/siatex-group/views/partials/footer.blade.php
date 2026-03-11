@@ -8,13 +8,25 @@
     $sidebarRenderer = app(\App\Cms\Widgets\SidebarRenderer::class);
     $hooks = app(Hooks::class);
 
+    $footerData = theme_footer_data();
+
+    $bg = $footerData['background_color'] ?? '#ffffff';
+    $text = $footerData['text_color'] ?? '#111827';
+    $align = $footerData['text_alignment'] ?? 'center';
+
+    $siteName = theme_site_title();
+
+    $beforeCopyright = (string) ($footerData['before_copyright'] ?? '');
+    $copyrightHtml = (string) ($footerData['copyright_html'] ?? '');
+    $secondLine = (string) ($footerData['second_line'] ?? '');
+
     $footerMenu = $menuRenderer->renderLocation('footer');
 
     $footerMenu = str_replace(
         ['class="cms-menu"', 'class="cms-menu__link"', 'class="cms-menu__item"'],
         [
             'class="cms-menu flex flex-wrap items-center gap-5 text-sm"',
-            'class="cms-menu__link text-slate-600 hover:text-slate-900 transition"',
+            'class="cms-menu__link transition hover:opacity-80"',
             'class="cms-menu__item"',
         ],
         $footerMenu,
@@ -43,7 +55,8 @@
     };
 @endphp
 
-<footer class="border-t border-slate-200 bg-slate-50">
+<footer class="cms-footer border-t"
+    style="background: {{ $bg }}; color: {{ $text }}; border-color: rgba(0,0,0,.12);">
     <div class="cms-container mx-auto px-4 py-10">
         @if (!empty($footerColumnHtml))
             <div class="mb-8 grid gap-6 {{ $gridClass }}">
@@ -56,24 +69,41 @@
         @endif
 
         @if (trim($bottomFooterHtml) !== '')
-            <div class="border-t border-slate-200 pt-8">
-                <div class="prose prose-slate max-w-none">
+            <div class="border-t pt-8" style="border-color: rgba(0,0,0,.12);">
+                <div class="prose max-w-none">
                     {!! $bottomFooterHtml !!}
                 </div>
             </div>
         @endif
 
-        <div
-            class="mt-8 flex flex-col items-start justify-between gap-4 border-t border-slate-200 pt-6 md:flex-row md:items-center">
+        <div class="mt-8 border-t pt-6" style="border-color: rgba(0,0,0,.12); text-align: {{ $align }};">
+            @if ($beforeCopyright !== '')
+                <div class="mb-3">
+                    {!! nl2br(e($beforeCopyright)) !!}
+                </div>
+            @endif
+
             @if (trim($footerMenu) !== '')
-                <nav aria-label="Footer navigation">
+                <nav aria-label="Footer navigation" class="mb-4">
                     {!! $footerMenu !!}
                 </nav>
             @endif
 
-            <div class="text-sm text-slate-500">
-                © {{ date('Y') }} {{ config('app.name', 'Siatex') }}. All rights reserved.
-            </div>
+            @if ($copyrightHtml !== '')
+                <div class="copyright-text">
+                    {!! $copyrightHtml !!}
+                </div>
+            @else
+                <div class="copyright-text">
+                    © {{ date('Y') }} {{ $siteName }}. All rights reserved.
+                </div>
+            @endif
+
+            @if ($secondLine !== '')
+                <div class="mt-2 opacity-80">
+                    {{ $secondLine }}
+                </div>
+            @endif
         </div>
     </div>
 </footer>

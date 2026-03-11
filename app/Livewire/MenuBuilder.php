@@ -19,51 +19,41 @@ class MenuBuilder extends Component
     public ?int $activeMenuId = null;
 
     /**
-     * Tabs for WP-like UI (you will use it in blade):
-     * - edit       : Edit Menus (structure + add items)
+     * Tabs for WP-like UI:
+     * - edit       : Edit Menus
      * - locations  : Manage Locations
      * - create     : Create New Menu
      */
     public string $activeTab = 'edit';
 
-    // Menu actions UI
     public string $newMenuName = '';
     public bool $isRenaming = false;
     public string $renameValue = '';
 
-    // ✅ Location assignment (current persisted assignment)
     public ?string $activeLocationKey = null;
-
-    // ✅ Location draft (only saved when user clicks Save)
     public ?string $draftLocationKey = null;
 
-    // Left panel search
     public string $searchPosts = '';
     public string $searchPages = '';
     public string $searchTerms = '';
 
-    // Left panel selected IDs
     public array $selectedPostIds = [];
     public array $selectedPageIds = [];
     public array $selectedTermIds = [];
 
-    // Custom link
     public string $customLabel = '';
     public string $customUrl = '';
 
-    // Right side state (DRAFT state now)
-    public array $tree = [];       // nested structure (draft)
-    public array $items = [];      // editable state by id (draft)
-    public array $collapsed = [];  // collapse/expand per item id
+    public array $tree = [];
+    public array $items = [];
+    public array $collapsed = [];
 
-    // Unsaved changes flags
     public bool $hasUnsavedChanges = false;
     public bool $structureDirty = false;
     public bool $itemsDirty = false;
     public bool $locationDirty = false;
 
-    // Optional UI helpers
-    public ?int $lastSavedAt = null;     // timestamp of last Save Menu
+    public ?int $lastSavedAt = null;
     public ?int $lastSavedAtLocation = null;
 
     public function mount(): void
@@ -75,6 +65,10 @@ class MenuBuilder extends Component
             : null;
 
         $this->draftLocationKey = $this->activeLocationKey;
+
+        if (!$this->activeMenuId) {
+            $this->activeTab = 'create';
+        }
 
         $this->reload();
     }
@@ -91,22 +85,18 @@ class MenuBuilder extends Component
         ]);
     }
 
-    // -------------------------
-    // Toast helper
-    // -------------------------
     private function toast(string $type, string $title, string $message, int $timeout = 2500): void
     {
         $this->dispatch('toast', [
-            'type' => $type,   // success|error|warning|info
+            'type' => $type,
             'title' => $title,
             'message' => $message,
             'timeout' => $timeout,
         ]);
+
+        $this->dispatch('customizer-notice', message: $message, type: $type);
     }
 
-    // -------------------------
-    // ✅ Cache invalidation helpers (MENU)
-    // -------------------------
     private function bumpMenuLocationCache(?string $locationKey): void
     {
         $locationKey = $locationKey !== null ? trim($locationKey) : null;
@@ -135,18 +125,37 @@ class MenuBuilder extends Component
         }
     }
 
-    // -------------------------
-    // Tabs
-    // -------------------------
     public function setTab(string $tab): void
     {
         $allowed = ['edit', 'locations', 'create'];
         $this->activeTab = in_array($tab, $allowed, true) ? $tab : 'edit';
     }
 
-    // -------------------------
-    // Menu header actions
-    // -------------------------
+    public function openCreateMenuPanel(): void
+    {
+        $this->activeTab = 'create';
+        $this->newMenuName = '';
+        $this->dispatch('menu-builder-panel-changed', panel: 'create');
+    }
+
+    public function openEditMenusPanel(): void
+    {
+        $this->activeTab = 'edit';
+        $this->dispatch('menu-builder-panel-changed', panel: 'edit');
+    }
+
+    public function openManageLocationsPanel(): void
+    {
+        $this->activeTab = 'locations';
+        $this->dispatch('menu-builder-panel-changed', panel: 'locations');
+    }
+
+    public function cancelCreateMenu(): void
+    {
+        $this->newMenuName = '';
+        $this->activeTab = $this->activeMenuId ? 'edit' : 'create';
+    }
+
     public function selectMenu(int $menuId): void
     {
         $this->activeMenuId = $menuId;
@@ -160,6 +169,14 @@ class MenuBuilder extends Component
 
         $this->reload();
         $this->toast('info', 'Menu selected', 'You are now editing a different menu.');
+    }
+
+    public function selectMenuAndEdit(int $menuId): void
+    {
+        $this->selectMenu($menuId);
+        $this->activeTab = 'edit';
+
+        $this->dispatch('menu-builder-panel-changed', panel: 'edit');
     }
 
     public function createMenu(): void
@@ -186,6 +203,9 @@ class MenuBuilder extends Component
 
         $this->reload();
         $this->setTab('edit');
+
+        $this->dispatch('menu-created', menuId: (int) $menu->id);
+        $this->dispatch('menu-builder-panel-changed', panel: 'edit');
 
         $this->toast('success', 'Menu created', 'New menu created successfully.');
     }
@@ -274,7 +294,6 @@ class MenuBuilder extends Component
             }
 
             $this->activeMenuId = (int) $new->id;
-
             $this->activeLocationKey = null;
             $this->draftLocationKey = null;
         });
@@ -302,7 +321,6 @@ class MenuBuilder extends Component
             Menu::query()->whereKey($menuId)->delete();
         });
 
-        // Bust cache for any locations that were pointing to this menu
         foreach ($oldLocationKeys as $k) {
             $this->bumpMenuLocationCache(is_string($k) ? $k : null);
         }
@@ -316,12 +334,12 @@ class MenuBuilder extends Component
         $this->draftLocationKey = $this->activeLocationKey;
 
         $this->reload();
+        $this->activeTab = $this->activeMenuId ? 'edit' : 'create';
+
+        $this->dispatch('menu-deleted');
         $this->toast('success', 'Menu deleted', 'Menu has been deleted.');
     }
 
-    // -------------------------
-    // ✅ Location assignment (DRAFT + SAVE)
-    // -------------------------
     public function setDraftLocation(?string $locationKey): void
     {
         $locationKey = $locationKey !== null ? trim($locationKey) : null;
@@ -359,7 +377,6 @@ class MenuBuilder extends Component
             $this->lastSavedAtLocation = time();
             $this->syncUnsavedFlag();
 
-            // Bust cache for old location (it was unassigned)
             $this->bumpMenuLocationCache($oldLocationKey);
 
             $this->toast('success', 'Location saved', 'Menu location has been unassigned.');
@@ -385,16 +402,12 @@ class MenuBuilder extends Component
         $this->lastSavedAtLocation = time();
         $this->syncUnsavedFlag();
 
-        // Bust cache for both old + new location keys (covers re-assign)
         $this->bumpMenuLocationCache($oldLocationKey);
         $this->bumpMenuLocationCache($locationKey);
 
         $this->toast('success', 'Location saved', 'Menu location assignment saved.');
     }
 
-    // -------------------------
-    // Left panel add actions
-    // -------------------------
     public function addSelectedPosts(): void
     {
         $this->addPostsByIds($this->selectedPostIds);
@@ -438,7 +451,6 @@ class MenuBuilder extends Component
             }
         });
 
-        // Bust cache for locations that use this menu
         $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
 
         $this->selectedTermIds = [];
@@ -477,7 +489,6 @@ class MenuBuilder extends Component
             MenuItem::query()->create($data);
         });
 
-        // Bust cache for locations that use this menu
         $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
 
         $this->customLabel = '';
@@ -487,12 +498,8 @@ class MenuBuilder extends Component
         $this->toast('success', 'Item added', 'Custom link has been added to the menu.');
     }
 
-    // -------------------------
-    // Right side actions
-    // -------------------------
     public function toggleCollapse(int $id): void
     {
-        // default should be collapsed = true
         $current = (bool) ($this->collapsed[$id] ?? true);
         $this->collapsed[$id] = !$current;
     }
@@ -507,10 +514,8 @@ class MenuBuilder extends Component
             $this->deleteItemRecursive($id);
         });
 
-        // Bust cache for locations that use this menu
         $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
 
-        // Keep UI consistent
         $this->structureDirty = true;
         $this->itemsDirty = true;
         $this->syncUnsavedFlag();
@@ -565,14 +570,12 @@ class MenuBuilder extends Component
                             'label' => $row['label'] ?? null,
                             'url' => $row['url'] ?? null,
                             'is_enabled' => (bool) ($row['is_enabled'] ?? true),
-
                             'target' => $row['target'] ?? null,
                             'rel' => $row['rel'] ?? null,
                             'css_class' => $row['css_class'] ?? null,
                             'css_id' => $row['css_id'] ?? null,
                             'icon' => $row['icon'] ?? null,
                             'description' => $row['description'] ?? null,
-
                             'visibility' => $row['visibility'] ?? null,
                             'data' => $row['data'] ?? null,
                         ]);
@@ -587,7 +590,6 @@ class MenuBuilder extends Component
             throw $e;
         }
 
-        // ✅ Bust cache for all locations that use this menu
         $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
 
         $this->lastSavedAt = time();
@@ -597,23 +599,19 @@ class MenuBuilder extends Component
 
         $this->reload();
 
+        $this->dispatch('menu-saved', menuId: (int) $this->activeMenuId);
         $this->toast('success', 'Menu saved', 'Your menu changes have been saved.');
     }
 
-    // -------------------------
-    // Internals
-    // -------------------------
     private function reload(): void
     {
         $this->tree = $this->buildTree();
         $this->items = $this->buildItemsState();
 
-        // ✅ Default should be COLLAPSED (true)
         foreach (array_keys($this->items) as $id) {
             $this->collapsed[$id] = $this->collapsed[$id] ?? true;
         }
 
-        // reset dirty flags after reload
         $this->hasUnsavedChanges = false;
         $this->structureDirty = false;
         $this->itemsDirty = false;
@@ -645,14 +643,12 @@ class MenuBuilder extends Component
                 'label' => (string) ($r->label ?? ''),
                 'url' => (string) ($r->url ?? ''),
                 'is_enabled' => (bool) $r->is_enabled,
-
                 'target' => $r->target,
                 'rel' => $r->rel,
                 'css_class' => $r->css_class,
                 'css_id' => $r->css_id,
                 'icon' => $r->icon,
                 'description' => $r->description,
-
                 'visibility' => is_array($r->visibility) ? $r->visibility : [],
                 'data' => is_array($r->data) ? $r->data : [],
             ];
@@ -778,7 +774,6 @@ class MenuBuilder extends Component
             }
         });
 
-        // Bust cache for locations that use this menu
         $this->bumpAllLocationsForMenu((int) $this->activeMenuId);
 
         $this->reload();

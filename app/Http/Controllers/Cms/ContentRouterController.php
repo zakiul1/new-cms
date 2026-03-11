@@ -52,14 +52,10 @@ class ContentRouterController extends Controller
             }
         }
 
-        // ✅ One standard homepage system: core.homepage_page_id
-        $homepageId = $settings->get('core', 'homepage_page_id', null);
-        $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
-        if ($homepageId !== null && $homepageId <= 0) {
-            $homepageId = null;
-        }
+        // Homepage preview: use customizer draft first, then saved DB value
+        [$homepageMode, $homepageId] = $this->resolveHomepagePreviewState($request, $settings);
 
-        if ($homepageId !== null) {
+        if ($homepageMode === 'static_page' && $homepageId !== null) {
             $now = now();
 
             $homePage = Post::query()
@@ -93,6 +89,52 @@ class ContentRouterController extends Controller
             'privateFrom' => (string) $request->query('from', ''),
             'adminEditUrl' => url('/lara-admin'),
         ]);
+    }
+
+    private function resolveHomepagePreviewState(Request $request, SettingsRepository $settings): array
+    {
+        $mode = 'latest_posts';
+        $pageId = null;
+
+        // Saved DB value
+        $savedHomepageId = $settings->get('core', 'homepage_page_id', null);
+        $savedHomepageId = is_numeric($savedHomepageId) ? (int) $savedHomepageId : null;
+
+        if ($savedHomepageId !== null && $savedHomepageId > 0) {
+            $mode = 'static_page';
+            $pageId = $savedHomepageId;
+        }
+
+        // If not customizer preview, use saved value only
+        $isCustomizerPreview = $request->boolean('customizer');
+        $previewTheme = trim((string) $request->query('preview_theme', ''));
+
+        if (!$isCustomizerPreview || $previewTheme === '' || !auth()->check()) {
+            return [$mode, $pageId];
+        }
+
+        // Read draft from session
+        $draft = session()->get("theme_customizer.draft.{$previewTheme}", []);
+        $draft = is_array($draft) ? $draft : [];
+
+        $draftMode = data_get($draft, 'homepage.mode');
+        $draftPageId = data_get($draft, 'homepage.page_id');
+
+        if ($draftMode === 'latest_posts') {
+            return ['latest_posts', null];
+        }
+
+        if ($draftMode === 'static_page') {
+            $draftPageId = is_numeric($draftPageId) ? (int) $draftPageId : null;
+
+            if ($draftPageId !== null && $draftPageId > 0) {
+                return ['static_page', $draftPageId];
+            }
+
+            return ['latest_posts', null];
+        }
+
+        return [$mode, $pageId];
     }
 
     // ✅ FIX: slug can be null when "/" matches catch-all
@@ -156,7 +198,6 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($tag) {
-                // Make current tag available to shortcode parsing (context + fallback)
                 $request->attributes->set('siatex_tag', $tag);
 
                 $termId = (int) ($tag->media_category_term_id ?? 0);
@@ -187,7 +228,6 @@ class ContentRouterController extends Controller
                     $seo['title'] = $tag->title;
                 }
 
-                // ✅ Canonical enforcement MUST use trailing slash standard
                 $canonicalPath = '/' . trim((string) $tag->slug, '/') . '/';
                 if ($this->pathsDiffer($path, $canonicalPath)) {
                     return $this->redirectPreserveQuery($request, $canonicalPath, 301);
@@ -203,10 +243,6 @@ class ContentRouterController extends Controller
 
         $now = now();
 
-        /**
-         * ✅ 1) Pages + MultiPages stay WP-style: only single-segment /{slug}
-         * MultiPage CPT: posts.type = 'multipage'
-         */
         if ($slug !== '' && !str_contains($slug, '/')) {
             $page = Post::query()
                 ->whereIn('type', ['page', 'multipage'])
@@ -218,10 +254,6 @@ class ContentRouterController extends Controller
                 ->first();
 
             if ($page) {
-
-                /**
-                 * ✅ FIX: Do NOT canonical-redirect generated multipage URLs.
-                 */
                 $isGeneratedMultipage =
                     $page->type === 'multipage'
                     && (bool) $request->attributes->get('multipage_generated', false);
@@ -233,7 +265,6 @@ class ContentRouterController extends Controller
                     }
                 }
 
-                // ✅ FORCE TEMPLATE FOR SEGMENT REQUESTS (from MultiPageResolver)
                 $forced = trim((string) $request->attributes->get('cms_forced_template', ''));
                 if ($forced !== '') {
                     $metaJson = $page->meta_json;
@@ -308,7 +339,6 @@ class ContentRouterController extends Controller
             }
         }
 
-        // 2) Posts via current permalink structure
         $match = $permalinks->matchPostPath($slug);
 
         $post = null;
@@ -322,7 +352,6 @@ class ContentRouterController extends Controller
         if ($post) {
             $canonicalPath = $permalinks->postPath($post);
 
-            // If not plain permalink mode, enforce canonical
             if ($canonicalPath !== '/?p=' . $post->id) {
                 if ($this->pathsDiffer($path, $canonicalPath)) {
                     return $this->redirectPreserveQuery($request, $canonicalPath, 301);
@@ -344,7 +373,6 @@ class ContentRouterController extends Controller
             ]);
         }
 
-        // 3) Attachment pages (Media)
         if ($slug !== '' && !str_contains($slug, '/')) {
             $attachmentsEnabled = (bool) $settings->get('core', 'attachment_pages_enabled', false);
 
@@ -355,12 +383,10 @@ class ContentRouterController extends Controller
                     ->first();
 
                 if ($media) {
-                    // ✅ CHANGED: private media now redirects to homepage with 301
                     if ($this->hasPrivateMediaCategory($media)) {
                         return redirect()->to(url('/'), 301);
                     }
 
-                    // ✅ Attachment canonical MUST include trailing slash
                     $canonicalPath = '/' . trim((string) $media->slug, '/') . '/';
                     if ($this->pathsDiffer($path, $canonicalPath)) {
                         return $this->redirectPreserveQuery($request, $canonicalPath, 301);
@@ -416,7 +442,6 @@ class ContentRouterController extends Controller
             }
         }
 
-        // 4) Slug history fallback
         $oldSlugCandidate = null;
 
         if (is_array($match) && isset($match['slug'])) {
@@ -459,12 +484,6 @@ class ContentRouterController extends Controller
         return $this->normalizeForLookup($a) !== $this->normalizeForLookup($b);
     }
 
-    /**
-     * ✅ normalize path to your standard:
-     * - always leading slash
-     * - always trailing slash EXCEPT root "/"
-     * - DO NOT touch file-like paths
-     */
     private function normalizeForLookup(string $path): string
     {
         $path = '/' . ltrim($path, '/');
@@ -484,11 +503,6 @@ class ContentRouterController extends Controller
         return rtrim($path, '/') . '/';
     }
 
-    /**
-     * ✅ NEW: safe trailing slash normalization for either:
-     * - absolute URL (http/https)
-     * - relative path (/slug or slug)
-     */
     private function ensureTrailingSlashUrlOrPath(string $value): string
     {
         $value = trim($value);
@@ -496,7 +510,6 @@ class ContentRouterController extends Controller
             return $value;
         }
 
-        // Absolute URL?
         if (preg_match('#^https?://#i', $value)) {
             $parts = parse_url($value);
             if ($parts === false) {
@@ -505,7 +518,6 @@ class ContentRouterController extends Controller
 
             $path = $parts['path'] ?? '/';
 
-            // don't touch file-like paths
             $lastSeg = basename((string) $path);
             if ($lastSeg !== '' && str_contains($lastSeg, '.')) {
                 return $value;
@@ -546,7 +558,6 @@ class ContentRouterController extends Controller
             return $out;
         }
 
-        // Relative path
         return $this->normalizeForLookup($value);
     }
 
@@ -558,12 +569,10 @@ class ContentRouterController extends Controller
             $to = '/';
         }
 
-        // If it's a relative path, ensure it starts with "/"
         if ($to !== '' && $to[0] !== '/' && !str_starts_with($to, 'http')) {
             $to = '/' . $to;
         }
 
-        // Enforce trailing slash for relative paths (except "/" and file-like)
         if (!str_starts_with($to, 'http')) {
             $to = $this->normalizeForLookup($to);
         }
@@ -576,9 +585,6 @@ class ContentRouterController extends Controller
         return redirect()->to($to, $status);
     }
 
-    /**
-     * ✅ UPDATED: allow forced template from request attribute (segment pages)
-     */
     private function resolveFrontendView(Post $post, string $fallback, ?Request $request = null): string
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
@@ -598,8 +604,6 @@ class ContentRouterController extends Controller
         return view()->exists($view) ? $view : $fallback;
     }
 
-    // ------------------- ✅ MultiPage helpers (Option C + global token replacement) -------------------
-
     private function multipageFirstCsvRowSegments(array $mp): array
     {
         $csvFile = trim((string) ($mp['csv_file'] ?? $mp['data_file'] ?? $mp['file'] ?? ''));
@@ -616,7 +620,7 @@ class ContentRouterController extends Controller
             'multipage/' . $csvFile,
         ];
 
-        $disk = Storage::disk('local'); // storage/app
+        $disk = Storage::disk('local');
 
         $found = null;
         foreach ($candidates as $rel) {
@@ -638,7 +642,7 @@ class ContentRouterController extends Controller
 
         try {
             if ($hasHeader) {
-                @fgetcsv($fh); // skip header
+                @fgetcsv($fh);
             }
 
             $row = @fgetcsv($fh);
@@ -668,9 +672,7 @@ class ContentRouterController extends Controller
         }
 
         $s = mb_strtolower($s);
-
         $s = preg_replace('/[^\p{L}\p{N}]+/u', '-', $s) ?? $s;
-
         $s = trim($s, '-');
         $s = preg_replace('/-+/', '-', $s) ?? $s;
 
@@ -726,8 +728,6 @@ class ContentRouterController extends Controller
         return $data;
     }
 
-    // ------------------- Helpers below (unchanged + SEO shortcode helpers) -------------------
-
     private function hasPrivateMediaCategory(Media $media): bool
     {
         if (method_exists($media, 'categories')) {
@@ -759,7 +759,6 @@ class ContentRouterController extends Controller
             try {
                 $value = (string) do_shortcode($value, $ctx);
             } catch (\Throwable $e) {
-                // ignore
             }
         }
 
@@ -778,7 +777,6 @@ class ContentRouterController extends Controller
             try {
                 $value = (string) do_shortcode($value, $ctx);
             } catch (\Throwable $e) {
-                // ignore
             }
         }
 
@@ -815,7 +813,6 @@ class ContentRouterController extends Controller
                 : $permalinks->postUrl($post);
         }
 
-        // ✅ FIX: safe trailing slash for absolute URL or relative path
         $canonical = $this->ensureTrailingSlashUrlOrPath($canonical);
 
         $robotsRaw = (string) ($seo['robots'] ?? '');
@@ -899,7 +896,6 @@ class ContentRouterController extends Controller
             $canonical = $base . '/' . trim((string) $media->slug, '/');
         }
 
-        // ✅ FIX: safe trailing slash for absolute URL or relative path
         $canonical = $this->ensureTrailingSlashUrlOrPath($canonical);
 
         $robotsRaw = (string) ($seo['robots'] ?? '');
@@ -976,7 +972,6 @@ class ContentRouterController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
-        // ✅ CHANGED: private term archives now redirect to homepage with 301
         if (($term->visibility ?? 'public') !== 'public') {
             return redirect()->to(url('/'), 301);
         }
@@ -1001,9 +996,6 @@ class ContentRouterController extends Controller
         ]);
     }
 
-    /**
-     * @return array{0:string,1:string} [css, js]
-     */
     private function extractPostAssets(Post $post): array
     {
         $meta = is_array($post->meta_json) ? $post->meta_json : [];
@@ -1040,9 +1032,6 @@ class ContentRouterController extends Controller
             ->all();
     }
 
-    /**
-     * @return array{0:string,1:string} [css, js]
-     */
     private function extractMediaAssets(Media $media): array
     {
         $meta = is_array($media->meta) ? $media->meta : [];
