@@ -96,7 +96,6 @@
 @if ($showTop || $items->count() > 0)
     <div class="page-container">
         <div class="{{ $rootClassAttr }}">
-
             {{-- TOP SECTION --}}
             @if ($showTop)
                 @if ($topVariant === 'hybrid')
@@ -124,17 +123,17 @@
                                                     [
                                                         'alt' => $topTitle !== '' ? $topTitle : 'Featured image',
                                                         'loading' => 'lazy',
-                                                        'fetchpriority' => 'low',
+                                                        'fetchpriority' => 'auto',
                                                         'decoding' => 'async',
                                                         'sizes' => $topHybridSizes,
                                                     ],
                                                     'hero_sm',
-                                                    ['hero_sm', 'medium', 'medium_large'],
+                                                    ['thumb', 'small', 'hero_sm', 'large'],
                                                 ) !!}
                                             @else
-                                                <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
+                                                <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('small') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
                                                     alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
-                                                    loading="lazy" fetchpriority="low" decoding="async">
+                                                    loading="lazy" fetchpriority="auto" decoding="async">
                                             @endif
                                         </div>
 
@@ -150,10 +149,10 @@
                                                         'sizes' => $topHybridSizes,
                                                     ],
                                                     'hero_sm',
-                                                    ['hero_sm', 'medium', 'medium_large'],
+                                                    ['thumb', 'small', 'hero_sm', 'large'],
                                                 ) !!}
                                             @else
-                                                <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
+                                                <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('small') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
                                                     alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                     loading="eager" fetchpriority="high" decoding="async">
                                             @endif
@@ -172,10 +171,10 @@
                                                     'sizes' => $topHybridSizes,
                                                 ],
                                                 'hero_sm',
-                                                ['hero_sm', 'medium', 'medium_large'],
+                                                ['thumb', 'small', 'hero_sm', 'large'],
                                             ) !!}
                                         @else
-                                            <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
+                                            <img src="{{ $topMediaBack->variantUrl('hero_sm', 'jpeg') ?: $topMediaBack->variantUrl('hero_sm') ?: $topMediaBack->variantUrl('small') ?: $topMediaBack->variantUrl('medium') ?: $topMediaBack->url() }}"
                                                 alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                 loading="eager" fetchpriority="high" decoding="async">
                                         @endif
@@ -193,10 +192,10 @@
                                                     'sizes' => $topHybridSizes,
                                                 ],
                                                 'hero_sm',
-                                                ['hero_sm', 'medium', 'medium_large'],
+                                                ['thumb', 'small', 'hero_sm', 'large'],
                                             ) !!}
                                         @else
-                                            <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
+                                            <img src="{{ $topMediaFront->variantUrl('hero_sm', 'jpeg') ?: $topMediaFront->variantUrl('hero_sm') ?: $topMediaFront->variantUrl('small') ?: $topMediaFront->variantUrl('medium') ?: $topMediaFront->url() }}"
                                                 alt="{{ e($topTitle !== '' ? $topTitle : 'Featured image') }}"
                                                 loading="eager" fetchpriority="high" decoding="async">
                                         @endif
@@ -284,6 +283,7 @@
                                     $imageUrl =
                                         (string) ($featuredMedia->variantUrl('hero_sm', 'jpeg') ?:
                                         $featuredMedia->variantUrl('hero_sm') ?:
+                                        $featuredMedia->variantUrl('small') ?:
                                         $featuredMedia->variantUrl('medium') ?:
                                         $featuredMedia->url());
                                 } catch (\Throwable $e) {
@@ -306,23 +306,23 @@
                                                 'class' => 'w-full h-full object-cover',
                                                 'sizes' => $gridImageSizes,
                                                 'loading' => 'lazy',
-                                                'fetchpriority' => 'low',
+                                                'fetchpriority' => 'auto',
                                                 'decoding' => 'async',
                                             ],
-                                            'thumb',
-                                            ['thumb', 'hero_sm', 'medium'],
+                                            'small',
+                                            ['thumb', 'small', 'hero_sm', 'medium'],
                                         ) !!}
                                     @else
                                         <img src="{{ $imageUrl }}"
                                             alt="{{ e($title !== '' ? $title : 'Post image') }}" loading="lazy"
-                                            fetchpriority="low" decoding="async">
+                                            fetchpriority="auto" decoding="async">
                                     @endif
                                 </div>
                             @elseif ($img && $imageUrl !== '')
                                 <div class="sp-img">
                                     <img src="{{ $imageUrl }}"
                                         alt="{{ e($title !== '' ? $title : 'Post image') }}" loading="lazy"
-                                        fetchpriority="low" decoding="async">
+                                        fetchpriority="auto" decoding="async">
                                 </div>
                             @elseif ($img)
                                 <div class="sp-img" aria-hidden="true"></div>
@@ -337,7 +337,7 @@
                             @endif
 
                             @if ($showLearnMoreBtn && !empty($learnMoreUrl))
-                                <a class="sp-more focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                <a class="sp-more focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                     href="{{ $learnMoreUrl }}">
                                     Learn more <span aria-hidden="true">→</span>
                                 </a>
@@ -596,7 +596,7 @@
                 }
 
                 .sp-shortcode .sp-more:hover {
-                    color: #0f4c81;
+                    color: var(--cms-primary);
                 }
 
                 @media (max-width: 767px) {

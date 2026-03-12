@@ -37,7 +37,6 @@
                             (string) ($heroPost->content_html ??
                                 (data_get($heroPost->content_json ?? [], 'html') ?? ($heroPost->excerpt ?? '')));
 
-                        // ✅ Get Media model for responsive variants (cms_picture)
                         $img = null;
                         if (method_exists($heroPost, 'featuredMediaPivot')) {
                             $img = $heroPost->featuredMediaPivot()->first();
@@ -77,16 +76,10 @@
 
     {{-- HERO (ONLY if slider term + published static post exists) --}}
     @if ($showHero)
-        <section class="bg-white mt-[20px]">
+        <section class="mt-[20px] bg-white">
             <div class="cms-container mx-auto px-4 py-10">
                 <div class="bg-gray-50 p-12">
-
-                    {{-- Load the font (required, otherwise browser fallback font shows) --}}
-                    <link rel="preconnect" href="https://fonts.googleapis.com">
-                    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                    <link href="https://fonts.googleapis.com/css2?family=Ropa+Sans&display=swap" rel="stylesheet">
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 items-center gap-0">
+                    <div class="grid grid-cols-1 items-center gap-0 lg:grid-cols-2">
                         {{-- IMAGE (mobile top) --}}
                         <div class="order-1 lg:order-2">
                             @if ($heroMedia instanceof \App\Models\Media && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
@@ -95,17 +88,14 @@
                                         $heroMedia,
                                         [
                                             'alt' => e($heroTitle),
-                                            // mimic your old sizing behavior
                                             'class' => 'w-full h-64 sm:h-80 lg:h-[420px] object-cover',
-                                            // ✅ responsive hint: full width on mobile, half on desktop
                                             'sizes' => '(max-width: 1024px) 100vw, 50vw',
-                                            'loading' => 'lazy',
+                                            'loading' => 'eager',
+                                            'fetchpriority' => 'high',
                                             'decoding' => 'async',
                                         ],
-                                        // base variant
-                                        'large',
-                                        // srcset candidates
-                                        ['medium', 'medium_large', 'large'],
+                                        'hero_sm',
+                                        ['thumb', 'small', 'hero_sm', 'large'],
                                     ) !!}
                                 </div>
                             @endif
@@ -113,13 +103,13 @@
 
                         {{-- TEXT --}}
                         <div class="order-2 lg:order-1">
-                            <div class="py-10 lg:py-0 lg:pr-14 slider-text">
+                            <div class="slider-text py-10 lg:py-0 lg:pr-14">
                                 @if (trim($heroTitle) !== '')
                                     <h1>{{ $heroTitle }}</h1>
                                 @endif
 
                                 @if (trim($heroSubtitle) !== '')
-                                    <div class="mt-6 leading-relaxed text-gray-700 font-semibold italic">
+                                    <div class="slider-subtitle mt-6">
                                         {!! $heroSubtitle !!}
                                     </div>
                                 @endif
@@ -130,16 +120,28 @@
                     <style>
                         .slider-text h1,
                         .slider-text h2 {
-                            font-size: 48px;
-                            font-weight: 400;
-                            color: #666;
-                            text-transform: uppercase;
-                            line-height: 1;
-                            letter-spacing: 0;
+                            font-family: var(--cms-heading-font-family);
+                            font-size: var(--cms-h1-font-size);
+                            font-weight: var(--cms-heading-font-weight);
+                            text-transform: var(--cms-heading-text-transform);
+                            line-height: var(--cms-heading-line-height);
+                            letter-spacing: var(--cms-heading-letter-spacing);
+                            color: var(--cms-heading-color);
                             text-align: left;
                             max-width: 370px;
                             margin-bottom: 15px;
-                            font-family: 'Ropa Sans', sans-serif;
+                        }
+
+                        .slider-subtitle,
+                        .slider-subtitle p,
+                        .slider-subtitle li {
+                            font-family: var(--cms-body-font-family);
+                            font-size: var(--cms-body-font-size);
+                            font-weight: var(--cms-body-font-weight);
+                            line-height: var(--cms-body-line-height);
+                            letter-spacing: var(--cms-body-letter-spacing);
+                            color: var(--cms-body-color);
+                            font-style: italic;
                         }
                     </style>
                 </div>
@@ -148,8 +150,8 @@
     @endif
 
     {{-- PAGE CONTENT --}}
-    <section class="bg-white ">
-        <div class="cms-container mx-auto px-4 pb-12 my-10">
+    <section class="bg-white">
+        <div class="cms-container mx-auto my-10 px-4 pb-12">
             @if ($hasShortcode)
                 <div class="cms-content">
                     {!! $contentHtml !!}

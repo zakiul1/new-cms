@@ -8,8 +8,8 @@
     $desktopMenuHtml = str_replace(
         ['class="cms-menu"', 'class="cms-menu__link"', 'class="cms-menu__item"'],
         [
-            'class="cms-menu hidden md:flex flex-wrap items-center gap-6 text-sm text-white/90"',
-            'class="cms-menu__link underline underline-offset-4 decoration-[1.5px] hover:text-white hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition"',
+            'class="cms-menu topbar-menu hidden md:flex flex-wrap items-center gap-6"',
+            'class="cms-menu__link topbar-link underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition"',
             'class="cms-menu__item"',
         ],
         $menuHtml,
@@ -19,8 +19,8 @@
     $mobileMenuHtml = str_replace(
         ['class="cms-menu"', 'class="cms-menu__link"', 'class="cms-menu__item"'],
         [
-            'class="cms-menu mt-4 space-y-2 text-white/90"',
-            'class="cms-menu__link block py-2 underline underline-offset-4 decoration-[1.5px] hover:text-white hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition"',
+            'class="cms-menu topbar-mobile-menu mt-4 space-y-2"',
+            'class="cms-menu__link topbar-link block py-2 underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition"',
             'class="cms-menu__item"',
         ],
         $menuHtml,
@@ -29,7 +29,7 @@
 
 @if (trim($menuHtml) !== '')
     {{-- NOTE: Topbar is fixed by layout shell now, so no sticky here --}}
-    <div id="site-topbar" class="bg-[#2f6fa3]">
+    <div id="site-topbar" class="bg-[var(--cms-primary)]">
         <div class="cms-container mx-auto px-4">
             <div class="py-2">
                 <nav aria-label="Top navigation" class="flex items-center justify-between gap-3">
@@ -47,9 +47,9 @@
                     {!! $desktopMenuHtml !!}
 
                     {{-- Mobile email only --}}
-                    <div class="whitespace-nowrap text-xs text-white/90 md:hidden">
+                    <div class="topbar-email whitespace-nowrap md:hidden">
                         <a href="mailto:sales@siatex.com"
-                            class="underline underline-offset-4 decoration-[1.5px] hover:text-white hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition">
+                            class="topbar-link underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition">
                             sales@siatex.com
                         </a>
                     </div>
@@ -61,10 +61,10 @@
         <div id="mobileMenuOverlay" class="fixed inset-0 z-[9998] hidden bg-black/60" aria-hidden="true"></div>
 
         <div id="mobileMenu"
-            class="fixed inset-y-0 left-0 z-[9999] hidden w-[85%] max-w-[360px] bg-[#2f6fa3] shadow-2xl"
+            class="fixed inset-y-0 left-0 z-[9999] hidden w-[85%] max-w-[360px] bg-[var(--cms-primary)] shadow-2xl"
             aria-hidden="true">
             <div class="flex items-center justify-between border-b border-white/10 px-4 py-4">
-                <div class="font-semibold text-white">Menu</div>
+                <div class="topbar-panel-title font-semibold text-white">Menu</div>
 
                 <button type="button" id="mobileMenuCloseBtn"
                     class="inline-flex items-center justify-center rounded p-2 text-white/90 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/40"
@@ -81,6 +81,35 @@
             </div>
         </div>
     </div>
+
+    <style>
+        .topbar-menu,
+        .topbar-mobile-menu,
+        .topbar-link,
+        .topbar-email,
+        .topbar-panel-title {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+        }
+
+        .topbar-menu,
+        .topbar-mobile-menu,
+        .topbar-link,
+        .topbar-email {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .topbar-link:hover {
+            color: #fff;
+        }
+
+        .topbar-panel-title {
+            color: #fff;
+        }
+    </style>
 
     <script>
         (function() {

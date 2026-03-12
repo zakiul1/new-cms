@@ -20,21 +20,14 @@
             $productMedia = $post->mediaPivot()->wherePivot('role', 'product')->orderBy('post_media.sort_order')->get();
         }
 
-        $slides = $productMedia
-            ->map(function ($m) {
-                if (is_object($m) && method_exists($m, 'url')) {
-                    return (string) $m->url();
-                }
-                if (is_object($m) && property_exists($m, 'url') && is_string($m->url)) {
-                    return (string) $m->url;
-                }
-                if (is_object($m) && property_exists($m, 'path') && is_string($m->path)) {
-                    return (string) $m->path;
-                }
-                return null;
-            })
-            ->filter(fn($u) => is_string($u) && trim($u) !== '')
+        $productMedia = $productMedia
+            ->filter(fn($m) => $m instanceof \App\Models\Media)
+            ->unique(fn($m) => $m->id ?? spl_object_hash($m))
             ->values();
+
+        if ($productMedia->isNotEmpty()) {
+            $productMedia->loadMissing('variantRecords');
+        }
 
         // 3) Duotone
         $duotoneHex = (string) data_get($post->meta_json, 'duotone.color', '');
@@ -62,14 +55,30 @@
     @endphp
 
     {{-- HERO / SLIDER --}}
-    @if ($slides->count() > 0)
+    @if ($productMedia->count() > 0)
         <section class="cms-hero cms-container">
-            <div class="cms-hero__wrap" data-slider-count="{{ $slides->count() }}">
+            <div class="cms-hero__wrap" data-slider-count="{{ $productMedia->count() }}">
                 <div class="cms-hero__track" id="cmsHeroTrack">
-                    @foreach ($slides as $src)
+                    @foreach ($productMedia as $index => $media)
+                        @php
+                            $isFirstSlide = $index === 0;
+                        @endphp
+
                         <div class="cms-hero__slide">
-                            <img src="{{ $src }}" alt="{{ e($sliderTitle) }}" class="cms-hero__img" loading="lazy"
-                                decoding="async" />
+                            {!! cms_picture(
+                                $media,
+                                [
+                                    'alt' => e($sliderTitle),
+                                    'class' => 'cms-hero__img',
+                                    'sizes' => '100vw',
+                                    'loading' => $isFirstSlide ? 'eager' : 'lazy',
+                                    'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
+                                    'decoding' => 'async',
+                                ],
+                                'hero_sm',
+                                ['thumb', 'small', 'hero_sm', 'large'],
+                            ) !!}
+
                             @if ($duotoneRgb && $duotoneAlpha > 0)
                                 <div class="cms-hero__overlay"
                                     style="background: rgba({{ $duotoneRgb[0] }}, {{ $duotoneRgb[1] }}, {{ $duotoneRgb[2] }}, {{ $duotoneAlpha }});">
@@ -83,17 +92,9 @@
                     <h1 class="cms-hero__title">{{ $sliderTitle }}</h1>
                 </div>
 
-                {{--
-                    ✅ Navigation icons hidden (commented)
-                    If you want back later, uncomment below:
-                    <button class="cms-hero__btn cms-hero__btn--prev" ...>‹</button>
-                    <button class="cms-hero__btn cms-hero__btn--next" ...>›</button>
-                --}}
-
-                {{-- ✅ Indicator: flat bars, gray --}}
-                @if ($slides->count() > 1)
+                @if ($productMedia->count() > 1)
                     <div class="cms-hero__bars" id="cmsHeroDots" aria-label="Slider indicators">
-                        @for ($i = 0; $i < $slides->count(); $i++)
+                        @for ($i = 0; $i < $productMedia->count(); $i++)
                             <button type="button" class="cms-hero__bar" data-dot="{{ $i }}"
                                 aria-label="Go to slide {{ $i + 1 }}"></button>
                         @endfor
@@ -178,22 +179,13 @@
         .cms-hero__title {
             margin: 0;
             color: #fff;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            line-height: 1.03;
+            font-family: var(--cms-heading-font-family);
+            font-size: var(--cms-h1-font-size);
+            font-weight: var(--cms-heading-font-weight);
+            text-transform: var(--cms-heading-text-transform);
+            line-height: var(--cms-heading-line-height);
+            letter-spacing: var(--cms-heading-letter-spacing);
             text-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-            font-size: clamp(40px, 6vw, 92px);
-        }
-
-        .cms-hero__scroll {
-            position: absolute;
-            bottom: 22px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 12px;
-            letter-spacing: 0.25em;
-            opacity: 0.9;
         }
 
         .cms-hero--empty .cms-hero__content {
@@ -202,7 +194,6 @@
             background: #0b0b0b;
         }
 
-        /* ✅ Flat gray indicators */
         .cms-hero__bars {
             position: absolute;
             left: 50%;
@@ -233,10 +224,6 @@
             }
         }
 
-        /* ============================
-                       ✅ Mobile-only optimizations
-                       (No design/logic changes)
-                       ============================ */
         @media (max-width: 768px) {
             .cms-hero.cms-container {
                 padding-left: 0 !important;
@@ -252,9 +239,9 @@
             }
 
             .cms-hero__title {
-                font-size: clamp(28px, 9vw, 48px);
-                line-height: 1.05;
-                letter-spacing: -0.015em;
+                font-size: var(--cms-h1-font-size);
+                line-height: var(--cms-heading-line-height);
+                letter-spacing: var(--cms-heading-letter-spacing);
             }
 
             .cms-hero__bars {
@@ -267,7 +254,6 @@
                 height: 4px;
             }
 
-            /* Slightly reduce content spacing on mobile */
             .cms-container.mx-auto.px-4.py-10 {
                 padding-top: 24px;
                 padding-bottom: 24px;
@@ -280,7 +266,7 @@
             }
 
             .cms-hero__title {
-                font-size: clamp(24px, 10vw, 40px);
+                font-size: var(--cms-h1-font-size);
             }
 
             .cms-hero__bar {
@@ -289,7 +275,7 @@
         }
     </style>
 
-    @if ($slides->count() > 1)
+    @if ($productMedia->count() > 1)
         <script>
             (function() {
                 const wrap = document.querySelector('.cms-hero__wrap');
@@ -342,7 +328,6 @@
                     timer = null;
                 }
 
-                // Bars click
                 if (dotsWrap) {
                     dotsWrap.addEventListener('click', (e) => {
                         const t = e.target;
@@ -358,11 +343,9 @@
                     });
                 }
 
-                // Pause on hover
                 wrap.addEventListener('mouseenter', stopAuto);
                 wrap.addEventListener('mouseleave', startAuto);
 
-                // Init
                 setActiveDot();
                 startAuto();
             })();

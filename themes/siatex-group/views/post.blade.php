@@ -322,7 +322,7 @@
 
                                 @if ($displayTitle !== '')
                                     <h1
-                                        class="text-3xl font-semibold leading-tight tracking-tight text-[#0f4c81] sm:text-4xl lg:text-5xl xl:text-[48px]">
+                                        class="cms-page-title font-semibold leading-tight tracking-tight text-[#0f4c81] sm:text-4xl lg:text-5xl xl:text-[48px]">
                                         {{ $displayTitle }}
                                     </h1>
                                 @endif

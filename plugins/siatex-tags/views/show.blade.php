@@ -493,7 +493,7 @@
 
                                     <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
                                         <div
-                                            class="text-sm font-medium leading-snug text-slate-600 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
+                                            class="text-sm font-medium leading-snug underline underline-offset-4 decoration-[1.5px] group-hover:no-underline text-slate-600 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 

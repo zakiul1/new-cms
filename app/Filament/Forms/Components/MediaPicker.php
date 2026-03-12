@@ -17,40 +17,57 @@ class MediaPicker extends Field
 
     protected string|Closure|null $modalHeading = null;
 
+    protected string|Closure $type = 'image';
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        // ✅ Ensure state shape is correct after hydration AND filter invalid/deleted media IDs
         $this->afterStateHydrated(function (MediaPicker $component, $state): void {
             if ($component->isMultiple()) {
                 $ids = array_values(array_filter(array_map('intval', (array) ($state ?? []))));
 
-                // ✅ keep only IDs that exist in `media` table (prevents FK errors on save)
                 if ($ids !== []) {
-                    $existing = Media::query()
-                        ->whereIn('id', $ids)
+                    $existingQuery = Media::query()->whereIn('id', $ids);
+
+                    if ($component->getType() === 'image') {
+                        $existingQuery->where('mime_type', 'like', 'image/%');
+                    }
+
+                    $existing = $existingQuery
                         ->pluck('id')
                         ->map(fn($id) => (int) $id)
                         ->all();
 
                     $set = array_flip($existing);
 
-                    // keep original order, drop missing
                     $ids = array_values(array_filter($ids, fn($id) => isset($set[$id])));
                 }
 
-                $component->state($ids);
-            } else {
-                $id = $state ? (int) $state : null;
-
-                // ✅ single: if selected media doesn't exist anymore, clear it
-                if ($id && !Media::query()->whereKey($id)->exists()) {
-                    $id = null;
+                if (($maxItems = $component->getMaxItems()) !== null) {
+                    $ids = array_slice($ids, 0, $maxItems);
                 }
 
-                $component->state($id);
+                $component->state($ids);
+
+                return;
             }
+
+            $id = $state ? (int) $state : null;
+
+            if ($id) {
+                $query = Media::query()->whereKey($id);
+
+                if ($component->getType() === 'image') {
+                    $query->where('mime_type', 'like', 'image/%');
+                }
+
+                if (!$query->exists()) {
+                    $id = null;
+                }
+            }
+
+            $component->state($id);
         });
     }
 
@@ -75,6 +92,20 @@ class MediaPicker extends Field
         return $this;
     }
 
+    public function type(string|Closure $type = 'image'): static
+    {
+        $this->type = $type;
+
+        return $this;
+    }
+
+    public function image(): static
+    {
+        $this->type = 'image';
+
+        return $this;
+    }
+
     public function isMultiple(): bool
     {
         return (bool) $this->evaluate($this->multiple);
@@ -92,6 +123,13 @@ class MediaPicker extends Field
         return (string) ($this->evaluate($this->modalHeading) ?: ($this->isMultiple() ? 'Select images' : 'Select image'));
     }
 
+    public function getType(): string
+    {
+        $type = (string) $this->evaluate($this->type);
+
+        return in_array($type, ['all', 'image'], true) ? $type : 'image';
+    }
+
     /**
      * @return array<int, array{id:int, title:string, thumb:string, url:string}>
      */
@@ -103,8 +141,7 @@ class MediaPicker extends Field
             return [];
         }
 
-        /** @var Collection<int, Media> $media */
-        $media = Media::query()
+        $query = Media::query()
             ->select([
                 'id',
                 'title',
@@ -117,16 +154,22 @@ class MediaPicker extends Field
             ])
             ->whereIn('id', $ids)
             ->with([
-                'variantRecords', // helps thumbUrl fast
-                'terms',          // for category/folder filter/badges in picker view
-            ])
-            ->get()
-            ->keyBy('id');
+                'variantRecords',
+                'terms',
+            ]);
 
-        // Preserve selected order
+        if ($this->getType() === 'image') {
+            $query->where('mime_type', 'like', 'image/%');
+        }
+
+        /** @var Collection<int, Media> $media */
+        $media = $query->get()->keyBy('id');
+
         $out = [];
+
         foreach ($ids as $id) {
             $m = $media->get($id);
+
             if (!$m) {
                 continue;
             }
@@ -160,7 +203,13 @@ class MediaPicker extends Field
     protected function normalizeIds(mixed $state): array
     {
         if ($this->isMultiple()) {
-            return array_values(array_filter(array_map('intval', (array) ($state ?? []))));
+            $ids = array_values(array_filter(array_map('intval', (array) ($state ?? []))));
+
+            if (($maxItems = $this->getMaxItems()) !== null) {
+                $ids = array_slice($ids, 0, $maxItems);
+            }
+
+            return $ids;
         }
 
         $id = (int) ($state ?? 0);

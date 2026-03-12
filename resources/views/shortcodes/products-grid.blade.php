@@ -35,7 +35,7 @@
         $quoteButtonLabel = 'Custom Quote';
     }
 
-    $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonLabel)));
+    $quoteButtonHtml = nl2br(e(str_replace('|', "\n", $quoteButtonText)));
 
     $mobileSizeValue = match ($mobileColumns) {
         1 => '100vw',
@@ -90,6 +90,7 @@
                         if ($media instanceof \App\Models\Media) {
                             $productImage =
                                 (string) ($media->variantUrl('hero_sm') ?:
+                                $media->variantUrl('small') ?:
                                 $media->variantUrl('medium') ?:
                                 $media->url());
                         }
@@ -110,7 +111,7 @@
                 <div class="group text-center">
                     @if ($safeUrl !== '')
                         <a href="{{ $safeUrl }}"
-                            class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                            class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                             aria-label="{{ $title }}">
                             <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
                                 @if ($media instanceof \App\Models\Media && method_exists($media, 'isImage') && $media->isImage())
@@ -122,16 +123,16 @@
                                                 'class' => 'h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]',
                                                 'sizes' => $imageSizes,
                                                 'loading' => 'lazy',
-                                                'fetchpriority' => 'low',
+                                                'fetchpriority' => 'auto',
                                                 'decoding' => 'async',
                                             ],
-                                            'thumb',
-                                            ['thumb', 'hero_sm', 'medium'],
+                                            'small',
+                                            ['thumb', 'small', 'hero_sm', 'medium'],
                                         ) !!}
                                     @elseif ($safeProductImage !== '')
                                         <img src="{{ $safeProductImage }}" alt="{{ $title }}"
                                             class="h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.02]"
-                                            loading="lazy" fetchpriority="low" decoding="async">
+                                            loading="lazy" fetchpriority="auto" decoding="async">
                                     @else
                                         <div class="h-full w-full bg-slate-100" aria-hidden="true"></div>
                                     @endif
@@ -140,8 +141,9 @@
                                 @endif
                             </div>
 
-                            <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                <div class="text-sm font-medium leading-snug text-slate-600">
+                            <div class="product-card-text mx-auto mt-4 w-full max-w-[220px]">
+                                <div
+                                    class="text-sm font-medium leading-snug decoration-[1.5px] group-hover:no-underline">
                                     {{ $styleCode }}
                                 </div>
 
@@ -162,15 +164,15 @@
                                                 'class' => 'h-full w-full object-contain',
                                                 'sizes' => $imageSizes,
                                                 'loading' => 'lazy',
-                                                'fetchpriority' => 'low',
+                                                'fetchpriority' => 'auto',
                                                 'decoding' => 'async',
                                             ],
-                                            'thumb',
-                                            ['thumb', 'hero_sm', 'medium'],
+                                            'small',
+                                            ['thumb', 'small', 'hero_sm', 'medium'],
                                         ) !!}
                                     @elseif ($safeProductImage !== '')
                                         <img src="{{ $safeProductImage }}" alt="{{ $title }}"
-                                            class="h-full w-full object-contain" loading="lazy" fetchpriority="low"
+                                            class="h-full w-full object-contain" loading="lazy" fetchpriority="auto"
                                             decoding="async">
                                     @else
                                         <div class="h-full w-full bg-slate-100" aria-hidden="true"></div>
@@ -180,8 +182,9 @@
                                 @endif
                             </div>
 
-                            <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
-                                <div class="text-sm font-medium leading-snug text-slate-600">
+                            <div class="product-card-text mx-auto mt-4 w-full max-w-[220px]">
+                                <div
+                                    class="text-sm font-medium leading-snug decoration-[1.5px] group-hover:no-underline">
                                     {{ $styleCode }}
                                 </div>
 
@@ -194,7 +197,7 @@
 
                     @if (!empty($showPriceBtn))
                         <button type="button"
-                            class="cf-get-price mt-3 inline-flex cursor-pointer items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                            class="cf-get-price mt-3 inline-flex cursor-pointer items-center justify-center text-center text-sm font-semibold text-[var(--cms-primary)] underline underline-offset-4 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                             aria-label="{{ $buttonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                             data-item-id="{{ (int) $media->id }}" data-item-type="media"
                             data-item-title="{{ $title }}" data-item-url="{{ $buttonItemUrl }}"
@@ -207,3 +210,16 @@
         </div>
     </div>
 </div>
+
+<style>
+    .product-card-text,
+    .product-card-text p,
+    .product-card-text div {
+        font-family: var(--cms-body-font-family);
+        font-size: var(--cms-body-font-size);
+        font-weight: var(--cms-body-font-weight);
+        line-height: var(--cms-body-line-height);
+        letter-spacing: var(--cms-body-letter-spacing);
+        color: var(--cms-body-color);
+    }
+</style>

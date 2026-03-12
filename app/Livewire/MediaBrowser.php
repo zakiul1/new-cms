@@ -62,7 +62,8 @@ class MediaBrowser extends Component
         ?string $type = 'image',
         ?string $source = null,
         ?bool $multiple = false,
-        ?int $maxItems = null
+        ?int $maxItems = null,
+        array $selected = []
     ): void {
         $this->isOpen = true;
         $this->targetKey = $targetKey;
@@ -70,7 +71,7 @@ class MediaBrowser extends Component
         $this->type = in_array($type, ['all', 'image'], true) ? $type : 'all';
         $this->multiple = (bool) $multiple;
         $this->maxItems = $maxItems;
-        $this->selectedIds = [];
+        $this->selectedIds = array_values(array_unique(array_filter(array_map('intval', $selected))));
         $this->resetPage();
 
         $this->dispatch('cms-media-browser-visibility', open: true);
@@ -133,7 +134,8 @@ class MediaBrowser extends Component
 
         $this->dispatch(
             $this->eventName,
-            ids: [$selectedId],
+            mediaId: (int) $selectedId,
+            ids: [(int) $selectedId],
             targetKey: $this->targetKey,
             source: $this->source
         );
@@ -141,6 +143,7 @@ class MediaBrowser extends Component
         $this->dispatch(
             'cms-media-selected',
             mediaId: (int) $selectedId,
+            ids: [(int) $selectedId],
             targetKey: $this->targetKey,
             source: $this->source
         );
@@ -150,9 +153,15 @@ class MediaBrowser extends Component
 
     public function upload(): void
     {
-        $this->validate([
+        $rules = [
             'uploads.*' => ['file', 'max:' . ((int) config('cms-media.max_upload_mb', 50) * 1024)],
-        ]);
+        ];
+
+        if ($this->type === 'image') {
+            $rules['uploads.*'][] = 'mimes:jpg,jpeg,png,gif,webp,svg,avif,ico';
+        }
+
+        $this->validate($rules);
 
         /** @var MediaUploader $uploader */
         $uploader = app(MediaUploader::class);
@@ -165,17 +174,27 @@ class MediaBrowser extends Component
             }
 
             $media = $uploader->upload($file);
+
+            if ($this->type === 'image' && method_exists($media, 'isImage') && !$media->isImage()) {
+                continue;
+            }
+
             $lastUploadedId = (int) $media->id;
 
-            $this->toggle((int) $media->id);
+            if ($this->multiple) {
+                $this->toggle((int) $media->id);
+            }
         }
 
         $this->uploads = [];
         $this->resetPage();
 
-        if (!$this->multiple && $lastUploadedId && $this->autoConfirmSingle) {
+        if (!$this->multiple && $lastUploadedId) {
             $this->selectedIds = [$lastUploadedId];
-            $this->confirm();
+
+            if ($this->autoConfirmSingle) {
+                $this->confirm();
+            }
         }
     }
 

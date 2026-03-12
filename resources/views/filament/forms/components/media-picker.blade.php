@@ -3,59 +3,116 @@
 
     $statePath = $field->getStatePath();
 
-    // IMPORTANT: we must pass plain strings inside Alpine attrs (avoid @js in x-data)
     $statePathJs = str_replace("'", "\\'", $statePath);
 
-    // unique modal id per field instance
     $modalId = 'media-picker-' . md5($field->getId() . '|' . $statePath);
     $modalIdJs = str_replace("'", "\\'", $modalId);
 
     $multiple = $field->isMultiple();
     $maxItems = $field->getMaxItems();
     $selected = $field->getSelectedMedia();
+    $type = method_exists($field, 'getType') ? $field->getType() : 'image';
 @endphp
 
 <x-dynamic-component :component="$field->getFieldWrapperView()" :field="$field">
-    <div x-data="{
-        modalId: '{{ $modalIdJs }}',
-        statePath: '{{ $statePathJs }}',
-        multiple: {{ $multiple ? 'true' : 'false' }},
-        maxItems: {{ is_null($maxItems) ? 'null' : (int) $maxItems }},
-        state: $wire.entangle('{{ $statePathJs }}').live,
+    <div
+        x-data="{
+            modalId: '{{ $modalIdJs }}',
+            statePath: '{{ $statePathJs }}',
+            multiple: {{ $multiple ? 'true' : 'false' }},
+            maxItems: {{ is_null($maxItems) ? 'null' : (int) $maxItems }},
+            type: '{{ $type }}',
+            state: $wire.entangle('{{ $statePathJs }}').live,
 
-        open() {
-            const store = Alpine.store('wpMediaModal');
-            if (store && store.open) store.open(this.modalId);
-        },
+            open() {
+                const store = Alpine.store('wpMediaModal');
+                if (store && store.open) {
+                    store.open(this.modalId);
+                }
 
-        close() {
-            const store = Alpine.store('wpMediaModal');
-            if (store && store.close) store.close();
-        },
+                window.dispatchEvent(new CustomEvent('cms-media-browser-open', {
+                    detail: {
+                        targetKey: this.statePath,
+                        statePath: this.statePath,
+                        type: this.type,
+                        source: 'filament-media-picker',
+                        multiple: this.multiple,
+                        maxItems: this.maxItems,
+                        selected: this.currentSelectedIds(),
+                    }
+                }));
+            },
 
-        handleApply(e) {
-            if (!e || !e.detail) return;
-            if (e.detail.statePath !== this.statePath) return;
+            close() {
+                const store = Alpine.store('wpMediaModal');
+                if (store && store.close) {
+                    store.close();
+                }
+            },
 
-            const ids = Array.isArray(e.detail.ids) ? e.detail.ids : [];
-            const clean = ids.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+            currentSelectedIds() {
+                if (this.multiple) {
+                    return Array.isArray(this.state)
+                        ? this.state.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+                        : [];
+                }
 
-            if (this.multiple) {
-                this.state = clean;
-            } else {
-                this.state = clean.length ? clean[0] : null;
-            }
+                const id = Number(this.state);
+                return Number.isFinite(id) && id > 0 ? [id] : [];
+            },
 
-            this.close();
-        },
-    }" x-on:media-library-apply.window="handleApply($event)" class="space-y-3">
+            handleApply(e) {
+                if (!e || !e.detail) return;
 
+                const key = e.detail.targetKey ?? e.detail.statePath ?? null;
+                if (key !== this.statePath) return;
+
+                let ids = [];
+
+                if (Array.isArray(e.detail.ids)) {
+                    ids = e.detail.ids;
+                } else if (e.detail.mediaId) {
+                    ids = [e.detail.mediaId];
+                }
+
+                const clean = ids
+                    .map((x) => Number(x))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+
+                if (this.multiple) {
+                    this.state = this.maxItems === null ? clean : clean.slice(0, this.maxItems);
+                } else {
+                    this.state = clean.length ? clean[0] : null;
+                }
+
+                this.close();
+            },
+        }"
+        x-on:media-library-apply.window="handleApply($event)"
+        x-on:cms-media-selected.window="handleApply($event)"
+        class="space-y-3"
+    >
         {{-- Preview strip --}}
         <div class="flex flex-wrap gap-2">
             @if (count($selected))
                 @foreach ($selected as $m)
-                    <div class="relative">
-                        <img src="{{ $m['thumb'] }}" class="w-20 h-20 object-cover rounded-md border" alt="">
+                    <div class="group relative">
+                        <img src="{{ $m['thumb'] }}" class="h-20 w-20 rounded-md border object-cover" alt="{{ $m['title'] }}">
+
+                        <button
+                            type="button"
+                            class="absolute -right-2 -top-2 hidden h-6 w-6 items-center justify-center rounded-full border bg-white text-xs shadow group-hover:inline-flex"
+                            x-on:click.prevent="
+                                if (multiple) {
+                                    state = (Array.isArray(state) ? state : []).filter((id) => Number(id) !== {{ (int) $m['id'] }});
+                                } else {
+                                    state = null;
+                                }
+                            "
+                            title="Remove"
+                        >
+                            ✕
+                        </button>
                     </div>
                 @endforeach
             @else
@@ -65,12 +122,30 @@
             @endif
         </div>
 
-        {{-- Open modal --}}
-        <x-filament::button type="button" x-on:click="open()">
-            {{ $multiple ? 'Select images' : 'Select image' }}
-        </x-filament::button>
+        {{-- Actions --}}
+        <div class="flex flex-wrap gap-2">
+            <x-filament::button type="button" x-on:click="open()">
+                {{ $multiple ? 'Select images' : 'Select image' }}
+            </x-filament::button>
 
-        {{-- WP-style overlay modal (windowed, with viewport padding like WP) --}}
+            @if (count($selected))
+                <x-filament::button
+                    type="button"
+                    color="gray"
+                    x-on:click="
+                        if (multiple) {
+                            state = [];
+                        } else {
+                            state = null;
+                        }
+                    "
+                >
+                    Remove {{ $multiple ? 'all' : 'image' }}
+                </x-filament::button>
+            @endif
+        </div>
+
+        {{-- Modal --}}
         <div
             x-show="$store.wpMediaModal && $store.wpMediaModal.isOpen('{{ $modalIdJs }}')"
             x-transition.opacity
@@ -79,30 +154,37 @@
             @keydown.escape.window="close()"
             @click.self="close()"
         >
-            {{-- Padding around the modal window (WP-like) --}}
             <div class="absolute inset-0 p-6 sm:p-8">
-                {{-- Modal window --}}
-                <div class="h-full w-full bg-white shadow-xl border border-gray-200 rounded-md overflow-hidden flex flex-col">
+                <div class="flex h-full w-full flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl">
                     {{-- Header --}}
-                    <div class="h-14 border-b flex items-center justify-between px-4 shrink-0">
+                    <div class="flex h-14 shrink-0 items-center justify-between border-b px-4">
                         <div class="font-semibold">
                             {{ $field->getModalHeading() }}
                         </div>
 
-                        <button type="button" class="text-sm px-3 py-1 rounded hover:bg-gray-100" @click="close()">
+                        <button
+                            type="button"
+                            class="rounded px-3 py-1 text-sm hover:bg-gray-100"
+                            @click="close()"
+                        >
                             ✕
                         </button>
                     </div>
 
                     {{-- Body --}}
-                    <div class="flex-1 overflow-hidden">
-                        <livewire:media-library-browser
-                            :state-path="$statePath"
-                            :multiple="$multiple"
-                            :max-items="$maxItems"
-                            :selected="(array) ($field->getState() ?? [])"
-                            :wire:key="$modalId . '-browser'"
-                        />
+                    <div class="min-h-0 flex-1 overflow-hidden">
+                        @livewire(
+                            'media-library-browser',
+                            [
+                                'statePath' => $statePath,
+                                'multiple' => $multiple,
+                                'maxItems' => $maxItems,
+                                'selected' => $multiple
+                                    ? (array) ($field->getState() ?? [])
+                                    : array_filter([(int) ($field->getState() ?? 0)]),
+                            ],
+                            key($modalId . '-browser')
+                        )
                     </div>
                 </div>
             </div>
@@ -112,9 +194,7 @@
 
 @once
     <script>
-        // 1) Modal store
         document.addEventListener('alpine:init', () => {
-            // If already registered, do nothing
             try {
                 if (Alpine.store('wpMediaModal')) return;
             } catch (e) {}
@@ -125,11 +205,13 @@
                 open(id) {
                     this.openId = id;
                     document.documentElement.classList.add('overflow-hidden');
+                    document.body.classList.add('overflow-hidden');
                 },
 
                 close() {
                     this.openId = null;
                     document.documentElement.classList.remove('overflow-hidden');
+                    document.body.classList.remove('overflow-hidden');
                 },
 
                 isOpen(id) {
@@ -138,9 +220,7 @@
             });
         });
 
-        // 2) Uploader function (FORCE define as function)
         (() => {
-            // ✅ Only skip if it's already a FUNCTION
             if (typeof window.wpMediaUploader === 'function') return;
 
             window.wpMediaUploader = (component) => ({
@@ -157,18 +237,29 @@
                     this._listenersBound = true;
 
                     const opts = { capture: true, passive: false };
-                    const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
+                    const prevent = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    };
 
                     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((name) => {
                         window.addEventListener(name, prevent, opts);
                         document.addEventListener(name, prevent, opts);
                     });
 
-                    window.addEventListener('dragenter', (e) => { prevent(e); this.isDropping = true; }, opts);
-                    window.addEventListener('dragover',  (e) => { prevent(e); this.isDropping = true; }, opts);
+                    window.addEventListener('dragenter', (e) => {
+                        prevent(e);
+                        this.isDropping = true;
+                    }, opts);
+
+                    window.addEventListener('dragover', (e) => {
+                        prevent(e);
+                        this.isDropping = true;
+                    }, opts);
 
                     window.addEventListener('dragleave', (e) => {
                         prevent(e);
+
                         if (
                             e.clientX <= 0 || e.clientY <= 0 ||
                             e.clientX >= window.innerWidth || e.clientY >= window.innerHeight
@@ -182,14 +273,19 @@
                         this.isDropping = false;
 
                         const files = e.dataTransfer?.files ?? null;
-                        if (files && files.length) this.startUpload(files);
+                        if (files && files.length) {
+                            this.startUpload(files);
+                        }
                     }, opts);
                 },
 
                 onDrop(e) {
                     this.isDropping = false;
+
                     const files = e.dataTransfer?.files ?? null;
-                    if (files && files.length) this.startUpload(files);
+                    if (files && files.length) {
+                        this.startUpload(files);
+                    }
                 },
 
                 startUpload(fileList) {
@@ -222,7 +318,10 @@
 
                                         component.call('filesUploaded');
 
-                                        setTimeout(() => { this.progress = 0; }, 300);
+                                        setTimeout(() => {
+                                            this.progress = 0;
+                                        }, 300);
+
                                         resolve();
                                     },
                                     (err) => {
@@ -238,7 +337,7 @@
                                 );
                             });
 
-                            await new Promise(r => setTimeout(r, 150));
+                            await new Promise((r) => setTimeout(r, 150));
                         }
                     } finally {
                         this.workerRunning = false;

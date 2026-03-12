@@ -33,9 +33,8 @@ class ThemeCustomizer extends Component
     /** @var array<int, array{id:int,title:string,slug:string}> */
     public array $pageOptions = [];
 
-    // reuse CMS media browser
     public string $mediaTargetKey = '';
-    public string $mediaType = 'image';
+    public bool $showMediaPicker = false;
 
     public function mount(?string $theme = 'default'): void
     {
@@ -100,6 +99,7 @@ class ThemeCustomizer extends Component
             $this->previewId = $this->pageOptions[0]['id'] ?? null;
         }
 
+        $this->normalizeCustomizerState();
         $this->saveDraft();
         $this->cacheBust = time();
     }
@@ -108,6 +108,7 @@ class ThemeCustomizer extends Component
     {
         $siteName = (string) $settings->get('site_name', config('app.name', 'My CMS'), 'core');
         $homepageId = $settings->get('homepage_page_id', null, 'core');
+        $defaultFont = theme_default_font_family($this->theme);
 
         return [
             'site_identity' => [
@@ -120,7 +121,7 @@ class ThemeCustomizer extends Component
 
             'typography' => [
                 'headings' => [
-                    'font_family' => 'Inter',
+                    'font_family' => $defaultFont,
                     'font_size' => 'inherit',
                     'font_weight' => '700',
                     'text_transform' => 'none',
@@ -129,12 +130,12 @@ class ThemeCustomizer extends Component
                     'color' => '',
                 ],
                 'strong' => [
-                    'font_family' => 'Inter',
+                    'font_family' => $defaultFont,
                     'font_weight' => '700',
                     'color' => '',
                 ],
                 'paragraph' => [
-                    'font_family' => 'Inter',
+                    'font_family' => $defaultFont,
                     'font_size' => '16px',
                     'font_weight' => '400',
                     'line_height' => '1.7',
@@ -142,13 +143,13 @@ class ThemeCustomizer extends Component
                     'color' => '',
                 ],
                 'list' => [
-                    'font_family' => 'Inter',
+                    'font_family' => $defaultFont,
                     'font_size' => '16px',
                     'line_height' => '1.7',
                     'color' => '',
                 ],
                 'anchor' => [
-                    'font_family' => 'Inter',
+                    'font_family' => $defaultFont,
                     'color' => '#0f5e9c',
                     'hover_color' => '#0b4c80',
                     'text_decoration' => 'underline',
@@ -167,6 +168,13 @@ class ThemeCustomizer extends Component
                 'copyright_area' => '[Y] Your Garments Manufacturing Company. All rights reserved.',
                 'second_line' => 'Production Base: Bangladesh | Operations: Canada',
                 'text_alignment' => 'center',
+                'heading' => '',
+                'description' => '',
+                'button_text' => '',
+                'button_url' => '',
+                'show_menu' => true,
+                'show_widgets' => true,
+                'show_bottom_content' => true,
             ],
 
             'additional_css' => '',
@@ -176,7 +184,7 @@ class ThemeCustomizer extends Component
                 'header_sticky' => true,
                 'background' => '#ffffff',
                 'text' => '#111827',
-                'primary' => '#f59e0b',
+                'primary' => '#2f6fa3',
                 'accent' => '#0ea5e9',
                 'container_width' => 'default',
                 'rounded' => true,
@@ -201,6 +209,7 @@ class ThemeCustomizer extends Component
                 }
             }
 
+            $this->normalizeCustomizerState();
             $this->syncCoreSettings();
 
             if (str_starts_with($name, 'data.homepage.')) {
@@ -210,6 +219,45 @@ class ThemeCustomizer extends Component
 
             $this->saveDraft();
             $this->refreshPreview();
+        }
+    }
+
+    protected function normalizeCustomizerState(): void
+    {
+        if ($this->section === 'menus') {
+            $this->goRoot();
+        }
+
+        $logoWidth = (int) data_get($this->data, 'site_identity.logo_width', 200);
+        $logoWidth = max(20, min(600, $logoWidth));
+        data_set($this->data, 'site_identity.logo_width', $logoWidth);
+
+        foreach ([
+            'site_identity.logo_media_id',
+            'site_identity.site_icon_media_id',
+            'homepage.page_id',
+        ] as $key) {
+            $value = data_get($this->data, $key);
+
+            if ($value === '' || $value === false) {
+                data_set($this->data, $key, null);
+                continue;
+            }
+
+            if (is_numeric($value)) {
+                data_set($this->data, $key, (int) $value);
+            }
+        }
+
+        foreach ([
+            'footer.show_menu',
+            'footer.show_widgets',
+            'footer.show_bottom_content',
+            'appearance.header_sticky',
+            'appearance.rounded',
+            'appearance.shadows',
+        ] as $key) {
+            data_set($this->data, $key, (bool) data_get($this->data, $key, false));
         }
     }
 
@@ -227,6 +275,11 @@ class ThemeCustomizer extends Component
 
     public function openSection(string $section): void
     {
+        if ($section === 'menus') {
+            $this->goRoot();
+            return;
+        }
+
         $this->screen = 'section';
         $this->section = $section;
         $this->subsection = null;
@@ -253,45 +306,55 @@ class ThemeCustomizer extends Component
         $this->subsection = null;
     }
 
-    public function openMediaBrowser(string $targetKey, string $type = 'image'): void
+    public function closeCustomizer()
     {
-        $this->mediaTargetKey = $targetKey;
-        $this->mediaType = $type;
-
-        $this->dispatch(
-            'cms-media-browser-open',
-            targetKey: $targetKey,
-            type: $type,
-            source: 'theme-customizer'
-        );
+        return redirect()->to('/lara-admin/themes');
     }
 
-    #[On('cms-media-selected')]
-    public function handleCmsMediaSelected($mediaId = null, $targetKey = null, $source = null): void
+    public function openMediaPicker(string $targetKey): void
     {
-        if ($source !== null && $source !== 'theme-customizer') {
+        $this->mediaTargetKey = $targetKey;
+        $this->showMediaPicker = true;
+    }
+
+    public function closeMediaPicker(): void
+    {
+        $this->showMediaPicker = false;
+    }
+
+    #[On('media-library-apply')]
+    public function handleMediaLibraryApply(array $ids = [], ?string $statePath = null): void
+    {
+        if ($statePath !== 'theme-customizer-media') {
             return;
         }
 
-        $resolvedTargetKey = is_string($targetKey) && $targetKey !== ''
-            ? $targetKey
-            : $this->mediaTargetKey;
+        $resolvedTargetKey = $this->mediaTargetKey;
 
         if ($resolvedTargetKey === '') {
             return;
         }
 
-        $mediaId = (int) $mediaId;
+        $mediaId = (int) ($ids[0] ?? 0);
         if ($mediaId <= 0) {
             return;
         }
 
-        $media = Media::query()->with('variantRecords')->whereKey($mediaId)->first();
+        $media = Media::query()
+            ->with('variantRecords')
+            ->whereKey($mediaId)
+            ->first();
+
         if (!$media) {
+            session()->flash('customizer_notice', 'Selected media was not found.');
+
+            $this->dispatch('notify', type: 'error', message: 'Selected media was not found.');
+            $this->dispatch('customizer-notice', message: 'Selected media was not found.', type: 'error');
+
             return;
         }
 
-        if ($this->mediaType === 'image' && method_exists($media, 'isImage') && !$media->isImage()) {
+        if (method_exists($media, 'isImage') && !$media->isImage()) {
             session()->flash('customizer_notice', 'Please select an image file.');
 
             $this->dispatch('notify', type: 'error', message: 'Please select an image file.');
@@ -302,8 +365,10 @@ class ThemeCustomizer extends Component
 
         data_set($this->data, $resolvedTargetKey, $mediaId);
 
+        $this->normalizeCustomizerState();
         $this->saveDraft();
         $this->refreshPreview();
+        $this->showMediaPicker = false;
 
         session()->flash('customizer_notice', 'Media selected.');
 
@@ -343,6 +408,7 @@ class ThemeCustomizer extends Component
         /** @var CmsCacheVersions $versions */
         $versions = app(CmsCacheVersions::class);
 
+        $this->normalizeCustomizerState();
         $this->syncCoreSettings();
 
         $settings->set("theme_options.{$this->theme}", $this->data);
@@ -382,6 +448,7 @@ class ThemeCustomizer extends Component
 
         $this->data = array_replace_recursive($this->defaults($settings), $saved);
 
+        $this->normalizeCustomizerState();
         $this->saveDraft();
 
         session()->flash('customizer_notice', 'Draft reset.');
@@ -434,14 +501,7 @@ class ThemeCustomizer extends Component
 
     public function getFontFamilyOptionsProperty(): array
     {
-        return [
-            'Inter' => 'Inter',
-            'Roboto' => 'Roboto',
-            'Ropa Sans' => 'Ropa Sans',
-            'Arial' => 'Arial',
-            'Georgia' => 'Georgia',
-            'System UI' => 'System UI',
-        ];
+        return theme_font_choices($this->theme);
     }
 
     public function getSelectedMediaProperty(): Collection
@@ -510,7 +570,10 @@ class ThemeCustomizer extends Component
 
         $this->preview = 'home';
         $this->previewId = null;
+        $this->showMediaPicker = false;
+        $this->mediaTargetKey = '';
 
+        $this->normalizeCustomizerState();
         $this->saveDraft();
         $this->refreshPreview();
         $this->goRoot();

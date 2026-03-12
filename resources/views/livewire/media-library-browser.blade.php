@@ -109,16 +109,19 @@
                                            {{ $isActive ? 'ring-2 ring-primary-600' : '' }}
                                            {{ $isSelected ? 'border-primary-600' : 'border-gray-200' }}">
                                     <div class="relative">
-                                        <img src="{{ $thumb }}" class="w-full aspect-square object-cover" alt="">
+                                        <img src="{{ $thumb }}" class="w-full aspect-square object-cover"
+                                            alt="">
 
                                         @if ($processing)
-                                            <div class="absolute top-2 left-2 bg-gray-900/70 text-white text-[10px] px-2 py-0.5">
+                                            <div
+                                                class="absolute top-2 left-2 bg-gray-900/70 text-white text-[10px] px-2 py-0.5">
                                                 Processing…
                                             </div>
                                         @endif
 
                                         {{-- WP style check / hover minus --}}
-                                        <div class="absolute top-2 right-2 w-6 h-6 border flex items-center justify-center text-sm
+                                        <div
+                                            class="absolute top-2 right-2 w-6 h-6 border flex items-center justify-center text-sm
                                             {{ $isSelected ? 'bg-primary-600 text-white border-primary-600' : 'bg-white opacity-0 group-hover:opacity-100' }}">
                                             @if ($isSelected)
                                                 <span class="group-hover:hidden">✓</span>
@@ -159,7 +162,9 @@
                         @foreach ($selected as $sid)
                             @php
                                 $m = $selectedMedia?->get((int) $sid);
-                                if (!$m) continue;
+                                if (!$m) {
+                                    continue;
+                                }
                                 $thumb = $m->thumbUrl('jpeg') ?: $m->url();
                             @endphp
 
@@ -190,7 +195,8 @@
 
                         <div class="mt-3 border bg-white p-2">
                             @php $thumb = $m->thumbUrl('jpeg') ?: $m->url(); @endphp
-                            <img src="{{ $thumb }}" class="w-full aspect-square object-contain bg-gray-100" alt="">
+                            <img src="{{ $thumb }}" class="w-full aspect-square object-contain bg-gray-100"
+                                alt="">
                         </div>
 
                         <div class="mt-3 text-xs text-gray-700 space-y-1">

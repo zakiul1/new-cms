@@ -7,7 +7,7 @@
     // Filament panel id from your AdminPanelProvider ->id('admin')
     $panelId = 'admin';
 
-    // ✅ Global toggle from CMS Settings (default ON)
+    // Global toggle from CMS Settings (default ON)
     $adminBarEnabled = true;
     try {
         $settingsRepo = app(\App\Cms\Core\SettingsRepository::class);
@@ -16,7 +16,7 @@
         $adminBarEnabled = true;
     }
 
-    // ✅ Show bar only when Filament user is logged in (most reliable)
+    // Show bar only when Filament user is logged in
     $isFilamentLoggedIn = false;
     try {
         $isFilamentLoggedIn = class_exists(\Filament\Facades\Filament::class)
@@ -28,7 +28,7 @@
 
     $showAdminBar = $adminBarEnabled && $isFilamentLoggedIn;
 
-    // ✅ Dashboard URL: try named route first, fallback to /lara-admin
+    // Dashboard URL: try named route first, fallback to /lara-admin
     $adminDashboardUrl = url('/lara-admin');
     try {
         $adminDashboardUrl = route("filament.{$panelId}.pages.dashboard");
@@ -36,11 +36,11 @@
         // keep fallback
     }
 
-    // ✅ Controller may pass $adminEditUrl, but if not, compute fallback here.
+    // Controller may pass $adminEditUrl, but if not, compute fallback here
     $adminEditUrl = isset($adminEditUrl) ? (string) $adminEditUrl : '';
     $adminEditUrl = trim($adminEditUrl);
 
-    // ✅ If Home page and edit url not provided, compute it from SettingsRepository
+    // If Home page and edit url not provided, compute it from SettingsRepository
     if ($adminEditUrl === '' && request()->routeIs('cms.home')) {
         try {
             $homeId = $settingsRepo->get('core', 'homepage_page_id', null);
@@ -54,14 +54,17 @@
         }
     }
 
-    // ✅ Final target: edit if available else dashboard
+    // Final target: edit if available else dashboard
     $adminTargetUrl = $adminEditUrl !== '' ? $adminEditUrl : $adminDashboardUrl;
 
-    // ✅ Favicon (Theme Customizer option)
-    $o = theme_options();
-    $faviconId = (int) ($o['favicon_media_id'] ?? 0);
-    $favicon = $faviconId ? \App\Models\Media::query()->whereKey($faviconId)->first() : null;
-    $faviconUrl = $favicon ? $favicon->url() : null;
+    // Theme customization values
+    $themeOptions = theme_options();
+    $faviconUrl = theme_favicon_url();
+    $logoUrl = theme_logo_url();
+
+    // Site identity fallbacks
+    $siteTitle = $themeOptions['site_identity']['site_title'] ?? config('app.name');
+    $siteTagline = $themeOptions['site_identity']['tagline'] ?? '';
 
     // WP-like admin bar height
     $adminBarHeight = $showAdminBar ? 32 : 0;
@@ -72,7 +75,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    {{-- ✅ IMPORTANT: pass all context vars so seo partial can build correct canonical/og/url --}}
     @include('cms.partials.seo', [
         'seo' => $seo ?? [],
         'post' => $post ?? null,
@@ -80,16 +82,14 @@
         'tag' => $tag ?? null,
     ])
 
-    {{-- ✅ Favicon --}}
     @if ($faviconUrl)
         <link rel="icon" href="{{ $faviconUrl }}">
+        <link rel="shortcut icon" href="{{ $faviconUrl }}">
         <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
     @endif
 
-    {{-- ✅ Vite assets (production build is minified automatically) --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
-    {{-- ✅ Inline tiny theme.css to remove one render-blocking request --}}
     <style id="theme-inline-css">
         .page-container {
             max-width: 1140px;
@@ -111,9 +111,10 @@
         }
     </style>
 
+    {{-- Theme customizer dynamic CSS: typography, local fonts, colors, etc. --}}
     {!! theme_customizer_css() !!}
 
-    {{-- ✅ IMPORTANT: Render CMS enqueued frontend styles (plugins use this) --}}
+    {{-- Render CMS enqueued frontend styles --}}
     {!! function_exists('cms_assets') ? cms_assets()->renderStyles('frontend') : '' !!}
 
     @if (!empty($pageAssetsCss))
@@ -122,17 +123,16 @@
         </style>
     @endif
 
-    {{-- ✅ Capture @stack('head') output and pass to theme.head --}}
     @php ob_start(); @endphp
     @stack('head')
     @php $stackHead = ob_get_clean(); @endphp
 
     {!! $hooks->applyFilters('theme.head', $stackHead) !!}
 
-    {{-- ✅ ONLY Topbar fixed (admin bar aware) --}}
     <style>
         :root {
             --cms-adminbar-h: {{ $adminBarHeight }}px;
+            --cms-topbar-h: 0px;
         }
 
         #site-topbar-shell {
@@ -145,7 +145,7 @@
         }
 
         body.has-fixed-topbar {
-            padding-top: calc(var(--cms-adminbar-h) + var(--cms-topbar-h, 0px));
+            padding-top: calc(var(--cms-adminbar-h) + var(--cms-topbar-h));
         }
     </style>
 </head>
@@ -153,7 +153,6 @@
 <body class="min-h-screen bg-white text-slate-900 antialiased has-fixed-topbar">
     {!! $hooks->applyFilters('theme.body.before', '') !!}
 
-    {{-- ✅ Frontend Admin Bar (WordPress-like) --}}
     @if ($showAdminBar)
         <div id="cms-admin-bar"
             style="position:fixed;top:0;left:0;right:0;z-index:99999;height:32px;
@@ -182,12 +181,10 @@
         </div>
     @endif
 
-    {{-- ✅ Fixed wrapper ONLY for Topbar --}}
     <div id="site-topbar-shell">
         @include('partials.topbar')
     </div>
 
-    {{-- ✅ Header is normal (NOT fixed) --}}
     @include('partials.header')
 
     <main class="flex-1">
@@ -196,7 +193,6 @@
 
     @include('partials.footer')
 
-    {{-- ✅ IMPORTANT: Render CMS enqueued frontend scripts (plugins use this) --}}
     {!! function_exists('cms_assets') ? cms_assets()->renderScripts('frontend') : '' !!}
 
     @stack('scripts')
@@ -207,21 +203,40 @@
         </script>
     @endif
 
-    {{-- ✅ Measure topbar height so content starts right under it (no extra gap) --}}
     <script>
         (function() {
             const shell = document.getElementById('site-topbar-shell');
             if (!shell) return;
 
-            const setH = () => {
-                const h = shell.offsetHeight || 0;
-                document.documentElement.style.setProperty('--cms-topbar-h', h + 'px');
+            const setTopbarHeight = () => {
+                const nextHeight = Math.ceil(shell.getBoundingClientRect().height || 0);
+                document.documentElement.style.setProperty('--cms-topbar-h', nextHeight + 'px');
             };
 
-            setH();
-            window.addEventListener('resize', setH, {
-                passive: true
-            });
+            let rafId = null;
+            const scheduleSetTopbarHeight = () => {
+                if (rafId !== null) return;
+                rafId = window.requestAnimationFrame(() => {
+                    rafId = null;
+                    setTopbarHeight();
+                });
+            };
+
+            scheduleSetTopbarHeight();
+
+            if ('ResizeObserver' in window) {
+                const observer = new ResizeObserver(() => {
+                    scheduleSetTopbarHeight();
+                });
+                observer.observe(shell);
+            } else {
+                window.addEventListener('resize', scheduleSetTopbarHeight, {
+                    passive: true
+                });
+                window.addEventListener('load', scheduleSetTopbarHeight, {
+                    passive: true
+                });
+            }
         })();
     </script>
 

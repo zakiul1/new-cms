@@ -38,7 +38,7 @@
         </nav>
 
         <header class="mt-5">
-            <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">
+            <h1 class="cms-page-title">
                 {{ $title }}
             </h1>
 

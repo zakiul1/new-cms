@@ -68,16 +68,11 @@
         $hasPromo = trim(strip_tags($promoHtml)) !== '';
     @endphp
 
-    {{-- Required font for the hero design --}}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Ropa+Sans&display=swap" rel="stylesheet">
-
     @if ($homePost && $hasHero)
         <section class="bg-white mt-[20px]">
             <div class="cms-container mx-auto px-4">
                 <div class="bg-gray-50 p-6 md:p-10 lg:p-12">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 items-center gap-8 lg:gap-0">
+                    <div class="grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-0">
                         {{-- TEXT --}}
                         <div class="order-2 lg:order-1">
                             <div class="py-4 lg:py-0 lg:pr-14 home-hero-text">
@@ -108,11 +103,12 @@
                                                 'alt' => e($heroTitle !== '' ? $heroTitle : $homePost->title ?? 'Home'),
                                                 'class' => 'w-full h-64 sm:h-80 lg:h-[420px] object-cover',
                                                 'sizes' => '(max-width: 1024px) 100vw, 50vw',
-                                                'loading' => 'lazy',
+                                                'loading' => 'eager',
+                                                'fetchpriority' => 'high',
                                                 'decoding' => 'async',
                                             ],
-                                            'large',
-                                            ['medium', 'medium_large', 'large'],
+                                            'hero_sm',
+                                            ['thumb', 'small', 'hero_sm', 'large'],
                                         ) !!}
                                     </div>
                                 @endif
@@ -122,7 +118,7 @@
                                 @endphp
 
                                 <div id="{{ $sliderId }}" class="relative w-full">
-                                    <div class="overflow-hidden relative">
+                                    <div class="relative overflow-hidden">
                                         @foreach ($featuredMediaItems as $index => $heroMedia)
                                             <div class="home-featured-slide {{ $index === 0 ? 'block' : 'hidden' }}"
                                                 data-slide-index="{{ $index }}">
@@ -133,11 +129,12 @@
                                                             'alt' => e($heroTitle !== '' ? $heroTitle : $homePost->title ?? 'Home'),
                                                             'class' => 'w-full h-64 sm:h-80 lg:h-[420px] object-cover',
                                                             'sizes' => '(max-width: 1024px) 100vw, 50vw',
-                                                            'loading' => 'lazy',
+                                                            'loading' => $index === 0 ? 'eager' : 'lazy',
+                                                            'fetchpriority' => $index === 0 ? 'high' : 'auto',
                                                             'decoding' => 'async',
                                                         ],
-                                                        'large',
-                                                        ['medium', 'medium_large', 'large'],
+                                                        'hero_sm',
+                                                        ['thumb', 'small', 'hero_sm', 'large'],
                                                     ) !!}
                                                 @endif
                                             </div>
@@ -145,7 +142,7 @@
                                     </div>
 
                                     <button type="button"
-                                        class="home-featured-prev absolute left-3 top-1/2 -translate-y-1/2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                                        class="home-featured-prev absolute left-3 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
                                         aria-label="Previous image">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                                             fill="currentColor">
@@ -156,7 +153,7 @@
                                     </button>
 
                                     <button type="button"
-                                        class="home-featured-next absolute right-3 top-1/2 -translate-y-1/2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                                        class="home-featured-next absolute right-3 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
                                         aria-label="Next image">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
                                             fill="currentColor">
@@ -247,24 +244,27 @@
     <style>
         .home-hero-text h1,
         .home-hero-text h2 {
-            font-size: 48px;
-            font-weight: 400;
-            color: #666;
-            text-transform: uppercase;
-            line-height: 1;
-            letter-spacing: 0;
+            font-family: var(--cms-heading-font-family);
+            font-size: var(--cms-h1-font-size);
+            font-weight: var(--cms-heading-font-weight);
+            text-transform: var(--cms-heading-text-transform);
+            line-height: var(--cms-heading-line-height);
+            letter-spacing: var(--cms-heading-letter-spacing);
+            color: var(--cms-heading-color);
             text-align: left;
             max-width: 370px;
             margin-bottom: 15px;
-            font-family: 'Ropa Sans', sans-serif;
         }
 
         .home-hero-subtitle,
         .home-hero-subtitle p {
-            color: #374151;
-            font-weight: 600;
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
             font-style: italic;
-            line-height: 1.7;
         }
 
         .home-hero-subtitle>*:first-child {

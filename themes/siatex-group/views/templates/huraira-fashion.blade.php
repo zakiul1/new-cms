@@ -323,6 +323,7 @@
                 if (method_exists($heroPreloadMedia, 'variantUrl')) {
                     $heroPreloadHref =
                         $heroPreloadMedia->variantUrl('hero_sm') ?:
+                        $heroPreloadMedia->variantUrl('small') ?:
                         $heroPreloadMedia->variantUrl('medium') ?:
                         $heroPreloadMedia->url();
                 } elseif (method_exists($heroPreloadMedia, 'url')) {
@@ -346,8 +347,6 @@
                     <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
                 </noscript>
             @endpush
-
-
         @endonce
     @endif
 
@@ -357,22 +356,16 @@
                 <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 50vw"
                     fetchpriority="high">
             @endif
-
-            @if ($isHomepage)
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=Ropa+Sans&display=swap" rel="stylesheet">
-            @endif
         @endpush
     @endif
 
     @if (!$isHomepage)
         <div class="cms-container mx-auto px-4 pt-6">
             <nav aria-label="Breadcrumb" class="text-sm text-slate-600">
-                <ol class="flex flex-wrap items-center gap-1 breadcrumb-list">
+                <ol class="breadcrumb-list flex flex-wrap items-center gap-1">
                     <li>
                         <a href="{{ url('/') }}"
-                            class="text-slate-700 underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
+                            class="underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
                             Home
                         </a>
                     </li>
@@ -382,11 +375,11 @@
                         <li>
                             @if (!empty($breadcrumbParentUrl))
                                 <a href="{{ $breadcrumbParentUrl }}"
-                                    class="text-slate-700 underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
+                                    class="underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
                                     {{ $breadcrumbParentTitle }}
                                 </a>
                             @else
-                                <span class="text-slate-700">{{ $breadcrumbParentTitle }}</span>
+                                <span>{{ $breadcrumbParentTitle }}</span>
                             @endif
                         </li>
                     @endif
@@ -424,7 +417,7 @@
                                                 'decoding' => 'async',
                                             ],
                                             'hero_sm',
-                                            ['hero_sm', 'medium', 'medium_large'],
+                                            ['thumb', 'small', 'hero_sm', 'large'],
                                         ) !!}
                                     </div>
                                 @endif
@@ -470,11 +463,11 @@
                                                             'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
                                                             'sizes' => '(max-width: 1024px) 100vw, 50vw',
                                                             'loading' => $isFirstSlide ? 'eager' : 'lazy',
-                                                            'fetchpriority' => $isFirstSlide ? 'high' : 'low',
+                                                            'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
                                                             'decoding' => 'async',
                                                         ],
                                                         'hero_sm',
-                                                        ['hero_sm', 'medium', 'medium_large'],
+                                                        ['thumb', 'small', 'hero_sm', 'large'],
                                                     ) !!}
                                                 @endif
                                             </div>
@@ -551,17 +544,14 @@
                                 @endif
 
                                 @if ($heroTitle !== '')
-                                    <h1
-                                        class="{{ $isHomepage
-                                            ? 'font-ropa text-3xl font-normal uppercase leading-tight tracking-tight text-[#666] sm:text-4xl lg:text-5xl xl:text-[48px]'
-                                            : 'text-3xl font-semibold leading-tight tracking-tight text-[#0f4c81] sm:text-4xl lg:text-5xl xl:text-[48px]' }}">
+                                    <h1 class="{{ $isHomepage ? 'home-hero-title' : 'page-hero-title' }}">
                                         {{ $heroTitle }}
                                     </h1>
                                 @endif
 
                                 @if (trim($heroHtml) !== '')
                                     <div
-                                        class="cms-content mt-5 sm:mt-6 {{ $isHomepage ? 'font-medium italic leading-7 text-slate-700' : 'leading-7 text-slate-800' }}">
+                                        class="cms-content {{ $isHomepage ? 'home-hero-content' : 'page-hero-content' }} mt-5 sm:mt-6">
                                         {!! $heroHtml !!}
                                     </div>
                                 @endif
@@ -569,7 +559,7 @@
                                 @if (!$isHomepage)
                                     <div class="mt-8">
                                         <button type="button"
-                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                             aria-label="{{ $postButtonAriaLabel }}"
                                             data-default-label="{{ $quoteButtonLabel }}"
                                             data-item-id="{{ (int) $post->id }}" data-item-type="post"
@@ -611,12 +601,12 @@
                         <div class="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
                             @if (!$isHomepage && $relatedLinks->isNotEmpty())
                                 <div class="bg-[#f3f3f3] p-6">
-                                    <h3 class="mb-4 text-[22px] font-normal leading-[1.2] text-[#333]">Related Links :</h3>
+                                    <h3 class="related-links-title mb-4">Related Links :</h3>
 
                                     <div class="flex flex-col">
                                         @foreach ($relatedLinks as $item)
                                             <a href="{{ trim((string) $item['url']) }}"
-                                                class="flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] text-[16px] italic leading-[1.35] text-[#555] underline underline-offset-4 decoration-[1.5px] first:border-t-0 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
+                                                class="related-link-item flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] underline underline-offset-4 decoration-[1.5px] first:border-t-0 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
                                                 <span class="text-[20px] leading-none text-[#777]">›</span>
                                                 <span class="block truncate"
                                                     title="{{ trim(strip_tags((string) $item['title'])) }}">
@@ -647,4 +637,72 @@
             </div>
         </section>
     @endif
+
+    <style>
+        .page-hero-title {
+            font-family: var(--cms-heading-font-family);
+            font-size: var(--cms-h1-font-size);
+            font-weight: var(--cms-heading-font-weight);
+            text-transform: var(--cms-heading-text-transform);
+            line-height: var(--cms-heading-line-height);
+            letter-spacing: var(--cms-heading-letter-spacing);
+            color: var(--cms-heading-color);
+        }
+
+        .home-hero-title {
+            font-family: var(--cms-heading-font-family);
+            font-size: var(--cms-h1-font-size);
+            font-weight: 400;
+            text-transform: uppercase;
+            line-height: 1;
+            letter-spacing: 0;
+            color: #666;
+            text-align: left;
+            max-width: 370px;
+            margin-bottom: 15px;
+        }
+
+        .page-hero-content,
+        .page-hero-content p,
+        .page-hero-content li {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
+        }
+
+        .home-hero-content,
+        .home-hero-content p,
+        .home-hero-content li {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: 600;
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
+            font-style: italic;
+        }
+
+        .related-links-title {
+            font-family: var(--cms-heading-font-family);
+            font-size: var(--cms-h3-font-size);
+            font-weight: var(--cms-heading-font-weight);
+            text-transform: var(--cms-heading-text-transform);
+            line-height: var(--cms-heading-line-height);
+            letter-spacing: var(--cms-heading-letter-spacing);
+            color: var(--cms-heading-color);
+        }
+
+        .related-link-item,
+        .related-link-item span:last-child {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
+        }
+    </style>
 @endsection

@@ -56,6 +56,58 @@ class CoreShortcodes
         ]);
 
         /**
+         * ✅ [ctabtn]
+         * CTA button shortcode
+         *
+         * Usage:
+         * [ctabtn]
+         * [ctabtn title="Start Your Ethical Production Journey"]
+         * [ctabtn title="Start Your Ethical Production Journey" link="/contact"]
+         * [ctabtn title="Visit Site" link="www.siatex.com"]
+         */
+        $shortcodes->registerWithMeta('ctabtn', function (array $atts = [], ?string $content = null, array $context = []) {
+            try {
+                $title = trim((string) ($atts['title'] ?? 'write something'));
+                $link = trim((string) ($atts['link'] ?? '#'));
+
+                if ($title === '') {
+                    $title = 'write something';
+                }
+
+                $link = self::normalizeShortcodeLink($link);
+
+                if (view()->exists('shortcodes.cta-button')) {
+                    return view('shortcodes.cta-button', [
+                        'title' => $title,
+                        'link' => $link,
+                    ])->render();
+                }
+
+                return '<a href="' . e($link) . '" class="cta-button">'
+                    . '<span>' . e($title) . '</span>'
+                    . '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+                    . '<path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"></path>'
+                    . '</svg>'
+                    . '</a>';
+            } catch (\Throwable $e) {
+                return '<!-- [ctabtn] shortcode error: ' . e($e->getMessage()) . ' -->';
+            }
+        }, [
+            'group' => 'Core',
+            'description' => 'Renders a CTA button with title and link.',
+            'params' => [
+                ['name' => 'title', 'type' => 'string', 'default' => 'write something', 'desc' => 'Button text.'],
+                ['name' => 'link', 'type' => 'string', 'default' => '#', 'desc' => 'Button URL. External links without http/https will automatically use https://'],
+            ],
+            'examples' => [
+                '[ctabtn]',
+                '[ctabtn title="write something"]',
+                '[ctabtn title="Start Your Ethical Production Journey" link="/contact"]',
+                '[ctabtn title="Visit Site" link="www.siatex.com"]',
+            ],
+        ]);
+
+        /**
          * ✅ [posts] shortcode (unchanged)
          */
         $shortcodes->registerWithMeta('posts', function (array $atts = [], ?string $content = null, array $context = []) {
@@ -700,6 +752,49 @@ class CoreShortcodes
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Normalize shortcode link values.
+     *
+     * Rules:
+     * - empty => #
+     * - /contact => keep
+     * - #section => keep
+     * - ?x=1 => keep
+     * - http://... => keep
+     * - https://... => keep
+     * - mailto:... => keep
+     * - tel:... => keep
+     * - www.siatex.com => https://www.siatex.com
+     * - siatex.com => https://siatex.com
+     */
+    private static function normalizeShortcodeLink($link): string
+    {
+        $link = trim((string) $link);
+
+        if ($link === '') {
+            return '#';
+        }
+
+        $lower = strtolower($link);
+
+        $hasScheme =
+            str_starts_with($lower, 'http://') ||
+            str_starts_with($lower, 'https://') ||
+            str_starts_with($lower, 'mailto:') ||
+            str_starts_with($lower, 'tel:');
+
+        $isRelative =
+            str_starts_with($link, '/') ||
+            str_starts_with($link, '#') ||
+            str_starts_with($link, '?');
+
+        if ($hasScheme || $isRelative) {
+            return $link;
+        }
+
+        return 'https://' . ltrim($link, '/');
     }
 
     /**

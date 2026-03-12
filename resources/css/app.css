@@ -114,3 +114,23 @@ img {
         scroll-behavior: auto !important;
     }
 }
+
+.cta-button {
+	display: inline-flex;
+	align-items: center;
+	background-color:#2f6fa3;
+	color: white;
+	padding: 0.875rem 2rem;
+	border-radius: 4px;
+	text-decoration: none;
+	font-weight: 600;
+	transition: var(--transition);
+	border: 2px solid #2f6fa3;
+	font-size: 1rem;
+	gap: 8px;
+}
+
+.cta-button:hover {
+	background-color: transparent;
+	color:#2f6fa3;
+}

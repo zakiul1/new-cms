@@ -12,22 +12,23 @@
 }" x-init="if (notice) { setTimeout(() => notice = null, 2500) }"
     x-on:customizer-notice.window="if ($event.detail && $event.detail.message) setNotice($event.detail.message)">
 
-    <div class="grid h-full transition-all duration-200"
-        :class="controlsHidden ? 'grid-cols-[0px_minmax(0,1fr)]' : 'grid-cols-[240px_minmax(0,1fr)]'">
-
+    <div class="flex h-full w-full">
         {{-- LEFT SIDEBAR --}}
-        <aside x-show="!controlsHidden" x-transition
-            class="flex h-full min-h-0 flex-col overflow-hidden border-r border-black/10 bg-[#f0f0f1] text-[13px] text-[#1d2327]">
+        <aside x-show="!controlsHidden" x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="-translate-x-full opacity-0" x-transition:enter-end="translate-x-0 opacity-100"
+            x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-x-0 opacity-100"
+            x-transition:leave-end="-translate-x-full opacity-0"
+            class="flex h-full w-[240px] min-h-0 shrink-0 flex-col overflow-hidden border-r border-black/10 bg-[#f0f0f1] text-[13px] text-[#1d2327]">
 
             {{-- top bar --}}
             <div class="flex shrink-0 items-center justify-between border-b border-black/10 px-3 py-2">
-                <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-black/5"
-                    wire:click="goRoot">
+                <a href="{{ url('/lara-admin/themes') }}"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-black/5">
                     <svg class="h-5 w-5 text-[#50575e]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                             stroke-linejoin="round" />
                     </svg>
-                </button>
+                </a>
 
                 <button type="button" wire:click="publish"
                     class="rounded border border-[#2271b1] bg-[#2271b1] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#135e96]">
@@ -82,14 +83,6 @@
                             class="block w-full border-b border-black/10 px-3 py-4 text-left text-[16px] text-[#50575e] hover:bg-white/40">
                             <span class="flex items-center justify-between">
                                 <span>Site Identity</span>
-                                <span class="text-[20px] leading-none">›</span>
-                            </span>
-                        </button>
-
-                        <button type="button" wire:click="openSection('menus')"
-                            class="block w-full border-b border-black/10 px-3 py-4 text-left text-[16px] text-[#50575e] hover:bg-white/40">
-                            <span class="flex items-center justify-between">
-                                <span>Menus</span>
                                 <span class="text-[20px] leading-none">›</span>
                             </span>
                         </button>
@@ -189,10 +182,54 @@
                             </div>
                         @endif
 
-                        @if (in_array($subsection, ['headings', 'paragraph'], true))
+                        @if ($subsection === 'headings')
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H1 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h1_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="48px">
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H2 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h2_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="40px">
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H3 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h3_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="32px">
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H4 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h4_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="28px">
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H5 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h5_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="24px">
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">H6 Size</label>
+                                <input type="text" wire:model.live="data.typography.headings.h6_size"
+                                    class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                    placeholder="20px">
+                            </div>
+                        @endif
+
+                        @if ($subsection === 'paragraph')
                             <div>
                                 <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Font Size</label>
-                                <input type="text" wire:model.live="data.typography.{{ $subsection }}.font_size"
+                                <input type="text" wire:model.live="data.typography.paragraph.font_size"
                                     class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
                             </div>
                         @endif
@@ -295,8 +332,7 @@
                         <div>
                             <label class="mb-2 block text-[12px] font-semibold text-[#50575e]">Fav Icon</label>
 
-                            <button type="button"
-                                wire:click="openMediaBrowser('site_identity.site_icon_media_id', 'image')"
+                            <button type="button" wire:click="openMediaPicker('site_identity.site_icon_media_id')"
                                 class="w-full rounded border border-[#2271b1] bg-white px-3 py-2 text-[13px] text-[#2271b1]">
                                 Select Fav Icon
                             </button>
@@ -317,8 +353,7 @@
                         <div>
                             <label class="mb-2 block text-[12px] font-semibold text-[#50575e]">Logo</label>
 
-                            <button type="button"
-                                wire:click="openMediaBrowser('site_identity.logo_media_id', 'image')"
+                            <button type="button" wire:click="openMediaPicker('site_identity.logo_media_id')"
                                 class="w-full rounded border border-[#2271b1] bg-white px-3 py-2 text-[13px] text-[#2271b1]">
                                 Select Logo
                             </button>
@@ -344,27 +379,6 @@
                                 wire:model.live="data.site_identity.logo_width"
                                 class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
                         </div>
-                    </div>
-                @endif
-
-                {{-- MENUS --}}
-                @if ($screen === 'section' && $section === 'menus')
-                    <div class="border-b border-black/10 px-3 py-4">
-                        <div class="flex items-center gap-3">
-                            <button type="button"
-                                class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-black/5"
-                                wire:click="goRoot">
-                                <svg class="h-5 w-5 text-[#2271b1]" viewBox="0 0 24 24" fill="none">
-                                    <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
-                                        stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
-                            </button>
-                            <div class="text-[16px] leading-6 text-[#50575e]">Menus</div>
-                        </div>
-                    </div>
-
-                    <div class="p-3">
-                        @livewire('menu-builder', [], key('customizer-menu-builder'))
                     </div>
                 @endif
 
@@ -434,7 +448,7 @@
 
                     <div class="space-y-4 p-3">
                         <div>
-                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Background color</label>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Background Color</label>
                             <input type="color" wire:model.live="data.footer.background_color"
                                 class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
                         </div>
@@ -446,8 +460,32 @@
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Before
-                                Copyright</label>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Heading</label>
+                            <input type="text" wire:model.live.debounce.300ms="data.footer.heading"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Description</label>
+                            <textarea wire:model.live.debounce.300ms="data.footer.description" rows="4"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Button Text</label>
+                            <input type="text" wire:model.live.debounce.300ms="data.footer.button_text"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Button URL</label>
+                            <input type="text" wire:model.live.debounce.300ms="data.footer.button_url"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                placeholder="https://example.com">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Before Copyright</label>
                             <textarea wire:model.live.debounce.300ms="data.footer.before_copyright" rows="4"
                                 class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"></textarea>
                         </div>
@@ -464,14 +502,13 @@
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Second line</label>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Second Line</label>
                             <input type="text" wire:model.live.debounce.300ms="data.footer.second_line"
                                 class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Copyright Text
-                                Alignment</label>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Text Alignment</label>
                             <select wire:model.live="data.footer.text_alignment"
                                 class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
                                 <option value="left">Left</option>
@@ -479,6 +516,23 @@
                                 <option value="right">Right</option>
                                 <option value="justify">Justify</option>
                             </select>
+                        </div>
+
+                        <div class="space-y-3 rounded border border-black/10 bg-white p-3">
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Show Footer Menu</span>
+                                <input type="checkbox" wire:model.live="data.footer.show_menu">
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Show Footer Widgets</span>
+                                <input type="checkbox" wire:model.live="data.footer.show_widgets">
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Show Bottom Content</span>
+                                <input type="checkbox" wire:model.live="data.footer.show_bottom_content">
+                            </label>
                         </div>
                     </div>
                 @endif
@@ -583,44 +637,57 @@
         </aside>
 
         {{-- RIGHT PREVIEW --}}
-        <main class="relative h-full overflow-auto bg-[#dcdcdd] p-4">
+        <main class="relative h-full min-w-0 flex-1 overflow-auto bg-[#dcdcdd] p-4">
             <button x-show="controlsHidden" x-transition type="button"
-                class="absolute left-4 top-4 z-20 inline-flex items-center gap-2 rounded border border-black/10 bg-white px-3 py-2 text-[13px] text-[#50575e] shadow"
+                class="absolute bottom-4 left-4 z-20 inline-flex items-center gap-2 rounded border border-black/10 bg-white px-3 py-2 text-[13px] text-[#50575e] shadow"
                 x-on:click="controlsHidden = false">
                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                         stroke-linejoin="round" />
                 </svg>
-                Show Controls
+                Expand Controls
             </button>
 
-            <div class="mx-auto {{ $this->iframeWidthClass }} h-full bg-white shadow">
+            <div class="mx-auto h-full bg-white shadow"
+                :class="controlsHidden ? 'w-full max-w-none' : '{{ $this->iframeWidthClass }}'">
                 <iframe id="customizerPreview" src="{{ $this->previewUrl }}"
                     class="h-[calc(100vh-2rem)] w-full border-0"></iframe>
             </div>
         </main>
     </div>
 
-    {{-- Shared media browser --}}
-    <div class="hidden">
-        @livewire(
-            'media-browser',
-            [
-                'multiple' => false,
-                'eventName' => 'media-picker-selected',
-                'source' => 'theme-customizer',
-                'type' => 'image',
-            ],
-            key('customizer-media-browser')
-        )
-    </div>
+    @if ($showMediaPicker)
+        <div class="fixed inset-0 z-[99999] bg-black/40" wire:click.self="closeMediaPicker">
+            <div class="flex min-h-full items-start justify-center overflow-y-auto p-4 md:p-6">
+                <div class="max-h-[88vh] w-[95vw] max-w-6xl overflow-hidden rounded-2xl bg-white shadow-xl">
+                    <div class="flex items-center justify-between gap-3 border-b px-4 py-3">
+                        <div class="text-sm font-semibold">Pick an image</div>
+
+                        <button type="button" class="rounded-lg border px-2 py-1 text-sm"
+                            wire:click="closeMediaPicker">
+                            Close
+                        </button>
+                    </div>
+
+                    <div class="max-h-[calc(88vh-56px)] overflow-y-auto p-4">
+                        <livewire:media-library-browser :state-path="'theme-customizer-media'" :multiple="false" :max-items="1"
+                            :selected="array_filter([data_get($data, $mediaTargetKey)])" :key="'theme-customizer-media-' .
+                                $mediaTargetKey .
+                                '-' .
+                                (data_get($data, $mediaTargetKey) ?: 'none')" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 
     <script>
         document.addEventListener('livewire:init', () => {
             Livewire.on('customizer-refresh', () => {
                 const iframe = document.getElementById('customizerPreview');
                 if (!iframe) return;
-                const url = new URL(iframe.src);
+
+                const url = new URL(iframe.src, window.location.origin);
                 url.searchParams.set('_t', Date.now());
                 iframe.src = url.toString();
             });
@@ -628,6 +695,7 @@
             Livewire.on('notify', (payload) => {
                 const data = Array.isArray(payload) ? payload[0] : payload;
                 if (!data || !data.message) return;
+
                 window.dispatchEvent(new CustomEvent('customizer-notice', {
                     detail: data
                 }));
