@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-2DrL6X4T.css",
+    "file": "assets/app-CijmmBIr.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,7 +9,7 @@
     ]
   },
   "resources/css/filament/admin/theme.css": {
-    "file": "assets/theme-rPCemt4_.css",
+    "file": "assets/theme-DxE_8J8v.css",
     "src": "resources/css/filament/admin/theme.css",
     "isEntry": true,
     "name": "theme",
@@ -18,7 +18,7 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-c2PnUpmG.js",
+    "file": "assets/app-BINR6zJa.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true
@@ -28,5 +28,45 @@
     "name": "monaco",
     "src": "resources/js/filament/monaco.js",
     "isEntry": true
+  },
+  "themes/siatex-group/public/fonts/poppins/poppins-light-webfont.woff": {
+    "file": "assets/poppins-light-webfont-Cmlmgmvf.woff",
+    "src": "themes/siatex-group/public/fonts/poppins/poppins-light-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/poppins/poppins-medium-webfont.woff": {
+    "file": "assets/poppins-medium-webfont-C8oRxf9B.woff",
+    "src": "themes/siatex-group/public/fonts/poppins/poppins-medium-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/poppins/poppins-regular-webfont.woff": {
+    "file": "assets/poppins-regular-webfont-AC8g5tKq.woff",
+    "src": "themes/siatex-group/public/fonts/poppins/poppins-regular-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/poppins/poppins-semibold-webfont.woff": {
+    "file": "assets/poppins-semibold-webfont-DbO5BONI.woff",
+    "src": "themes/siatex-group/public/fonts/poppins/poppins-semibold-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff": {
+    "file": "assets/roboto-medium-webfont-DEM3JeGj.woff",
+    "src": "themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff2": {
+    "file": "assets/roboto-medium-webfont-Bl90UPU8.woff2",
+    "src": "themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff2"
+  },
+  "themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff": {
+    "file": "assets/roboto-regular-webfont-BrFSLzof.woff",
+    "src": "themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff2": {
+    "file": "assets/roboto-regular-webfont-CopdT0mF.woff2",
+    "src": "themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff2"
+  },
+  "themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff": {
+    "file": "assets/ropasans-regular-webfont-DPEtnOhA.woff",
+    "src": "themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff"
+  },
+  "themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff2": {
+    "file": "assets/ropasans-regular-webfont-CkrXhiHH.woff2",
+    "src": "themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff2"
   }
 }

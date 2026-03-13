@@ -1,14 +1,88 @@
 @import 'tailwindcss';
-@import "./cart.css";
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
+/* Local fonts */
+@font-face {
+    font-family: 'Poppins';
+    src:
+        url('/themes/siatex-group/public/fonts/poppins/poppins-light-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/poppins/poppins-light-webfont.woff') format('woff');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Poppins';
+    src:
+        url('/themes/siatex-group/public/fonts/poppins/poppins-regular-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/poppins/poppins-regular-webfont.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Poppins';
+    src:
+        url('/themes/siatex-group/public/fonts/poppins/poppins-medium-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/poppins/poppins-medium-webfont.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Poppins';
+    src:
+        url('/themes/siatex-group/public/fonts/poppins/poppins-semibold-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/poppins/poppins-semibold-webfont.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Roboto';
+    src:
+        url('/themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/roboto/roboto-regular-webfont.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Roboto';
+    src:
+        url('/themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/roboto/roboto-medium-webfont.woff') format('woff');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Ropa Sans';
+    src:
+        url('/themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff2') format('woff2'),
+        url('/themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-body: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --font-heading: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --font-alt: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Ropa Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Base */
@@ -17,9 +91,19 @@ html {
 }
 
 body {
+    font-family: var(--font-body);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-heading);
 }
 
 /* Layout */
@@ -30,7 +114,7 @@ body {
     padding-right: 15px;
 }
 
-/* Theme tag links (moved from theme.css) */
+/* Theme tag links */
 .sc-tag-current {
     font-weight: 400 !important;
 }
@@ -80,11 +164,41 @@ a[href]:not(.btn):not(.button):not(.no-link-affordance):not(.cf-get-price):focus
 }
 
 /* Branding */
+.logo-frame {
+    display: block;
+    max-width: 100%;
+}
+
 .logo-img {
-    width: 200px !important;
     max-width: 100%;
     height: auto;
     display: block;
+}
+
+/* Keep header action row stable */
+.data-cms-header-actions {
+    min-height: 24px;
+    align-items: center;
+    white-space: nowrap;
+}
+
+/* Topbar accessibility baseline */
+#site-topbar,
+#site-topbar a,
+#site-topbar .topbar-link,
+#site-topbar .topbar-email,
+#site-topbar .cms-menu__link {
+    color: #fff;
+}
+
+#site-topbar a:hover,
+#site-topbar a:focus-visible,
+#site-topbar .topbar-link:hover,
+#site-topbar .topbar-link:focus-visible,
+#site-topbar .cms-menu__link:hover,
+#site-topbar .cms-menu__link:focus-visible {
+    color: #fff;
+    text-decoration: underline;
 }
 
 /* Media defaults */
@@ -113,24 +227,4 @@ img {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
-}
-
-.cta-button {
-	display: inline-flex;
-	align-items: center;
-	background-color:#2f6fa3;
-	color: white;
-	padding: 0.875rem 2rem;
-	border-radius: 4px;
-	text-decoration: none;
-	font-weight: 600;
-	transition: var(--transition);
-	border: 2px solid #2f6fa3;
-	font-size: 1rem;
-	gap: 8px;
-}
-
-.cta-button:hover {
-	background-color: transparent;
-	color:#2f6fa3;
 }

@@ -220,10 +220,11 @@
                                                 'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
                                                 'sizes' => '(max-width: 1024px) 100vw, 50vw',
                                                 'loading' => 'eager',
+                                                'fetchpriority' => 'high',
                                                 'decoding' => 'async',
                                             ],
-                                            'large',
-                                            ['medium', 'medium_large', 'large'],
+                                            'hero_sm',
+                                            ['thumb', 'small', 'hero_sm', 'large'],
                                         ) !!}
                                     </div>
                                 @endif
@@ -247,8 +248,8 @@
                                                             'loading' => $index === 0 ? 'eager' : 'lazy',
                                                             'decoding' => 'async',
                                                         ],
-                                                        'large',
-                                                        ['medium', 'medium_large', 'large'],
+                                                        'hero_sm',
+                                                        ['thumb', 'small', 'hero_sm', 'large'],
                                                     ) !!}
                                                 @endif
                                             </div>

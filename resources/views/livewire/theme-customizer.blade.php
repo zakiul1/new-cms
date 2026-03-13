@@ -79,6 +79,14 @@
                             </span>
                         </button>
 
+                        <button type="button" wire:click="openSection('appearance')"
+                            class="block w-full border-b border-black/10 px-3 py-4 text-left text-[16px] text-[#50575e] hover:bg-white/40">
+                            <span class="flex items-center justify-between">
+                                <span>Appearance</span>
+                                <span class="text-[20px] leading-none">›</span>
+                            </span>
+                        </button>
+
                         <button type="button" wire:click="openSection('site_identity')"
                             class="block w-full border-b border-black/10 px-3 py-4 text-left text-[16px] text-[#50575e] hover:bg-white/40">
                             <span class="flex items-center justify-between">
@@ -297,6 +305,88 @@
                                     class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
                             </div>
                         @endif
+                    </div>
+                @endif
+
+                {{-- APPEARANCE --}}
+                @if ($screen === 'section' && $section === 'appearance')
+                    <div class="border-b border-black/10 px-3 py-4">
+                        <div class="flex items-center gap-3">
+                            <button type="button"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-black/5"
+                                wire:click="goRoot">
+                                <svg class="h-5 w-5 text-[#2271b1]" viewBox="0 0 24 24" fill="none">
+                                    <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
+                            <div class="text-[16px] leading-6 text-[#50575e]">Appearance</div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4 p-3">
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Background Color</label>
+                            <input type="color" wire:model.live="data.appearance.background"
+                                class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Text Color</label>
+                            <input type="color" wire:model.live="data.appearance.text"
+                                class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Primary Color</label>
+                            <input type="color" wire:model.live="data.appearance.primary"
+                                class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Accent Color</label>
+                            <input type="color" wire:model.live="data.appearance.accent"
+                                class="h-10 w-full rounded border border-[#8c8f94] bg-white px-2">
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Container Width</label>
+                            <select wire:model.live="data.appearance.container_width"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
+                                <option value="narrow">Narrow</option>
+                                <option value="default">Default</option>
+                                <option value="wide">Wide</option>
+                                <option value="full">Full</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Header Layout</label>
+                            <select wire:model.live="data.appearance.header_layout"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="split">Split</option>
+                                <option value="stacked">Stacked</option>
+                            </select>
+                        </div>
+
+                        <div class="space-y-3 rounded border border-black/10 bg-white p-3">
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Sticky Header</span>
+                                <input type="checkbox" wire:model.live="data.appearance.header_sticky">
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Rounded Corners</span>
+                                <input type="checkbox" wire:model.live="data.appearance.rounded">
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3">
+                                <span class="text-[13px] text-[#50575e]">Shadows</span>
+                                <input type="checkbox" wire:model.live="data.appearance.shadows">
+                            </label>
+                        </div>
                     </div>
                 @endif
 

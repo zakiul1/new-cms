@@ -111,10 +111,8 @@
         }
     </style>
 
-    {{-- Theme customizer dynamic CSS: typography, local fonts, colors, etc. --}}
     {!! theme_customizer_css() !!}
 
-    {{-- Render CMS enqueued frontend styles --}}
     {!! function_exists('cms_assets') ? cms_assets()->renderStyles('frontend') : '' !!}
 
     @if (!empty($pageAssetsCss))
@@ -132,31 +130,47 @@
     <style>
         :root {
             --cms-adminbar-h: {{ $adminBarHeight }}px;
-            --cms-topbar-h: 0px;
+        }
+
+        html {
+            scroll-padding-top: var(--cms-adminbar-h);
+        }
+
+        body {
+            margin: 0;
+        }
+
+        #cms-admin-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99999;
+            height: 32px;
+            background: #1d2327;
+            color: #fff;
+            font: 13px/32px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        }
+
+        body.has-admin-bar {
+            padding-top: var(--cms-adminbar-h);
         }
 
         #site-topbar-shell {
-            position: fixed;
+            position: sticky;
             top: var(--cms-adminbar-h);
-            left: 0;
-            right: 0;
             z-index: 9990;
-            background: transparent;
-        }
-
-        body.has-fixed-topbar {
-            padding-top: calc(var(--cms-adminbar-h) + var(--cms-topbar-h));
+            display: block;
+            background: #fff;
         }
     </style>
 </head>
 
-<body class="min-h-screen bg-white text-slate-900 antialiased has-fixed-topbar">
+<body class="min-h-screen bg-white text-slate-900 antialiased {{ $showAdminBar ? 'has-admin-bar' : '' }}">
     {!! $hooks->applyFilters('theme.body.before', '') !!}
 
     @if ($showAdminBar)
-        <div id="cms-admin-bar"
-            style="position:fixed;top:0;left:0;right:0;z-index:99999;height:32px;
-                    background:#1d2327;color:#fff;font:13px/32px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;">
+        <div id="cms-admin-bar">
             <div style="max-width:1280px;margin:0 auto;padding:0 12px;display:flex;gap:14px;align-items:center;">
                 <a href="{{ $adminDashboardUrl }}" style="color:#fff;text-decoration:none;font-weight:600;">
                     Admin
@@ -202,43 +216,6 @@
             {!! $pageAssetsJs !!}
         </script>
     @endif
-
-    <script>
-        (function() {
-            const shell = document.getElementById('site-topbar-shell');
-            if (!shell) return;
-
-            const setTopbarHeight = () => {
-                const nextHeight = Math.ceil(shell.getBoundingClientRect().height || 0);
-                document.documentElement.style.setProperty('--cms-topbar-h', nextHeight + 'px');
-            };
-
-            let rafId = null;
-            const scheduleSetTopbarHeight = () => {
-                if (rafId !== null) return;
-                rafId = window.requestAnimationFrame(() => {
-                    rafId = null;
-                    setTopbarHeight();
-                });
-            };
-
-            scheduleSetTopbarHeight();
-
-            if ('ResizeObserver' in window) {
-                const observer = new ResizeObserver(() => {
-                    scheduleSetTopbarHeight();
-                });
-                observer.observe(shell);
-            } else {
-                window.addEventListener('resize', scheduleSetTopbarHeight, {
-                    passive: true
-                });
-                window.addEventListener('load', scheduleSetTopbarHeight, {
-                    passive: true
-                });
-            }
-        })();
-    </script>
 
     {!! $hooks->applyFilters('theme.body.after', '') !!}
 </body>

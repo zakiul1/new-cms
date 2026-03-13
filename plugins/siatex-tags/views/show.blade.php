@@ -3,8 +3,6 @@
 
 @section('content')
     @once
-
-
         @push('scripts')
             <script src="{{ asset('_contact/cart.js') }}" defer></script>
         @endpush
@@ -97,7 +95,6 @@
             try {
                 $value = (string) $parser->render($value, $shortcodeCtx);
             } catch (\Throwable $e) {
-                // ignore
             }
 
             $value = $removeScriptStyleBlocks($value);
@@ -285,7 +282,6 @@
                     $seo['og']['image'] = (string) $heroMedia->url();
                 }
             } catch (\Throwable $e) {
-                // ignore
             }
         }
 
@@ -347,72 +343,72 @@
     @endpush
 
     <div class="cms-container mx-auto px-4 pt-6">
-        <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-            <a class="   decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+        <nav class="breadcrumb-text" aria-label="Breadcrumb">
+            <a class="underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                 href="{{ url('/') }}">
                 Home
             </a>
 
             @if (trim($categoryName) !== '')
                 <span class="mx-2 text-slate-300">/</span>
-                <span class="text-slate-600">{{ $categoryName }}</span>
+                <span>{{ $categoryName }}</span>
             @endif
 
             <span class="mx-2 text-slate-300">/</span>
-            <span class="text-slate-600">{{ $title }}</span>
+            <span>{{ $title }}</span>
         </nav>
     </div>
 
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
-
                 <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
                     @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
-                        {!! cms_picture(
-                            $heroMedia,
-                            [
-                                'alt' => $title,
-                                'class' => 'w-full object-contain',
-                                'sizes' => '(max-width: 1024px) 100vw, 420px',
-                                'loading' => 'eager',
-                                'decoding' => 'async',
-                                'fetchpriority' => 'high',
-                            ],
-                            'hero_sm',
-                            ['hero_sm', 'medium', 'medium_large'],
-                        ) !!}
+                        <div class="hero-media-wrap mx-auto w-full max-w-[420px]">
+                            {!! cms_picture(
+                                $heroMedia,
+                                [
+                                    'alt' => $title,
+                                    'class' => 'hero-media-image w-full object-contain',
+                                    'sizes' => '(max-width: 1024px) 100vw, 420px',
+                                    'loading' => 'eager',
+                                    'decoding' => 'async',
+                                    'fetchpriority' => 'high',
+                                ],
+                                'hero_sm',
+                                ['hero_sm', 'medium', 'medium_large'],
+                            ) !!}
+                        </div>
                     @else
-                        <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
+                        <div class="h-80 w-full" aria-hidden="true"></div>
                     @endif
                 </div>
 
                 <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
 
-                    <div class="mt-4 text-sm font-semibold text-slate-700">
+                    <div class="page-slogan mt-4">
                         {{ $sloganTag }}
                     </div>
 
-                    <h1 class="mt-3 break-words text-4xl font-extrabold leading-tight tracking-tight text-[#1f5f99]">
+                    <h1 class="page-hero-title mt-3 break-words">
                         {{ $heroH1 }}
                     </h1>
 
                     @if (trim($heroTextHtml) !== '')
-                        <div class="mt-4 space-y-4 text-justify text-sm leading-7 text-slate-700">
+                        <div class="page-hero-content mt-4 space-y-4">
                             {!! $heroTextHtml !!}
                         </div>
                     @endif
 
                     <button type="button"
-                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[#1f5f99] px-6 py-3 text-center text-sm font-semibold text-white hover:bg-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                         aria-label="{{ $tagButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                         data-item-id="{{ (int) $tag->id }}" data-item-type="tag" data-item-title="{{ $title }}"
                         data-item-url="{{ $safeTagUrl }}" data-item-image="{{ $safeTagImage }}">
                         {!! $quoteButtonHtml !!}
                     </button>
                 </div>
-
             </div>
         </div>
     </section>
@@ -420,7 +416,6 @@
     @if ($related->count() || $relatedLinks->count() || trim($bottomTitle) !== '' || trim($bottomDescHtml) !== '')
         <section class="bg-white">
             <div class="page-container mx-auto px-4 py-10">
-
                 @if ($related->count())
                     <div class="my-8 grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-4">
                         @foreach ($related as $r)
@@ -474,9 +469,9 @@
 
                             <div class="group text-center">
                                 <a href="{{ $safeRUrl }}"
-                                    class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                     aria-label="{{ $rTitle }}">
-                                    <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
+                                    <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden">
                                         {!! cms_picture(
                                             $r,
                                             [
@@ -491,9 +486,9 @@
                                         ) !!}
                                     </div>
 
-                                    <div class="mx-auto mt-4 w-full max-w-[220px] text-slate-700">
+                                    <div class="related-card-text mx-auto mt-4 w-full max-w-[220px]">
                                         <div
-                                            class="text-sm font-medium leading-snug underline underline-offset-4 decoration-[1.5px] group-hover:no-underline text-slate-600 underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
+                                            class="text-sm font-medium leading-snug underline underline-offset-4 decoration-[1.5px] group-hover:no-underline">
                                             {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
@@ -505,7 +500,7 @@
                                 </a>
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[#1f5f99] underline underline-offset-4 hover:text-[#194f7f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
+                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[var(--cms-primary)] underline underline-offset-4 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                     aria-label="{{ $rButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
                                     data-item-title="{{ $rTitle }}" data-item-url="{{ $safeRUrl }}"
@@ -519,12 +514,12 @@
 
                 <div class="mt-14 grid gap-10 lg:grid-cols-12">
                     <div class="lg:col-span-8">
-                        <h2 class="text-2xl font-semibold leading-tight text-slate-900">
+                        <h2 class="section-title">
                             {{ $bottomTitle !== '' ? $bottomTitle : $title }}
                         </h2>
 
                         @if (trim($bottomDescHtml) !== '')
-                            <div class="prose prose-slate mt-4 max-w-none text-sm leading-7 text-justify">
+                            <div class="section-body mt-4">
                                 {!! $bottomDescHtml !!}
                             </div>
                         @endif
@@ -532,10 +527,10 @@
 
                     <div class="hidden lg:block lg:col-span-4">
                         <div class="rounded bg-slate-100 p-6">
-                            <div class="text-lg font-semibold text-slate-900">Related Links :</div>
+                            <div class="related-links-title">Related Links :</div>
 
                             @if ($relatedLinks->count())
-                                <ul class="mt-4 space-y-3 text-sm text-slate-700">
+                                <ul class="mt-4 space-y-3">
                                     @foreach ($relatedLinks as $q)
                                         @php
                                             /** @var \App\Models\Media $q */
@@ -575,7 +570,7 @@
                                             class="flex items-start gap-2 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0">
                                             <span class="mt-[2px] text-slate-500">›</span>
                                             <a href="{{ $safeQUrl }}" target="_blank" rel="noopener noreferrer"
-                                                class="block truncate italic text-slate-700 underline underline-offset-4 decoration-[1.5px] hover:text-slate-900 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                                                class="related-link-item block truncate underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                                                 title="{{ $qTitle }}">
                                                 {{ $qTitle }}
                                             </a>
@@ -583,15 +578,68 @@
                                     @endforeach
                                 </ul>
                             @else
-                                <div class="mt-3 text-sm text-slate-500">
+                                <div class="mt-3 empty-related-links">
                                     No related links found.
                                 </div>
                             @endif
                         </div>
                     </div>
                 </div>
-
             </div>
         </section>
     @endif
+
+    <style>
+        .breadcrumb-text {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
+        }
+
+        .page-slogan,
+        .page-hero-content,
+        .page-hero-content p,
+        .page-hero-content li,
+        .related-card-text,
+        .related-card-text p,
+        .section-body,
+        .section-body p,
+        .section-body li,
+        .related-link-item,
+        .empty-related-links {
+            font-family: var(--cms-body-font-family);
+            font-size: var(--cms-body-font-size);
+            font-weight: var(--cms-body-font-weight);
+            line-height: var(--cms-body-line-height);
+            letter-spacing: var(--cms-body-letter-spacing);
+            color: var(--cms-body-color);
+        }
+
+        .page-hero-title,
+        .section-title,
+        {
+        font-family: var(--cms-heading-font-family);
+        font-size: var(--cms-h1-font-size);
+        font-weight: var(--cms-heading-font-weight);
+        text-transform: var(--cms-heading-text-transform);
+        line-height: var(--cms-heading-line-height);
+        letter-spacing: var(--cms-heading-letter-spacing);
+        color: var(--cms-primary);
+        }
+
+        .hero-media-wrap {
+            width: 100%;
+        }
+
+        .hero-media-image {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
 @endsection

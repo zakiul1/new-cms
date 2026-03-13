@@ -13,7 +13,10 @@
     $logo = $logoId ? \App\Models\Media::query()->with('variantRecords')->whereKey($logoId)->first() : null;
 
     $logoUrl = theme_logo_url();
-    $logoWidth = theme_logo_width();
+    $logoWidth = (int) theme_logo_width();
+    if ($logoWidth <= 0) {
+        $logoWidth = 200;
+    }
 
     $logoNaturalWidth = 0;
     $logoNaturalHeight = 0;
@@ -42,17 +45,22 @@
         }
     }
 
-    $logoHeight = 40;
-    if ($logoNaturalWidth > 0 && $logoNaturalHeight > 0) {
-        $calculatedHeight = (int) round(($logoNaturalHeight / $logoNaturalWidth) * $logoWidth);
-        if ($calculatedHeight > 0) {
-            $logoHeight = $calculatedHeight;
-        }
+    if ($logoNaturalWidth <= 0) {
+        $logoNaturalWidth = 300;
+    }
+
+    if ($logoNaturalHeight <= 0) {
+        $logoNaturalHeight = 103;
+    }
+
+    $logoHeight = (int) round(($logoNaturalHeight / $logoNaturalWidth) * $logoWidth);
+    if ($logoHeight <= 0) {
+        $logoHeight = 40;
     }
 
     $logoSizes = $logoWidth . 'px';
     $logoVariantKey = 'thumb';
-    $logoVariantKeys = ['thumb', 'hero_sm', 'medium'];
+    $logoVariantKeys = ['thumb', 'small', 'hero_sm'];
 
     $faviconUrl = theme_favicon_url();
 @endphp
@@ -65,6 +73,24 @@
     @endpush
 @endif
 
+@push('head')
+    <style>
+        .logo-frame {
+            width: {{ $logoWidth }}px;
+            max-width: 100%;
+            aspect-ratio: {{ $logoNaturalWidth }} / {{ $logoNaturalHeight }};
+            flex: 0 0 {{ $logoWidth }}px;
+            display: block;
+        }
+
+        .data-cms-header-actions {
+            min-height: 24px;
+            align-items: center;
+            white-space: nowrap;
+        }
+    </style>
+@endpush
+
 <header id="site-header" class="bg-white">
     <div class="cms-container mx-auto px-4">
         <div class="flex items-center justify-between gap-4 pt-12 pb-8">
@@ -72,27 +98,30 @@
                 class="no-link-affordance flex items-center gap-3 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f5f99]"
                 aria-label="{{ $siteTitle }}">
                 @if ($logo instanceof \App\Models\Media)
-                    {!! cms_picture(
-                        $logo,
-                        [
-                            'alt' => $siteTitle,
-                            'class' => 'logo-img',
-                            'style' => 'width: ' . $logoWidth . 'px; height:auto;',
-                            'width' => $logoWidth,
-                            'height' => $logoHeight,
-                            'sizes' => $logoSizes,
-                            'loading' => 'eager',
-                            'fetchpriority' => 'high',
-                            'decoding' => 'async',
-                        ],
-                        $logoVariantKey,
-                        $logoVariantKeys,
-                    ) !!}
+                    <span class="logo-frame">
+                        {!! cms_picture(
+                            $logo,
+                            [
+                                'alt' => $siteTitle,
+                                'class' => 'logo-img',
+                                'style' => 'width:100%;height:auto;',
+                                'width' => $logoNaturalWidth,
+                                'height' => $logoNaturalHeight,
+                                'sizes' => $logoSizes,
+                                'loading' => 'eager',
+                                'fetchpriority' => 'high',
+                                'decoding' => 'async',
+                            ],
+                            $logoVariantKey,
+                            $logoVariantKeys,
+                        ) !!}
+                    </span>
                 @elseif ($logoUrl)
-                    <img class="logo-img" src="{{ $logoUrl }}" alt="{{ $siteTitle }}"
-                        width="{{ $logoWidth }}" height="{{ $logoHeight }}"
-                        style="width: {{ $logoWidth }}px; height:auto;" loading="eager" fetchpriority="high"
-                        decoding="async">
+                    <span class="logo-frame">
+                        <img class="logo-img" src="{{ $logoUrl }}" alt="{{ $siteTitle }}"
+                            width="{{ $logoNaturalWidth }}" height="{{ $logoNaturalHeight }}"
+                            style="width:100%;height:auto;" loading="eager" fetchpriority="high" decoding="async">
+                    </span>
                 @else
                     <div class="flex flex-col">
                         <span class="text-xl font-extrabold tracking-tight">{{ $siteTitle }}</span>

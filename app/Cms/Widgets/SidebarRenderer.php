@@ -20,7 +20,7 @@ class SidebarRenderer
     {
         $ver = $this->versions->get('widget_area', $areaKey);
 
-        // ✅ global render version (theme/plugins/customizer publish)
+        // global render version (theme/plugins/customizer publish)
         $renderVer = $this->versions->getRender();
 
         $cacheKey = "cms:sidebar:area:{$areaKey}:v{$ver}:r{$renderVer}";
@@ -63,9 +63,15 @@ class SidebarRenderer
                 $hideTitle = (bool) ($over['hide_title'] ?? false);
                 $cssClass = (string) ($over['css_class'] ?? '');
                 $wrapperTag = (string) ($over['wrapper_tag'] ?? 'section');
+                $titleTag = (string) ($over['title_tag'] ?? 'div');
 
                 if (!in_array($wrapperTag, ['div', 'aside', 'section'], true)) {
                     $wrapperTag = 'section';
+                }
+
+                // Use non-heading tags by default to avoid heading-order problems
+                if (!in_array($titleTag, ['div', 'p', 'span', 'h2', 'h3', 'h4'], true)) {
+                    $titleTag = 'div';
                 }
 
                 $title = ($titleOverride !== null && trim((string) $titleOverride) !== '')
@@ -78,9 +84,11 @@ class SidebarRenderer
                 }
 
                 $html .= '<' . $wrapperTag . ' class="' . $wrapClass . '">';
-                if (!$hideTitle && $title !== '') {
-                    $html .= '<h3 class="cms-widget__title">' . e($title) . '</h3>';
+
+                if (!$hideTitle && trim($title) !== '') {
+                    $html .= '<' . $titleTag . ' class="cms-widget__title">' . e($title) . '</' . $titleTag . '>';
                 }
+
                 $html .= $widgetHtml;
                 $html .= '</' . $wrapperTag . '>';
             }

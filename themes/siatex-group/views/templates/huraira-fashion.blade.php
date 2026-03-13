@@ -121,7 +121,7 @@
         try {
             $heroMediaForButton = $featuredMediaItems->first();
             if ($heroMediaForButton instanceof \App\Models\Media) {
-                $productImage = (string) ($heroMediaForButton->variantUrl('medium') ?: $heroMediaForButton->url());
+                $productImage = (string) ($heroMediaForButton->variantUrl('hero_sm') ?: $heroMediaForButton->url());
             }
         } catch (\Throwable $e) {
             $productImage = '';
@@ -324,7 +324,7 @@
                     $heroPreloadHref =
                         $heroPreloadMedia->variantUrl('hero_sm') ?:
                         $heroPreloadMedia->variantUrl('small') ?:
-                        $heroPreloadMedia->variantUrl('medium') ?:
+                        $heroPreloadMedia->variantUrl('large') ?:
                         $heroPreloadMedia->url();
                 } elseif (method_exists($heroPreloadMedia, 'url')) {
                     $heroPreloadHref = $heroPreloadMedia->url();
@@ -333,10 +333,47 @@
                 $heroPreloadHref = null;
             }
         }
-        $heroPreloadHref = $heroPreloadHref ? trim((string) $heroPreloadHref) : null;
 
+        $heroPreloadHref = $heroPreloadHref ? trim((string) $heroPreloadHref) : null;
         $shouldLoadCartAssets = !$isHomepage && $showCustomHero;
     @endphp
+
+    @if ($isHomepage)
+        @push('head')
+            <style>
+                h1.home-hero-title {
+                    font-family: 'Ropa Sans', sans-serif;
+                    color: #666;
+                    text-transform: uppercase;
+                    line-height: 1;
+                    letter-spacing: 0;
+                    text-align: left;
+                    max-width: 370px;
+                    margin: 0 0 15px;
+                    font-size: clamp(2rem, 5vw, 4.5rem);
+                    font-weight: 400;
+                    opacity: 1;
+                    visibility: visible;
+                    transform: none;
+                    animation: none;
+                    transition: none;
+                    font-size: 48px;
+                }
+
+                .home-hero-content,
+                .home-hero-content p,
+                .home-hero-content li {
+                    font-family: var(--cms-body-font-family);
+                    font-size: clamp(1rem, 1.4vw, 1.25rem);
+                    font-weight: 400;
+                    line-height: 1.6;
+                    letter-spacing: var(--cms-body-letter-spacing);
+                    color: #444;
+                    font-style: normal;
+                }
+            </style>
+        @endpush
+    @endif
 
     @if ($shouldLoadCartAssets)
         @once
@@ -396,22 +433,65 @@
     @if ($showCustomHero)
         <section class="mt-5 bg-white">
             <div class="cms-container mx-auto px-4">
-                <div class="bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 xl:px-12 xl:py-12">
-                    <div class="grid grid-cols-1 items-start gap-8 md:gap-10 lg:grid-cols-12 lg:gap-16 xl:gap-20">
-                        <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
+                <div class="bg-[#f3f3f3] px-5 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10 xl:px-12 xl:py-12">
+                    <div class="grid grid-cols-1 items-start gap-8 lg:min-h-[520px] lg:grid-cols-12 lg:gap-10 xl:gap-14">
+
+                        <div class="order-1 lg:order-1 lg:col-span-6 lg:self-center">
+                            <div class="max-w-[420px]">
+                                @if (!$isHomepage && $sloganTag !== '')
+                                    <div class="mb-4">
+                                        <div class="h-1 w-20 bg-red-500"></div>
+                                        <div class="mt-4 text-sm font-semibold text-slate-700">
+                                            {{ $sloganTag }}
+                                        </div>
+                                    </div>
+                                @endif
+
+                                @if ($heroTitle !== '')
+                                    <h1 class="{{ $isHomepage ? 'home-hero-title' : 'page-hero-title' }}">
+                                        {{ $heroTitle }}
+                                    </h1>
+                                @endif
+
+                                @if (trim($heroHtml) !== '')
+                                    <div
+                                        class="cms-content {{ $isHomepage ? 'home-hero-content' : 'page-hero-content' }} mt-5 sm:mt-6">
+                                        {!! $heroHtml !!}
+                                    </div>
+                                @endif
+
+                                @if (!$isHomepage)
+                                    <div class="mt-8">
+                                        <button type="button"
+                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
+                                            aria-label="{{ $postButtonAriaLabel }}"
+                                            data-default-label="{{ $quoteButtonLabel }}"
+                                            data-item-id="{{ (int) $post->id }}" data-item-type="post"
+                                            data-item-title="{{ $postButtonTitle }}" data-item-url="{{ $safePageUrl }}"
+                                            data-item-image="{{ $safeProductImage }}">
+                                            {!! $quoteButtonHtml !!}
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div
+                            class="order-2 lg:order-2 lg:col-span-6 {{ !$isHomepage ? 'lg:sticky lg:top-24 lg:self-start' : 'lg:self-center' }}">
                             @if ($featuredMediaItems->count() === 1)
                                 @php
                                     $heroMedia = $featuredMediaItems->first();
                                 @endphp
 
                                 @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
-                                    <div class="w-full overflow-hidden bg-white">
+                                    <div class="hero-media-wrap mx-auto w-full max-w-[520px]">
                                         {!! cms_picture(
                                             $heroMedia,
                                             [
                                                 'alt' => $postButtonTitle,
-                                                'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
-                                                'sizes' => '(max-width: 1024px) 100vw, 50vw',
+                                                'class' =>
+                                                    'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
+                                                'sizes' => '(max-width: 1024px) 100vw, 58vw',
                                                 'loading' => 'eager',
                                                 'fetchpriority' => 'high',
                                                 'decoding' => 'async',
@@ -427,10 +507,15 @@
                                 @endphp
 
                                 <div id="{{ $sliderId }}"
-                                    class="relative w-full overflow-visible bg-white px-8 sm:px-10">
+                                    class="page-featured-slider relative mx-auto w-full max-w-[520px]">
                                     <style>
+                                        #{{ $sliderId }} {
+                                            --hero-arrow-gap: 24px;
+                                        }
+
                                         #{{ $sliderId }} .page-featured-slider-track {
                                             position: relative;
+                                            overflow: hidden;
                                         }
 
                                         #{{ $sliderId }} .page-featured-slide {
@@ -446,9 +531,58 @@
                                             opacity: 1;
                                             pointer-events: auto;
                                         }
+
+                                        #{{ $sliderId }} .page-featured-nav {
+                                            position: absolute;
+                                            top: 50%;
+                                            z-index: 10;
+                                            display: inline-flex;
+                                            height: 48px;
+                                            width: 32px;
+                                            align-items: center;
+                                            justify-content: center;
+                                            padding: 0;
+                                            background: transparent;
+                                            color: #111;
+                                            transform: translateY(-50%);
+                                            transition: opacity .2s ease;
+                                        }
+
+                                        #{{ $sliderId }} .page-featured-nav:hover {
+                                            opacity: .7;
+                                        }
+
+                                        #{{ $sliderId }} .page-featured-prev {
+                                            left: calc(var(--hero-arrow-gap) * -1.5);
+                                        }
+
+                                        #{{ $sliderId }} .page-featured-next {
+                                            right: calc(var(--hero-arrow-gap) * -1.5);
+                                        }
+
+                                        @media (max-width: 1023.98px) {
+                                            #{{ $sliderId }} {
+                                                --hero-arrow-gap: 12px;
+                                            }
+                                        }
+
+                                        @media (max-width: 639.98px) {
+                                            #{{ $sliderId }} .page-featured-nav {
+                                                width: 28px;
+                                                height: 44px;
+                                            }
+
+                                            #{{ $sliderId }} .page-featured-prev {
+                                                left: -6px;
+                                            }
+
+                                            #{{ $sliderId }} .page-featured-next {
+                                                right: -6px;
+                                            }
+                                        }
                                     </style>
 
-                                    <div class="page-featured-slider-track relative overflow-hidden">
+                                    <div class="page-featured-slider-track">
                                         @foreach ($featuredMediaItems as $index => $heroMedia)
                                             @php
                                                 $isFirstSlide = $index === 0;
@@ -460,8 +594,9 @@
                                                         $heroMedia,
                                                         [
                                                             'alt' => $postButtonTitle,
-                                                            'class' => 'block w-full h-auto max-h-[280px] object-contain sm:max-h-[380px] lg:max-h-[520px]',
-                                                            'sizes' => '(max-width: 1024px) 100vw, 50vw',
+                                                            'class' =>
+                                                                'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
+                                                            'sizes' => '(max-width: 1024px) 100vw, 58vw',
                                                             'loading' => $isFirstSlide ? 'eager' : 'lazy',
                                                             'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
                                                             'decoding' => 'async',
@@ -475,7 +610,7 @@
                                     </div>
 
                                     <button type="button"
-                                        class="page-featured-prev absolute left-0 top-1/2 z-10 inline-flex h-12 w-8 -translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 sm:-translate-x-8"
+                                        class="page-featured-nav page-featured-prev focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                                         aria-label="Previous image">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
                                             viewBox="0 0 14 28" fill="none" aria-hidden="true">
@@ -485,7 +620,7 @@
                                     </button>
 
                                     <button type="button"
-                                        class="page-featured-next absolute right-0 top-1/2 z-10 inline-flex h-12 w-8 translate-x-6 -translate-y-1/2 items-center justify-center bg-transparent p-0 text-black transition hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500 sm:translate-x-8"
+                                        class="page-featured-nav page-featured-next focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
                                         aria-label="Next image">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
                                             viewBox="0 0 14 28" fill="none" aria-hidden="true">
@@ -531,46 +666,6 @@
                                 </script>
                             @endif
                         </div>
-
-                        <div class="order-2 lg:order-1 lg:col-span-6">
-                            <div class="py-1 lg:py-2">
-                                @if (!$isHomepage && $sloganTag !== '')
-                                    <div class="mb-4">
-                                        <div class="h-1 w-20 bg-red-500"></div>
-                                        <div class="mt-4 text-sm font-semibold text-slate-700">
-                                            {{ $sloganTag }}
-                                        </div>
-                                    </div>
-                                @endif
-
-                                @if ($heroTitle !== '')
-                                    <h1 class="{{ $isHomepage ? 'home-hero-title' : 'page-hero-title' }}">
-                                        {{ $heroTitle }}
-                                    </h1>
-                                @endif
-
-                                @if (trim($heroHtml) !== '')
-                                    <div
-                                        class="cms-content {{ $isHomepage ? 'home-hero-content' : 'page-hero-content' }} mt-5 sm:mt-6">
-                                        {!! $heroHtml !!}
-                                    </div>
-                                @endif
-
-                                @if (!$isHomepage)
-                                    <div class="mt-8">
-                                        <button type="button"
-                                            class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
-                                            aria-label="{{ $postButtonAriaLabel }}"
-                                            data-default-label="{{ $quoteButtonLabel }}"
-                                            data-item-id="{{ (int) $post->id }}" data-item-type="post"
-                                            data-item-title="{{ $postButtonTitle }}" data-item-url="{{ $safePageUrl }}"
-                                            data-item-image="{{ $safeProductImage }}">
-                                            {!! $quoteButtonHtml !!}
-                                        </button>
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -601,13 +696,13 @@
                         <div class="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
                             @if (!$isHomepage && $relatedLinks->isNotEmpty())
                                 <div class="bg-[#f3f3f3] p-6">
-                                    <h3 class="related-links-title mb-4">Related Links :</h3>
+                                    <h2 class="related-links-title mb-4">Related Links :</h2>
 
                                     <div class="flex flex-col">
                                         @foreach ($relatedLinks as $item)
                                             <a href="{{ trim((string) $item['url']) }}"
                                                 class="related-link-item flex items-start gap-2 border-t border-[#d8d8d8] py-[10px] underline underline-offset-4 decoration-[1.5px] first:border-t-0 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500">
-                                                <span class="text-[20px] leading-none text-[#777]">›</span>
+                                                <span class="text-[20px] leading-none text-[#555]">›</span>
                                                 <span class="block truncate"
                                                     title="{{ trim(strip_tags((string) $item['title'])) }}">
                                                     {{ trim(strip_tags((string) $item['title'])) }}
@@ -646,20 +741,7 @@
             text-transform: var(--cms-heading-text-transform);
             line-height: var(--cms-heading-line-height);
             letter-spacing: var(--cms-heading-letter-spacing);
-            color: var(--cms-heading-color);
-        }
-
-        .home-hero-title {
-            font-family: var(--cms-heading-font-family);
-            font-size: var(--cms-h1-font-size);
-            font-weight: 400;
-            text-transform: uppercase;
-            line-height: 1;
-            letter-spacing: 0;
-            color: #666;
-            text-align: left;
-            max-width: 370px;
-            margin-bottom: 15px;
+            color: var(--cms-primary);
         }
 
         .page-hero-content,
@@ -673,26 +755,17 @@
             color: var(--cms-body-color);
         }
 
-        .home-hero-content,
-        .home-hero-content p,
-        .home-hero-content li {
-            font-family: var(--cms-body-font-family);
-            font-size: var(--cms-body-font-size);
-            font-weight: 600;
-            line-height: var(--cms-body-line-height);
-            letter-spacing: var(--cms-body-letter-spacing);
-            color: var(--cms-body-color);
-            font-style: italic;
+        .hero-media-wrap,
+        .page-featured-slider {
+            width: 100%;
         }
 
-        .related-links-title {
-            font-family: var(--cms-heading-font-family);
-            font-size: var(--cms-h3-font-size);
-            font-weight: var(--cms-heading-font-weight);
-            text-transform: var(--cms-heading-text-transform);
-            line-height: var(--cms-heading-line-height);
-            letter-spacing: var(--cms-heading-letter-spacing);
-            color: var(--cms-heading-color);
+        .hero-media-image {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .related-link-item,

@@ -2,9 +2,6 @@
 @extends('layouts.app')
 
 @section('content')
-    @once
-    @endonce
-
     @php
         /** @var \App\Models\Media $media */
 
@@ -18,8 +15,7 @@
             '<p><br><b><strong><i><em><u><ul><ol><li><blockquote><a><h1><h2><h3><h4><h5><h6>' .
             '<div><span><section><article><header><footer>' .
             '<picture><source><img>' .
-            '<button>' .
-            '<script>';
+            '<button>';
 
         $removeScriptStyleBlocks = function (string $html): string {
             $html = preg_replace('~<\s*script\b[^>]*>.*?<\s*/\s*script\s*>~is', '', $html) ?? $html;
@@ -232,6 +228,7 @@
                     $media->variantUrl('small') ?:
                     $media->variantUrl('large') ?:
                     $media->url());
+
                 $heroPreloadHref =
                     (string) ($media->variantUrl('hero_sm') ?:
                     $media->variantUrl('small') ?:
@@ -399,12 +396,78 @@
         $printJsonLdHere = false;
     @endphp
 
+    @once
+        @push('head')
+            <link rel="preload" href="{{ asset('_contact/cart.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+            <noscript>
+                <link rel="stylesheet" href="{{ asset('_contact/cart.css') }}">
+            </noscript>
+        @endpush
+
+        @push('scripts')
+            <script src="{{ asset('_contact/cart.js') }}" defer></script>
+        @endpush
+    @endonce
+
     @push('head')
         @if ($heroPreloadHref !== '')
             <link rel="preload" as="image" href="{{ $heroPreloadHref }}"
                 imagesizes="(max-width: 575px) 275px, (max-width: 767px) 370px, (max-width: 991px) 575px, 1000px"
                 fetchpriority="high">
         @endif
+
+        <style>
+            .breadcrumb-text {
+                font-family: var(--cms-body-font-family);
+                font-size: var(--cms-body-font-size);
+                font-weight: var(--cms-body-font-weight);
+                line-height: var(--cms-body-line-height);
+                letter-spacing: var(--cms-body-letter-spacing);
+                color: var(--cms-body-color);
+            }
+
+            .page-slogan,
+            .page-hero-content,
+            .page-hero-content p,
+            .page-hero-content li,
+            .related-card-text,
+            .related-card-text p,
+            .section-body,
+            .section-body p,
+            .section-body li,
+            .related-link-item,
+            .empty-related-links {
+                font-family: var(--cms-body-font-family);
+                font-size: var(--cms-body-font-size);
+                font-weight: var(--cms-body-font-weight);
+                line-height: var(--cms-body-line-height);
+                letter-spacing: var(--cms-body-letter-spacing);
+                color: var(--cms-body-color);
+            }
+
+            .page-hero-title,
+            .section-title {
+                font-family: var(--cms-heading-font-family);
+                font-size: var(--cms-h1-font-size);
+                font-weight: var(--cms-heading-font-weight);
+                text-transform: var(--cms-heading-text-transform);
+                line-height: var(--cms-heading-line-height);
+                letter-spacing: var(--cms-heading-letter-spacing);
+                color: var(--cms-primary);
+            }
+
+            .hero-media-wrap {
+                width: 100%;
+            }
+
+            .hero-media-image {
+                display: block;
+                width: 100%;
+                height: auto;
+                margin-left: auto;
+                margin-right: auto;
+            }
+        </style>
     @endpush
 
     <div class="cms-container mx-auto px-4 pt-6">
@@ -417,9 +480,10 @@
             @if ($breadcrumbTerm)
                 <span class="mx-2 text-slate-300">/</span>
                 @if ($breadcrumbTermUrl)
-                    <span class="" href="{{ $breadcrumbTermUrl }}">
+                    <a class="underline underline-offset-4 decoration-[1.5px] hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
+                        href="{{ $breadcrumbTermUrl }}">
                         {{ $breadcrumbTerm->name }}
-                    </span>
+                    </a>
                 @else
                     <span>{{ $breadcrumbTerm->name }}</span>
                 @endif
@@ -433,28 +497,10 @@
     <section class="mt-6">
         <div class="cms-container mx-auto px-4 py-10">
             <div class="grid gap-12 bg-slate-50 p-6 md:p-10 lg:grid-cols-12 lg:items-start">
-                <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
-                    @if ($media->isImage())
-                        {!! cms_picture(
-                            $media,
-                            [
-                                'alt' => $title,
-                                'class' => 'w-full object-contain',
-                                'sizes' => '(max-width: 575px) 275px, (max-width: 767px) 370px, (max-width: 991px) 575px, 1000px',
-                                'loading' => 'eager',
-                                'decoding' => 'async',
-                                'fetchpriority' => 'high',
-                            ],
-                            'hero_sm',
-                            ['thumb', 'small', 'hero_sm', 'large'],
-                        ) !!}
-                    @else
-                        <div class="h-80 w-full bg-slate-100" aria-hidden="true"></div>
-                    @endif
-                </div>
 
-                <div class="order-2 min-w-0 lg:order-1 lg:col-span-6">
+                <div class="order-1 min-w-0 lg:order-1 lg:col-span-6">
                     <div class="h-1 w-20 bg-red-500"></div>
+
                     <div class="page-slogan mt-4">
                         {{ $sloganTag }}
                     </div>
@@ -470,12 +516,34 @@
                     @endif
 
                     <button type="button"
-                        class="cf-get-price mt-8 inline-flex items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
+                        class="cf-get-price mt-8 cursor-pointer inline-flex items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold !text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                         aria-label="{{ $buttonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                         data-item-id="{{ (int) $media->id }}" data-item-type="media" data-item-title="{{ $title }}"
                         data-item-url="{{ $safeProductUrl }}" data-item-image="{{ $safeProductImage }}">
                         {!! $quoteButtonHtml !!}
                     </button>
+                </div>
+
+                <div class="order-2 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
+                    @if ($media->isImage())
+                        <div class="hero-media-wrap mx-auto w-full max-w-[1000px]">
+                            {!! cms_picture(
+                                $media,
+                                [
+                                    'alt' => $title,
+                                    'class' => 'hero-media-image w-full object-contain',
+                                    'sizes' => '(max-width: 575px) 275px, (max-width: 767px) 370px, (max-width: 991px) 575px, 1000px',
+                                    'loading' => 'eager',
+                                    'decoding' => 'async',
+                                    'fetchpriority' => 'high',
+                                ],
+                                'hero_sm',
+                                ['thumb', 'small', 'hero_sm', 'large'],
+                            ) !!}
+                        </div>
+                    @else
+                        <div class="h-80 w-full" aria-hidden="true"></div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -521,7 +589,7 @@
                                 <a href="{{ $safeRUrl }}"
                                     class="block rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                     aria-label="{{ $rTitle }}">
-                                    <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden bg-white">
+                                    <div class="mx-auto aspect-square w-full max-w-[220px] overflow-hidden">
                                         {!! cms_picture(
                                             $r,
                                             [
@@ -537,7 +605,7 @@
                                     </div>
 
                                     <div class="related-card-text mx-auto mt-4 w-full max-w-[220px]">
-                                        <div class="text-sm font-medium leading-snug ">
+                                        <div class="text-sm font-medium leading-snug">
                                             {{ trim(strip_tags($productStylePrefix . (int) $r->id)) }}
                                         </div>
 
@@ -568,7 +636,7 @@
                                 @endphp
 
                                 <button type="button"
-                                    class="cf-get-price mt-3 inline-flex items-center justify-center text-center text-sm font-semibold text-[var(--cms-primary)] underline underline-offset-4 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
+                                    class="cf-get-price mt-3 cursor-pointer inline-flex items-center justify-center text-center text-sm font-semibold underline underline-offset-4 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
                                     aria-label="{{ $rButtonAriaLabel }}" data-default-label="{{ $quoteButtonLabel }}"
                                     data-item-id="{{ (int) $r->id }}" data-item-type="media"
                                     data-item-title="{{ $rTitle }}" data-item-url="{{ $safeRUrl }}"
@@ -652,45 +720,4 @@
             </div>
         </section>
     @endif
-
-    <style>
-        .breadcrumb-text {
-            font-family: var(--cms-body-font-family);
-            font-size: var(--cms-body-font-size);
-            font-weight: var(--cms-body-font-weight);
-            line-height: var(--cms-body-line-height);
-            letter-spacing: var(--cms-body-letter-spacing);
-            color: var(--cms-body-color);
-        }
-
-        .page-slogan,
-        .page-hero-content,
-        .page-hero-content p,
-        .page-hero-content li,
-        .related-card-text,
-        .related-card-text p,
-        .section-body,
-        .section-body p,
-        .section-body li,
-        .related-link-item,
-        .empty-related-links {
-            font-family: var(--cms-body-font-family);
-            font-size: var(--cms-body-font-size);
-            font-weight: var(--cms-body-font-weight);
-            line-height: var(--cms-body-line-height);
-            letter-spacing: var(--cms-body-letter-spacing);
-            color: var(--cms-body-color);
-        }
-
-        .page-hero-title,
-        .section-title,
-        .related-links-title {
-            font-family: var(--cms-heading-font-family);
-            var(--cms-h1-font-size) font-weight: var(--cms-heading-font-weight);
-            text-transform: var(--cms-heading-text-transform);
-            line-height: var(--cms-heading-line-height);
-            letter-spacing: var(--cms-heading-letter-spacing);
-            color: var(--cms-heading-color);
-        }
-    </style>
 @endsection
