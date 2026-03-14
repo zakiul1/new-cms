@@ -161,7 +161,7 @@
             top: var(--cms-adminbar-h);
             z-index: 9990;
             display: block;
-            background: #fff;
+            background: var(--cms-primary);
         }
     </style>
 </head>

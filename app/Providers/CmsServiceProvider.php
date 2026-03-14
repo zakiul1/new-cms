@@ -107,6 +107,10 @@ class CmsServiceProvider extends ServiceProvider
                 $opts['huraira-fashion'] = 'Huraira Fashion';
             }
 
+            if (view()->exists('templates.atelier-home')) {
+                $opts['atelier-home'] = 'Atelier Home';
+            }
+
             return $opts;
         }, 20, 1);
 

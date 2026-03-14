@@ -81,6 +81,7 @@
             aspect-ratio: {{ $logoNaturalWidth }} / {{ $logoNaturalHeight }};
             flex: 0 0 {{ $logoWidth }}px;
             display: block;
+            overflow: hidden;
         }
 
         .data-cms-header-actions {
@@ -104,7 +105,7 @@
                             [
                                 'alt' => $siteTitle,
                                 'class' => 'logo-img',
-                                'style' => 'width:100%;height:auto;',
+                                'style' => 'width:100%;height:100%;object-fit:contain;',
                                 'width' => $logoNaturalWidth,
                                 'height' => $logoNaturalHeight,
                                 'sizes' => $logoSizes,
@@ -120,7 +121,8 @@
                     <span class="logo-frame">
                         <img class="logo-img" src="{{ $logoUrl }}" alt="{{ $siteTitle }}"
                             width="{{ $logoNaturalWidth }}" height="{{ $logoNaturalHeight }}"
-                            style="width:100%;height:auto;" loading="eager" fetchpriority="high" decoding="async">
+                            style="width:100%;height:100%;object-fit:contain;" loading="eager" fetchpriority="high"
+                            decoding="async">
                     </span>
                 @else
                     <div class="flex flex-col">

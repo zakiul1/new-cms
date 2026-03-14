@@ -350,14 +350,14 @@
                     text-align: left;
                     max-width: 370px;
                     margin: 0 0 15px;
-                    font-size: clamp(2rem, 5vw, 4.5rem);
+                    font-size: clamp(2rem, 5vw, 3rem);
                     font-weight: 400;
                     opacity: 1;
                     visibility: visible;
                     transform: none;
                     animation: none;
                     transition: none;
-                    font-size: 48px;
+                    min-height: 2.2em;
                 }
 
                 .home-hero-content,
@@ -392,6 +392,15 @@
             @if ($heroPreloadHref)
                 <link rel="preload" as="image" href="{{ $heroPreloadHref }}" imagesizes="(max-width: 1024px) 100vw, 50vw"
                     fetchpriority="high">
+            @endif
+
+            @if ($isHomepage)
+                <link rel="preload" href="{{ asset('themes/siatex-group/public/fonts/ropa/ropasans-regular-webfont.woff2') }}"
+                    as="font" type="font/woff2" crossorigin>
+
+                <link rel="preload"
+                    href="{{ asset('themes/siatex-group/public/fonts/poppins/poppins-regular-webfont.woff2') }}" as="font"
+                    type="font/woff2" crossorigin>
             @endif
         @endpush
     @endif
@@ -433,34 +442,270 @@
     @if ($showCustomHero)
         <section class="mt-5 bg-white">
             <div class="cms-container mx-auto px-4">
-                <div class="bg-[#f3f3f3] px-5 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10 xl:px-12 xl:py-12">
-                    <div class="grid grid-cols-1 items-start gap-8 lg:min-h-[520px] lg:grid-cols-12 lg:gap-10 xl:gap-14">
+                @if ($isHomepage)
+                    <div class="home-hero-shell bg-[#f3f3f3]">
+                        <div class="home-hero-grid grid grid-cols-1 lg:grid-cols-12">
+                            <div class="home-hero-content-col order-2 lg:order-1 lg:col-span-5">
+                                <div class="home-hero-content-inner">
+                                    @if ($heroTitle !== '')
+                                        <h1 class="home-hero-title">
+                                            {{ $heroTitle }}
+                                        </h1>
+                                    @endif
 
-                        <div class="order-1 lg:order-1 lg:col-span-6 lg:self-center">
-                            <div class="max-w-[420px]">
-                                @if (!$isHomepage && $sloganTag !== '')
-                                    <div class="mb-4">
-                                        <div class="h-1 w-20 bg-red-500"></div>
-                                        <div class="mt-4 text-sm font-semibold text-slate-700">
-                                            {{ $sloganTag }}
+                                    @if (trim($heroHtml) !== '')
+                                        <div class="cms-content home-hero-content mt-5 sm:mt-6">
+                                            {!! $heroHtml !!}
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <div class="home-hero-media-col order-1 lg:order-2 lg:col-span-7">
+                                @if ($featuredMediaItems->count() === 1)
+                                    @php
+                                        $heroMedia = $featuredMediaItems->first();
+                                    @endphp
+
+                                    @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
+                                        <div class="home-hero-media-wrap">
+                                            {!! cms_picture(
+                                                $heroMedia,
+                                                [
+                                                    'alt' => $postButtonTitle,
+                                                    'class' => 'home-hero-media-image',
+                                                    'sizes' => '(max-width: 1023px) 100vw, 58vw',
+                                                    'loading' => 'eager',
+                                                    'fetchpriority' => 'high',
+                                                    'decoding' => 'async',
+                                                ],
+                                                'hero_sm',
+                                                ['thumb', 'small', 'hero_sm', 'large'],
+                                            ) !!}
+                                        </div>
+                                    @endif
+                                @elseif ($featuredMediaItems->count() > 1)
+                                    @php
+                                        $sliderId = 'home-hero-slider-' . ($post->id ?? 'default');
+                                    @endphp
+
+                                    <div id="{{ $sliderId }}" class="home-hero-slider home-hero-media-wrap relative"
+                                        aria-roledescription="carousel">
+                                        <style>
+                                            #{{ $sliderId }} .home-hero-slider-track {
+                                                position: relative;
+                                                overflow: hidden;
+                                                width: 100%;
+                                                height: 100%;
+                                                min-height: inherit;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slide {
+                                                position: absolute;
+                                                inset: 0;
+                                                opacity: 0;
+                                                pointer-events: none;
+                                                transition: opacity .7s ease;
+                                                height: 100%;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slide.is-active {
+                                                position: relative;
+                                                opacity: 1;
+                                                pointer-events: auto;
+                                                z-index: 2;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slide picture,
+                                            #{{ $sliderId }} .home-hero-slide img {
+                                                display: block;
+                                                width: 100%;
+                                                height: 100%;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slider-dots {
+                                                position: absolute;
+                                                left: 24px;
+                                                right: 24px;
+                                                bottom: 18px;
+                                                z-index: 4;
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                gap: 10px;
+                                                pointer-events: none;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slider-dot {
+                                                appearance: none;
+                                                border: 0;
+                                                padding: 0;
+                                                margin: 0;
+                                                width: 15px;
+                                                height: 3px;
+                                                background: rgba(255, 255, 255, .45);
+                                                pointer-events: auto;
+                                                cursor: pointer;
+                                                transition: background-color .25s ease, opacity .25s ease;
+                                            }
+
+                                            #{{ $sliderId }} .home-hero-slider-dot.is-active {
+                                                background: rgba(255, 255, 255, .95);
+                                            }
+
+                                            @media (max-width: 639.98px) {
+                                                #{{ $sliderId }} .home-hero-slider-dots {
+                                                    left: 16px;
+                                                    right: 16px;
+                                                    bottom: 12px;
+                                                    gap: 8px;
+                                                }
+
+                                                #{{ $sliderId }} .home-hero-slider-dot {
+                                                    width: 15px;
+                                                }
+                                            }
+                                        </style>
+
+                                        <div class="home-hero-slider-track">
+                                            @foreach ($featuredMediaItems as $index => $heroMedia)
+                                                @php
+                                                    $isFirstSlide = $index === 0;
+                                                @endphp
+
+                                                <div class="home-hero-slide {{ $isFirstSlide ? 'is-active' : '' }}"
+                                                    data-slide-index="{{ $index }}"
+                                                    aria-hidden="{{ $isFirstSlide ? 'false' : 'true' }}">
+                                                    @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
+                                                        {!! cms_picture(
+                                                            $heroMedia,
+                                                            [
+                                                                'alt' => $postButtonTitle,
+                                                                'class' => 'home-hero-media-image',
+                                                                'sizes' => '(max-width: 1023px) 100vw, 58vw',
+                                                                'loading' => $isFirstSlide ? 'eager' : 'lazy',
+                                                                'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
+                                                                'decoding' => 'async',
+                                                            ],
+                                                            'hero_sm',
+                                                            ['thumb', 'small', 'hero_sm', 'large'],
+                                                        ) !!}
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+
+                                        <div class="home-hero-slider-dots" aria-label="Slide indicators">
+                                            @foreach ($featuredMediaItems as $index => $heroMedia)
+                                                <button type="button"
+                                                    class="home-hero-slider-dot {{ $index === 0 ? 'is-active' : '' }}"
+                                                    data-slide-dot="{{ $index }}"
+                                                    aria-label="Go to slide {{ $index + 1 }}"
+                                                    aria-pressed="{{ $index === 0 ? 'true' : 'false' }}"></button>
+                                            @endforeach
                                         </div>
                                     </div>
-                                @endif
 
-                                @if ($heroTitle !== '')
-                                    <h1 class="{{ $isHomepage ? 'home-hero-title' : 'page-hero-title' }}">
-                                        {{ $heroTitle }}
-                                    </h1>
-                                @endif
+                                    <script>
+                                        (function() {
+                                            const slider = document.getElementById(@json($sliderId));
+                                            if (!slider) return;
 
-                                @if (trim($heroHtml) !== '')
-                                    <div
-                                        class="cms-content {{ $isHomepage ? 'home-hero-content' : 'page-hero-content' }} mt-5 sm:mt-6">
-                                        {!! $heroHtml !!}
-                                    </div>
-                                @endif
+                                            const slides = Array.from(slider.querySelectorAll('.home-hero-slide'));
+                                            const dots = Array.from(slider.querySelectorAll('.home-hero-slider-dot'));
+                                            if (slides.length < 2) return;
 
-                                @if (!$isHomepage)
+                                            let current = 0;
+                                            let timer = null;
+                                            const delay = 4200;
+
+                                            const render = (index) => {
+                                                current = (index + slides.length) % slides.length;
+
+                                                slides.forEach((slide, i) => {
+                                                    const active = i === current;
+                                                    slide.classList.toggle('is-active', active);
+                                                    slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+                                                });
+
+                                                dots.forEach((dot, i) => {
+                                                    const active = i === current;
+                                                    dot.classList.toggle('is-active', active);
+                                                    dot.setAttribute('aria-pressed', active ? 'true' : 'false');
+                                                });
+                                            };
+
+                                            const next = () => {
+                                                render(current + 1);
+                                            };
+
+                                            const start = () => {
+                                                stop();
+                                                timer = window.setInterval(next, delay);
+                                            };
+
+                                            const stop = () => {
+                                                if (timer) {
+                                                    window.clearInterval(timer);
+                                                    timer = null;
+                                                }
+                                            };
+
+                                            dots.forEach((dot, index) => {
+                                                dot.addEventListener('click', () => {
+                                                    render(index);
+                                                    start();
+                                                });
+                                            });
+
+                                            slider.addEventListener('mouseenter', stop);
+                                            slider.addEventListener('mouseleave', start);
+                                            slider.addEventListener('focusin', stop);
+                                            slider.addEventListener('focusout', start);
+
+                                            document.addEventListener('visibilitychange', () => {
+                                                if (document.hidden) {
+                                                    stop();
+                                                } else {
+                                                    start();
+                                                }
+                                            });
+
+                                            render(0);
+                                            start();
+                                        })();
+                                    </script>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div class="bg-[#f3f3f3] px-5 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10 xl:px-12 xl:py-12">
+                        <div
+                            class="grid grid-cols-1 items-start gap-8 lg:min-h-[520px] lg:grid-cols-12 lg:gap-10 xl:gap-14">
+                            <div class="order-2 lg:order-1 lg:col-span-6 lg:self-center">
+                                <div class="max-w-[420px]">
+                                    @if ($sloganTag !== '')
+                                        <div class="mb-4">
+                                            <div class="h-1 w-20 bg-red-500"></div>
+                                            <div class="mt-4 text-sm font-semibold text-slate-700">
+                                                {{ $sloganTag }}
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    @if ($heroTitle !== '')
+                                        <h1 class="page-hero-title">
+                                            {{ $heroTitle }}
+                                        </h1>
+                                    @endif
+
+                                    @if (trim($heroHtml) !== '')
+                                        <div class="cms-content page-hero-content mt-5 sm:mt-6">
+                                            {!! $heroHtml !!}
+                                        </div>
+                                    @endif
+
                                     <div class="mt-8">
                                         <button type="button"
                                             class="cf-get-price inline-flex min-h-[46px] items-center justify-center rounded bg-[var(--cms-primary)] px-6 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cms-primary)]"
@@ -472,202 +717,201 @@
                                             {!! $quoteButtonHtml !!}
                                         </button>
                                     </div>
-                                @endif
+                                </div>
                             </div>
-                        </div>
 
-                        <div
-                            class="order-2 lg:order-2 lg:col-span-6 {{ !$isHomepage ? 'lg:sticky lg:top-24 lg:self-start' : 'lg:self-center' }}">
-                            @if ($featuredMediaItems->count() === 1)
-                                @php
-                                    $heroMedia = $featuredMediaItems->first();
-                                @endphp
+                            <div class="order-1 lg:order-2 lg:col-span-6 lg:sticky lg:top-24 lg:self-start">
+                                @if ($featuredMediaItems->count() === 1)
+                                    @php
+                                        $heroMedia = $featuredMediaItems->first();
+                                    @endphp
 
-                                @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
-                                    <div class="hero-media-wrap mx-auto w-full max-w-[520px]">
-                                        {!! cms_picture(
-                                            $heroMedia,
-                                            [
-                                                'alt' => $postButtonTitle,
-                                                'class' =>
-                                                    'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
-                                                'sizes' => '(max-width: 1024px) 100vw, 58vw',
-                                                'loading' => 'eager',
-                                                'fetchpriority' => 'high',
-                                                'decoding' => 'async',
-                                            ],
-                                            'hero_sm',
-                                            ['thumb', 'small', 'hero_sm', 'large'],
-                                        ) !!}
-                                    </div>
-                                @endif
-                            @elseif ($featuredMediaItems->count() > 1)
-                                @php
-                                    $sliderId = 'page-featured-slider-' . ($post->id ?? 'default');
-                                @endphp
+                                    @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
+                                        <div class="hero-media-wrap mx-auto w-full max-w-[520px]">
+                                            {!! cms_picture(
+                                                $heroMedia,
+                                                [
+                                                    'alt' => $postButtonTitle,
+                                                    'class' =>
+                                                        'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
+                                                    'sizes' => '(max-width: 1024px) 100vw, 58vw',
+                                                    'loading' => 'eager',
+                                                    'fetchpriority' => 'high',
+                                                    'decoding' => 'async',
+                                                ],
+                                                'hero_sm',
+                                                ['thumb', 'small', 'hero_sm', 'large'],
+                                            ) !!}
+                                        </div>
+                                    @endif
+                                @elseif ($featuredMediaItems->count() > 1)
+                                    @php
+                                        $sliderId = 'page-featured-slider-' . ($post->id ?? 'default');
+                                    @endphp
 
-                                <div id="{{ $sliderId }}"
-                                    class="page-featured-slider relative mx-auto w-full max-w-[520px]">
-                                    <style>
-                                        #{{ $sliderId }} {
-                                            --hero-arrow-gap: 24px;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-slider-track {
-                                            position: relative;
-                                            overflow: hidden;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-slide {
-                                            position: absolute;
-                                            inset: 0;
-                                            opacity: 0;
-                                            pointer-events: none;
-                                            transition: opacity .25s ease;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-slide.is-active {
-                                            position: relative;
-                                            opacity: 1;
-                                            pointer-events: auto;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-nav {
-                                            position: absolute;
-                                            top: 50%;
-                                            z-index: 10;
-                                            display: inline-flex;
-                                            height: 48px;
-                                            width: 32px;
-                                            align-items: center;
-                                            justify-content: center;
-                                            padding: 0;
-                                            background: transparent;
-                                            color: #111;
-                                            transform: translateY(-50%);
-                                            transition: opacity .2s ease;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-nav:hover {
-                                            opacity: .7;
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-prev {
-                                            left: calc(var(--hero-arrow-gap) * -1.5);
-                                        }
-
-                                        #{{ $sliderId }} .page-featured-next {
-                                            right: calc(var(--hero-arrow-gap) * -1.5);
-                                        }
-
-                                        @media (max-width: 1023.98px) {
+                                    <div id="{{ $sliderId }}"
+                                        class="page-featured-slider relative mx-auto w-full max-w-[520px]">
+                                        <style>
                                             #{{ $sliderId }} {
-                                                --hero-arrow-gap: 12px;
+                                                --hero-arrow-gap: 24px;
                                             }
-                                        }
 
-                                        @media (max-width: 639.98px) {
+                                            #{{ $sliderId }} .page-featured-slider-track {
+                                                position: relative;
+                                                overflow: hidden;
+                                            }
+
+                                            #{{ $sliderId }} .page-featured-slide {
+                                                position: absolute;
+                                                inset: 0;
+                                                opacity: 0;
+                                                pointer-events: none;
+                                                transition: opacity .25s ease;
+                                            }
+
+                                            #{{ $sliderId }} .page-featured-slide.is-active {
+                                                position: relative;
+                                                opacity: 1;
+                                                pointer-events: auto;
+                                            }
+
                                             #{{ $sliderId }} .page-featured-nav {
-                                                width: 28px;
-                                                height: 44px;
+                                                position: absolute;
+                                                top: 50%;
+                                                z-index: 10;
+                                                display: inline-flex;
+                                                height: 48px;
+                                                width: 32px;
+                                                align-items: center;
+                                                justify-content: center;
+                                                padding: 0;
+                                                background: transparent;
+                                                color: #111;
+                                                transform: translateY(-50%);
+                                                transition: opacity .2s ease;
+                                            }
+
+                                            #{{ $sliderId }} .page-featured-nav:hover {
+                                                opacity: .7;
                                             }
 
                                             #{{ $sliderId }} .page-featured-prev {
-                                                left: -6px;
+                                                left: calc(var(--hero-arrow-gap) * -1.5);
                                             }
 
                                             #{{ $sliderId }} .page-featured-next {
-                                                right: -6px;
+                                                right: calc(var(--hero-arrow-gap) * -1.5);
                                             }
-                                        }
-                                    </style>
 
-                                    <div class="page-featured-slider-track">
-                                        @foreach ($featuredMediaItems as $index => $heroMedia)
-                                            @php
-                                                $isFirstSlide = $index === 0;
-                                            @endphp
+                                            @media (max-width: 1023.98px) {
+                                                #{{ $sliderId }} {
+                                                    --hero-arrow-gap: 12px;
+                                                }
+                                            }
 
-                                            <div class="page-featured-slide {{ $isFirstSlide ? 'is-active' : '' }}">
-                                                @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
-                                                    {!! cms_picture(
-                                                        $heroMedia,
-                                                        [
-                                                            'alt' => $postButtonTitle,
-                                                            'class' =>
-                                                                'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
-                                                            'sizes' => '(max-width: 1024px) 100vw, 58vw',
-                                                            'loading' => $isFirstSlide ? 'eager' : 'lazy',
-                                                            'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
-                                                            'decoding' => 'async',
-                                                        ],
-                                                        'hero_sm',
-                                                        ['thumb', 'small', 'hero_sm', 'large'],
-                                                    ) !!}
-                                                @endif
-                                            </div>
-                                        @endforeach
+                                            @media (max-width: 639.98px) {
+                                                #{{ $sliderId }} .page-featured-nav {
+                                                    width: 28px;
+                                                    height: 44px;
+                                                }
+
+                                                #{{ $sliderId }} .page-featured-prev {
+                                                    left: -6px;
+                                                }
+
+                                                #{{ $sliderId }} .page-featured-next {
+                                                    right: -6px;
+                                                }
+                                            }
+                                        </style>
+
+                                        <div class="page-featured-slider-track">
+                                            @foreach ($featuredMediaItems as $index => $heroMedia)
+                                                @php
+                                                    $isFirstSlide = $index === 0;
+                                                @endphp
+
+                                                <div class="page-featured-slide {{ $isFirstSlide ? 'is-active' : '' }}">
+                                                    @if ($heroMedia && method_exists($heroMedia, 'isImage') && $heroMedia->isImage())
+                                                        {!! cms_picture(
+                                                            $heroMedia,
+                                                            [
+                                                                'alt' => $postButtonTitle,
+                                                                'class' =>
+                                                                    'hero-media-image block w-full h-auto max-h-[280px] object-contain sm:max-h-[360px] md:max-h-[420px] lg:max-h-[470px] xl:max-h-[500px]',
+                                                                'sizes' => '(max-width: 1024px) 100vw, 58vw',
+                                                                'loading' => $isFirstSlide ? 'eager' : 'lazy',
+                                                                'fetchpriority' => $isFirstSlide ? 'high' : 'auto',
+                                                                'decoding' => 'async',
+                                                            ],
+                                                            'hero_sm',
+                                                            ['thumb', 'small', 'hero_sm', 'large'],
+                                                        ) !!}
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+
+                                        <button type="button"
+                                            class="page-featured-nav page-featured-prev focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                                            aria-label="Previous image">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
+                                                viewBox="0 0 14 28" fill="none" aria-hidden="true">
+                                                <path d="M11.5 2.5L2.5 14L11.5 25.5" stroke="currentColor"
+                                                    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                                            </svg>
+                                        </button>
+
+                                        <button type="button"
+                                            class="page-featured-nav page-featured-next focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+                                            aria-label="Next image">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
+                                                viewBox="0 0 14 28" fill="none" aria-hidden="true">
+                                                <path d="M2.5 2.5L11.5 14L2.5 25.5" stroke="currentColor"
+                                                    stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                                            </svg>
+                                        </button>
                                     </div>
 
-                                    <button type="button"
-                                        class="page-featured-nav page-featured-prev focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                                        aria-label="Previous image">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
-                                            viewBox="0 0 14 28" fill="none" aria-hidden="true">
-                                            <path d="M11.5 2.5L2.5 14L11.5 25.5" stroke="currentColor" stroke-width="1.4"
-                                                stroke-linecap="round" stroke-linejoin="round" />
-                                        </svg>
-                                    </button>
+                                    <script>
+                                        (function() {
+                                            const slider = document.getElementById(@json($sliderId));
+                                            if (!slider) return;
 
-                                    <button type="button"
-                                        class="page-featured-nav page-featured-next focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
-                                        aria-label="Next image">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="28"
-                                            viewBox="0 0 14 28" fill="none" aria-hidden="true">
-                                            <path d="M2.5 2.5L11.5 14L2.5 25.5" stroke="currentColor" stroke-width="1.4"
-                                                stroke-linecap="round" stroke-linejoin="round" />
-                                        </svg>
-                                    </button>
-                                </div>
+                                            const slides = Array.from(slider.querySelectorAll('.page-featured-slide'));
+                                            const prevBtn = slider.querySelector('.page-featured-prev');
+                                            const nextBtn = slider.querySelector('.page-featured-next');
 
-                                <script>
-                                    (function() {
-                                        const slider = document.getElementById(@json($sliderId));
-                                        if (!slider) return;
+                                            if (!slides.length) return;
 
-                                        const slides = Array.from(slider.querySelectorAll('.page-featured-slide'));
-                                        const prevBtn = slider.querySelector('.page-featured-prev');
-                                        const nextBtn = slider.querySelector('.page-featured-next');
+                                            let current = 0;
+                                            let ticking = false;
 
-                                        if (!slides.length) return;
+                                            const showSlide = (index) => {
+                                                current = (index + slides.length) % slides.length;
 
-                                        let current = 0;
-                                        let ticking = false;
+                                                if (ticking) return;
+                                                ticking = true;
 
-                                        const showSlide = (index) => {
-                                            current = (index + slides.length) % slides.length;
-
-                                            if (ticking) return;
-                                            ticking = true;
-
-                                            requestAnimationFrame(() => {
-                                                slides.forEach((slide, i) => {
-                                                    slide.classList.toggle('is-active', i === current);
+                                                requestAnimationFrame(() => {
+                                                    slides.forEach((slide, i) => {
+                                                        slide.classList.toggle('is-active', i === current);
+                                                    });
+                                                    ticking = false;
                                                 });
-                                                ticking = false;
-                                            });
-                                        };
+                                            };
 
-                                        prevBtn?.addEventListener('click', () => showSlide(current - 1));
-                                        nextBtn?.addEventListener('click', () => showSlide(current + 1));
+                                            prevBtn?.addEventListener('click', () => showSlide(current - 1));
+                                            nextBtn?.addEventListener('click', () => showSlide(current + 1));
 
-                                        showSlide(0);
-                                    })();
-                                </script>
-                            @endif
+                                            showSlide(0);
+                                        })();
+                                    </script>
+                                @endif
+                            </div>
                         </div>
                     </div>
-                </div>
+                @endif
             </div>
         </section>
 
@@ -776,6 +1020,108 @@
             line-height: var(--cms-body-line-height);
             letter-spacing: var(--cms-body-letter-spacing);
             color: var(--cms-body-color);
+        }
+
+        .home-hero-shell {
+            overflow: hidden;
+        }
+
+        .home-hero-content-col,
+        .home-hero-media-col {
+            min-width: 0;
+        }
+
+        .home-hero-content-inner {
+            padding: 1.5rem 1.25rem 1.75rem;
+        }
+
+        .home-hero-media-wrap {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            background: #f3f3f3;
+            min-height: 240px;
+        }
+
+        .home-hero-media-image {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        @media (min-width: 640px) {
+            .home-hero-content-inner {
+                padding: 2rem 1.75rem 2.25rem;
+            }
+
+            .home-hero-media-wrap {
+                min-height: 360px;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .home-hero-content-inner {
+                padding: 2.25rem 2rem 2.5rem;
+            }
+
+            .home-hero-media-wrap {
+                min-height: 420px;
+            }
+        }
+
+        @media (max-width: 1023.98px) {
+            .home-hero-grid {
+                gap: 0;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .home-hero-shell {
+                min-height: 520px;
+            }
+
+            .home-hero-grid {
+                min-height: 520px;
+                align-items: stretch;
+            }
+
+            .home-hero-content-inner {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: 3rem 2.5rem 3rem 2rem;
+            }
+
+            .home-hero-media-col,
+            .home-hero-media-wrap {
+                height: 100%;
+                min-height: 520px;
+            }
+
+            .home-hero-media-image {
+                height: 100%;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .home-hero-shell {
+                min-height: 560px;
+            }
+
+            .home-hero-grid {
+                min-height: 560px;
+            }
+
+            .home-hero-content-inner {
+                padding: 3.5rem 3rem 3.5rem 2.5rem;
+            }
+
+            .home-hero-media-col,
+            .home-hero-media-wrap {
+                min-height: 560px;
+            }
         }
     </style>
 @endsection
