@@ -92,7 +92,7 @@
 
     <style id="theme-inline-css">
         .page-container {
-            max-width: 1140px;
+            max-width: var(--page-container, 1140px);
             margin: auto;
             padding: 0 15px;
         }

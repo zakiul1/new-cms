@@ -110,7 +110,8 @@ if (!function_exists('theme_options')) {
                 'text' => '#111827',
                 'primary' => '#2f6fa3',
                 'accent' => '#0ea5e9',
-                'container_width' => 'default',
+                'cms_container_width' => '1280px',
+                'page_container_width' => '1140px',
                 'rounded' => true,
                 'shadows' => true,
             ],
@@ -150,7 +151,64 @@ if (!function_exists('theme_options')) {
             data_set($options, $key, (bool) data_get($options, $key, false));
         }
 
+        data_set(
+            $options,
+            'appearance.cms_container_width',
+            theme_normalize_css_length(
+                data_get($options, 'appearance.cms_container_width'),
+                '1100px'
+            )
+        );
+
+        data_set(
+            $options,
+            'appearance.page_container_width',
+            theme_normalize_css_length(
+                data_get($options, 'appearance.page_container_width'),
+                '1140px'
+            )
+        );
+
         return $options;
+    }
+}
+
+if (!function_exists('theme_normalize_css_length')) {
+    function theme_normalize_css_length(mixed $value, string $fallback): string
+    {
+        if ($value === null) {
+            return $fallback;
+        }
+
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return $fallback;
+        }
+
+        if (preg_match('/^\d+(\.\d+)?$/', $value)) {
+            return $value . 'px';
+        }
+
+        if (preg_match('/^\d+(\.\d+)?(px|%|rem|em|vw|vh|vmin|vmax|ch|ex)$/i', $value)) {
+            return $value;
+        }
+
+        if (preg_match('/^(auto|inherit|initial|unset|min-content|max-content|fit-content)$/i', $value)) {
+            return $value;
+        }
+
+        if (
+            str_starts_with($value, 'calc(') ||
+            str_starts_with($value, 'clamp(') ||
+            str_starts_with($value, 'min(') ||
+            str_starts_with($value, 'max(') ||
+            str_starts_with($value, 'var(')
+        ) {
+            return $value;
+        }
+
+        return $fallback;
     }
 }
 
@@ -649,12 +707,15 @@ if (!function_exists('theme_customizer_css')) {
         $primary = $appearance['primary'] ?? '#2f6fa3';
         $accent = $appearance['accent'] ?? '#0ea5e9';
 
-        $container = $appearance['container_width'] ?? 'default';
-        $containerMax = match ($container) {
-            'full' => '100%',
-            'wide' => '1280px',
-            default => '1140px',
-        };
+        $cmsContainerMax = theme_normalize_css_length(
+            $appearance['cms_container_width'] ?? '1100px',
+            '1100px'
+        );
+
+        $pageContainerMax = theme_normalize_css_length(
+            $appearance['page_container_width'] ?? '1140px',
+            '1140px'
+        );
 
         $rounded = !empty($appearance['rounded']) ? '14px' : '0px';
         $shadow = !empty($appearance['shadows']) ? '0 10px 30px rgba(0,0,0,.08)' : 'none';
@@ -719,7 +780,8 @@ if (!function_exists('theme_customizer_css')) {
   --cms-text: {$text};
   --cms-primary: {$primary};
   --cms-accent: {$accent};
-  --cms-container: {$containerMax};
+  --cms-container: {$cmsContainerMax};
+  --page-container: {$pageContainerMax};
   --cms-radius: {$rounded};
   --cms-shadow: {$shadow};
   --cms-footer-bg: {$footerBg};
@@ -778,6 +840,12 @@ body{
   margin: 0 auto;
   padding-left: 16px;
   padding-right: 16px;
+}
+.page-container{
+  max-width: var(--page-container);
+  margin: 0 auto;
+  padding-left: 15px;
+  padding-right: 15px;
 }
 .site-logo img,
 .custom-logo img,

@@ -350,14 +350,19 @@
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Container Width</label>
-                            <select wire:model.live="data.appearance.container_width"
-                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]">
-                                <option value="narrow">Narrow</option>
-                                <option value="default">Default</option>
-                                <option value="wide">Wide</option>
-                                <option value="full">Full</option>
-                            </select>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">CMS Container Width</label>
+                            <input type="text" wire:model.live.debounce.300ms="data.appearance.cms_container_width"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                placeholder="1100 or 1100px or 90%">
+                           
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-[12px] font-semibold text-[#50575e]">Page Container Width</label>
+                            <input type="text" wire:model.live.debounce.300ms="data.appearance.page_container_width"
+                                class="w-full rounded border border-[#8c8f94] bg-white px-3 py-2 text-[13px]"
+                                placeholder="1140 or 1140px or 95%">
+                           
                         </div>
 
                         <div>

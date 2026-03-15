@@ -71,7 +71,7 @@ class ThemeCustomizer extends Component
             ->latest('id')
             ->limit(20)
             ->get(['id', 'title', 'slug'])
-            ->map(fn($p) => [
+            ->map(fn ($p) => [
                 'id' => (int) $p->id,
                 'title' => (string) $p->title,
                 'slug' => (string) $p->slug,
@@ -84,7 +84,7 @@ class ThemeCustomizer extends Component
             ->latest('id')
             ->limit(50)
             ->get(['id', 'title', 'slug'])
-            ->map(fn($p) => [
+            ->map(fn ($p) => [
                 'id' => (int) $p->id,
                 'title' => (string) $p->title,
                 'slug' => (string) $p->slug,
@@ -186,7 +186,8 @@ class ThemeCustomizer extends Component
                 'text' => '#111827',
                 'primary' => '#2f6fa3',
                 'accent' => '#0ea5e9',
-                'container_width' => 'default',
+                'cms_container_width' => '1280px',
+                'page_container_width' => '1140px',
                 'rounded' => true,
                 'shadows' => true,
             ],
@@ -259,6 +260,24 @@ class ThemeCustomizer extends Component
         ] as $key) {
             data_set($this->data, $key, (bool) data_get($this->data, $key, false));
         }
+
+        data_set(
+            $this->data,
+            'appearance.cms_container_width',
+            $this->normalizeCssLength(
+                data_get($this->data, 'appearance.cms_container_width'),
+                '1280px'
+            )
+        );
+
+        data_set(
+            $this->data,
+            'appearance.page_container_width',
+            $this->normalizeCssLength(
+                data_get($this->data, 'appearance.page_container_width'),
+                '1140px'
+            )
+        );
     }
 
     protected function syncCoreSettings(): void
@@ -271,6 +290,43 @@ class ThemeCustomizer extends Component
         } elseif (is_numeric($pageId)) {
             data_set($this->data, 'homepage.page_id', (int) $pageId);
         }
+    }
+
+    protected function normalizeCssLength(mixed $value, string $fallback): string
+    {
+        if ($value === null) {
+            return $fallback;
+        }
+
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return $fallback;
+        }
+
+        if (preg_match('/^\d+(\.\d+)?$/', $value)) {
+            return $value . 'px';
+        }
+
+        if (preg_match('/^\d+(\.\d+)?(px|%|rem|em|vw|vh|vmin|vmax|ch|ex)$/i', $value)) {
+            return $value;
+        }
+
+        if (preg_match('/^(auto|inherit|initial|unset|min-content|max-content|fit-content)$/i', $value)) {
+            return $value;
+        }
+
+        if (
+            str_starts_with($value, 'calc(') ||
+            str_starts_with($value, 'clamp(') ||
+            str_starts_with($value, 'min(') ||
+            str_starts_with($value, 'max(') ||
+            str_starts_with($value, 'var(')
+        ) {
+            return $value;
+        }
+
+        return $fallback;
     }
 
     public function openSection(string $section): void
