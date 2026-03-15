@@ -45,8 +45,10 @@
             <button
                 aria-label="{{ __('filament-panels::layout.actions.open_user_menu.label') }}"
                 type="button"
-                class="fi-user-menu-trigger"
+                class="fi-user-menu-trigger fi-wp-user-menu-trigger"
             >
+                <span class="fi-wp-user-menu-greeting">Howdy, {{ filament()->getUserName($user) }}</span>
+
                 <x-filament-panels::avatar.user :user="$user" loading="lazy" />
             </button>
         @else

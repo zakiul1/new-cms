@@ -22,12 +22,14 @@ class StaticPostForm
     public static function configure(Schema $schema): Schema
     {
         return $schema
-            ->columns(['default' => 1, 'lg' => 3])
+           ->columns(['default' => 1, 'xl' => 12])
+
             ->components([
 
                 // LEFT: Tabs (2/3)
-                Tabs::make('Editor')
-                    ->columnSpan(['default' => 1, 'lg' => 2])
+              Tabs::make('Editor')
+    ->columnSpan(['default' => 1, 'xl' => 9])
+
                     ->tabs([
 
                         // ✅ Content tab
@@ -174,8 +176,9 @@ class StaticPostForm
                     ]),
 
                 // RIGHT: Publish panel (1/3)
-                Section::make('Publish')
-                    ->columnSpan(['default' => 1, 'lg' => 1])
+              Section::make('Publish')
+    ->columnSpan(['default' => 1, 'xl' => 3])
+
                     ->schema([
 
                         Select::make('status')

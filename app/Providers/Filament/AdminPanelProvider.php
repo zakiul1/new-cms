@@ -13,6 +13,7 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
@@ -35,20 +36,22 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('lara-admin')
             ->login()
-            ->maxContentWidth('full')
+            ->maxContentWidth(Width::Full)
+            ->sidebarWidth('160px')
+            ->collapsibleNavigationGroups(false)
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Blue,
             ])
             ->navigationGroups([
-                NavigationGroup::make()->label('Media')->collapsed(),
-                NavigationGroup::make()->label('Tags')->collapsed(),
-                NavigationGroup::make()->label('Blog Posts')->collapsed(),
-                NavigationGroup::make()->label('Static Posts')->collapsed(),
-                NavigationGroup::make()->label('Mega Post')->collapsed(),
-                NavigationGroup::make()->label('Appearance')->collapsed(),
-                NavigationGroup::make()->label('CMS')->collapsed(),
-                NavigationGroup::make()->label('SEO')->collapsed(),
-                NavigationGroup::make()->label('Tools')->collapsed(),
+                NavigationGroup::make()->label('Media')->icon('heroicon-o-photo')->collapsible(false),
+                NavigationGroup::make()->label('Tags')->icon('heroicon-o-tag')->collapsible(false),
+                NavigationGroup::make()->label('Blog Posts')->icon('heroicon-o-pencil-square')->collapsible(false),
+                NavigationGroup::make()->label('Static Posts')->icon('heroicon-o-document-duplicate')->collapsible(false),
+                NavigationGroup::make()->label('Mega Post')->icon('heroicon-o-squares-2x2')->collapsible(false),
+                NavigationGroup::make()->label('Appearance')->icon('heroicon-o-paint-brush')->collapsible(false),
+                NavigationGroup::make()->label('CMS')->icon('heroicon-o-cog-6-tooth')->collapsible(false),
+                NavigationGroup::make()->label('SEO')->icon('heroicon-o-magnifying-glass')->collapsible(false),
+                NavigationGroup::make()->label('Tools')->icon('heroicon-o-wrench-screwdriver')->collapsible(false),
             ])
             ->discoverResources(
                 in: app_path('Filament/Resources'),
@@ -108,13 +111,12 @@ class AdminPanelProvider extends PanelProvider
             $u = e($frontendHomeUrl);
 
             return <<<HTML
-<div class="flex items-center">
+<div class="fi-wp-adminbar-brand-ctn">
     <a href="{$u}"
        target="_blank"
        rel="noopener noreferrer"
-       class="text-xl font-bold tracking-tight"
-       style="line-height: 1;">
-        Siatex CMS
+       class="fi-wp-adminbar-brand">
+        Siatex
     </a>
 </div>
 HTML;
@@ -139,7 +141,7 @@ HTML;
 
         $panel->renderHook(PanelsRenderHook::GLOBAL_SEARCH_BEFORE, function (): string {
             return Blade::render('
-        <div class="flex items-center gap-2">
+        <div class="fi-wp-adminbar-actions">
             @livewire("filament.toggle-frontend-admin-bar")
             @livewire("filament.view-shortcodes")
         </div>

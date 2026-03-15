@@ -11,17 +11,17 @@
         toolbar: @js($toolbar),
         tinymceSrc: @js(asset('build/tinymce/tinymce.min.js')),
     })" x-init="init()" class="w-full">
-        <div class="rounded-xl border bg-white">
+        <div class="border bg-white">
             {{-- Tabs --}}
             <div class="flex items-center justify-between border-b px-3 py-2">
                 <div class="flex gap-2">
-                    <button type="button" class="rounded px-3 py-1 text-sm"
+                    <button type="button" class="px-3 py-1 text-sm"
                         :class="mode === 'visual' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'"
                         @click="switchToVisual()">
                         Visual
                     </button>
 
-                    <button type="button" class="rounded px-3 py-1 text-sm"
+                    <button type="button" class="px-3 py-1 text-sm"
                         :class="mode === 'code' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'"
                         @click="switchToCode()">
                         Code
@@ -36,7 +36,7 @@
 
             {{-- Code --}}
             <div x-show="mode === 'code'" class="p-2">
-                <textarea x-ref="code" class="w-full rounded-lg border p-3 font-mono text-sm" :style="`height:${height}px;`"
+                <textarea x-ref="code" class="w-full  border p-3 font-mono text-sm" :style="`height:${height}px;`"
                     @input="onCodeInput()"></textarea>
             </div>
         </div>

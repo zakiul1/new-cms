@@ -164,10 +164,12 @@ class MultiPageForm
         ];
 
         return $schema
-            ->columns(['default' => 1, 'lg' => 3])
+           ->columns(['default' => 1, 'xl' => 12])
+
             ->components([
-                Tabs::make('Editor')
-                    ->columnSpan(['default' => 1, 'lg' => 2])
+               Tabs::make('Editor')
+    ->columnSpan(['default' => 1, 'xl' => 9])
+
                     ->tabs([
                         Tab::make('Content')
                             ->schema([
@@ -309,7 +311,8 @@ class MultiPageForm
                     ]),
 
                 Section::make('Publish')
-                    ->columnSpan(['default' => 1, 'lg' => 1])
+    ->columnSpan(['default' => 1, 'xl' => 3])
+
                     ->schema($publishSchema),
             ]);
     }
