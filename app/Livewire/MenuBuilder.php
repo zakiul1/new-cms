@@ -485,7 +485,6 @@ class MenuBuilder extends Component
             $data = $factory->fromCustomLink($label, $url);
             $data['menu_id'] = $this->activeMenuId;
             $data['sort_order'] = $max + 1;
-
             MenuItem::query()->create($data);
         });
 
@@ -563,6 +562,16 @@ class MenuBuilder extends Component
                         continue;
                     }
 
+                    $existingData = is_array($row['data'] ?? null) ? $row['data'] : [];
+                    $existingMega = is_array($existingData['mega_menu'] ?? null) ? $existingData['mega_menu'] : [];
+
+                    $existingData['mega_menu'] = array_merge($existingMega, [
+                        'enabled' => (bool) ($row['mega_enabled'] ?? false),
+                        'columns' => max(2, min(6, (int) ($row['mega_columns'] ?? 4) ?: 4)),
+                        'column' => max(1, min(6, (int) ($row['mega_column'] ?? 1) ?: 1)),
+                        'continuation' => (bool) ($row['mega_continuation'] ?? false),
+                    ]);
+
                     MenuItem::query()
                         ->where('menu_id', $this->activeMenuId)
                         ->whereKey($id)
@@ -577,7 +586,7 @@ class MenuBuilder extends Component
                             'icon' => $row['icon'] ?? null,
                             'description' => $row['description'] ?? null,
                             'visibility' => $row['visibility'] ?? null,
-                            'data' => $row['data'] ?? null,
+                            'data' => $existingData,
                         ]);
                 }
 
@@ -639,7 +648,11 @@ class MenuBuilder extends Component
         $out = [];
 
         foreach ($rows as $r) {
+            $data = is_array($r->data) ? $r->data : [];
+            $mega = is_array($data['mega_menu'] ?? null) ? $data['mega_menu'] : [];
+
             $out[(int) $r->id] = [
+                'parent_id' => $r->parent_id ? (int) $r->parent_id : null,
                 'label' => (string) ($r->label ?? ''),
                 'url' => (string) ($r->url ?? ''),
                 'is_enabled' => (bool) $r->is_enabled,
@@ -650,7 +663,11 @@ class MenuBuilder extends Component
                 'icon' => $r->icon,
                 'description' => $r->description,
                 'visibility' => is_array($r->visibility) ? $r->visibility : [],
-                'data' => is_array($r->data) ? $r->data : [],
+                'data' => $data,
+                'mega_enabled' => (bool) ($mega['enabled'] ?? false),
+                'mega_columns' => max(2, min(6, (int) ($mega['columns'] ?? 4) ?: 4)),
+                'mega_column' => max(1, min(6, (int) ($mega['column'] ?? 1) ?: 1)),
+                'mega_continuation' => (bool) ($mega['continuation'] ?? false),
             ];
         }
 
@@ -779,7 +796,54 @@ class MenuBuilder extends Component
         $this->reload();
         $this->toast('success', 'Items added', 'Selected items were added to the menu.');
     }
+    public function updateItemField(int $id, string $field, $value): void
+    {
+        if (!$this->activeMenuId) {
+            return;
+        }
 
+        if (!isset($this->items[$id]) || !is_array($this->items[$id])) {
+            return;
+        }
+
+        $allowed = [
+            'label',
+            'url',
+            'is_enabled',
+            'target',
+            'rel',
+            'css_class',
+            'css_id',
+            'icon',
+            'description',
+            'visibility',
+            'mega_enabled',
+            'mega_columns',
+            'mega_column',
+            'mega_continuation',
+        ];
+
+        if (!in_array($field, $allowed, true)) {
+            return;
+        }
+
+        if (in_array($field, ['mega_enabled', 'mega_continuation', 'is_enabled'], true)) {
+            $value = (bool) $value;
+        }
+
+        if ($field === 'mega_columns') {
+            $value = max(2, min(6, (int) $value ?: 4));
+        }
+
+        if ($field === 'mega_column') {
+            $value = max(1, min(6, (int) $value ?: 1));
+        }
+
+        $this->items[$id][$field] = $value;
+
+        $this->itemsDirty = true;
+        $this->syncUnsavedFlag();
+    }
     private function queryPosts(string $want)
     {
         $factory = app(MenuItemFactory::class);

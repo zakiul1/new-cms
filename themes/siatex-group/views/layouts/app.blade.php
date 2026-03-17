@@ -68,6 +68,64 @@
 
     // WP-like admin bar height
     $adminBarHeight = $showAdminBar ? 32 : 0;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Body classes for theme templates / homepage / post types
+    |--------------------------------------------------------------------------
+    */
+    $bodyClasses = ['min-h-screen', 'bg-white', 'text-slate-900', 'antialiased'];
+
+    if ($showAdminBar) {
+        $bodyClasses[] = 'has-admin-bar';
+    }
+
+    try {
+        if (request()->routeIs('cms.home')) {
+            $bodyClasses[] = 'home';
+            $bodyClasses[] = 'front-page';
+        }
+
+        if (isset($post) && $post instanceof \App\Models\Post) {
+            $postType = trim((string) ($post->type ?? 'post'));
+            if ($postType !== '') {
+                $bodyClasses[] = 'post-type-' . \Illuminate\Support\Str::slug($postType);
+            }
+
+            $metaJson = $post->meta_json ?? [];
+            if (is_string($metaJson) && trim($metaJson) !== '') {
+                $decoded = json_decode($metaJson, true);
+                $metaJson = is_array($decoded) ? $decoded : [];
+            }
+            if (!is_array($metaJson)) {
+                $metaJson = [];
+            }
+
+            $template = trim((string) (data_get($metaJson, 'template', '') ?: data_get($metaJson, '_template', '')));
+            if ($template !== '') {
+                $templateSlug = \Illuminate\Support\Str::slug($template);
+                $bodyClasses[] = 'template-' . $templateSlug;
+                $bodyClasses[] = 'page-template-' . $templateSlug;
+            }
+
+            $homepageId = null;
+            try {
+                $homepageId = $settingsRepo->get('core', 'homepage_page_id', null);
+                $homepageId = is_numeric($homepageId) ? (int) $homepageId : null;
+            } catch (\Throwable $e) {
+                $homepageId = null;
+            }
+
+            if ($homepageId && (int) $post->getKey() === $homepageId) {
+                $bodyClasses[] = 'home';
+                $bodyClasses[] = 'front-page';
+            }
+        }
+    } catch (\Throwable $e) {
+        // keep default classes
+    }
+
+    $bodyClassString = implode(' ', array_values(array_unique(array_filter($bodyClasses))));
 @endphp
 
 <head>
@@ -108,6 +166,21 @@
 
         .sc-tag-link:hover {
             text-decoration: underline;
+        }
+
+        /* Header/layout safety styles only.
+           Keep actual header visual design inside partials/header.blade.php */
+        .site-header-nav,
+        .site-header-nav * {
+            box-sizing: border-box;
+        }
+
+        .site-header-nav {
+            min-width: 0;
+        }
+
+        .site-header-nav .mega-menu-panel {
+            max-width: 100%;
         }
     </style>
 
@@ -155,18 +228,10 @@
         body.has-admin-bar {
             padding-top: var(--cms-adminbar-h);
         }
-
-        #site-topbar-shell {
-            position: sticky;
-            top: var(--cms-adminbar-h);
-            z-index: 9990;
-            display: block;
-            background: var(--cms-primary);
-        }
     </style>
 </head>
 
-<body class="min-h-screen bg-white text-slate-900 antialiased {{ $showAdminBar ? 'has-admin-bar' : '' }}">
+<body class="{{ $bodyClassString }}">
     {!! $hooks->applyFilters('theme.body.before', '') !!}
 
     @if ($showAdminBar)
@@ -195,10 +260,7 @@
         </div>
     @endif
 
-    <div id="site-topbar-shell">
-        @include('partials.topbar')
-    </div>
-
+    {{-- Old topbar intentionally removed --}}
     @include('partials.header')
 
     <main class="flex-1">

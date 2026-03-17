@@ -15,7 +15,7 @@
     }" x-on:toast.window="push($event.detail)"
         class="fixed bottom-5 right-5 z-50 w-[340px] max-w-[90vw] space-y-2">
         <template x-for="t in toasts" :key="t.id">
-            <div class="flex items-start gap-3 rounded-md border bg-white px-4 py-3 shadow"
+            <div class="flex items-start gap-3 border bg-white px-4 py-3 shadow"
                 :class="t.type === 'success' ? 'border-green-200' :
                     t.type === 'error' ? 'border-red-200' :
                     t.type === 'warning' ? 'border-amber-200' :
@@ -69,19 +69,19 @@
 
     {{-- Top tabs --}}
     <div class="flex items-center gap-2">
-        <button type="button" class="rounded-md border px-3 py-2 text-sm"
+        <button type="button" class="border px-3 py-2 text-sm"
             :class="tab === 'edit' ? 'border-gray-300 bg-white text-gray-900' : 'border-gray-200 bg-gray-50 text-gray-600'"
             x-on:click="tab='edit'; $wire.openEditMenusPanel()">
             Edit Menus
         </button>
 
-        <button type="button" class="rounded-md border px-3 py-2 text-sm"
+        <button type="button" class="border px-3 py-2 text-sm"
             :class="tab === 'locations' ? 'border-gray-300 bg-white text-gray-900' : 'border-gray-200 bg-gray-50 text-gray-600'"
             x-on:click="tab='locations'; $wire.openManageLocationsPanel()">
             Manage Locations
         </button>
 
-        <button type="button" class="rounded-md border px-3 py-2 text-sm"
+        <button type="button" class="border px-3 py-2 text-sm"
             :class="tab === 'create' ? 'border-gray-300 bg-white text-gray-900' : 'border-gray-200 bg-gray-50 text-gray-600'"
             x-on:click="tab='create'; $wire.openCreateMenuPanel()">
             Create New Menu
@@ -90,7 +90,7 @@
         <div class="flex-1"></div>
 
         @if ($hasUnsavedChanges)
-            <div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            <div class="border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
                 You have unsaved changes.
             </div>
         @endif
@@ -98,14 +98,14 @@
 
     {{-- Create tab --}}
     <div x-show="tab === 'create'" x-cloak>
-        <div class="rounded-md border border-gray-200 bg-white p-4">
+        <div class="border border-gray-200 bg-white p-4">
             <div class="text-base font-semibold text-gray-900">Create New Menu</div>
             <div class="mt-1 text-sm text-gray-500">Create a new menu and then edit its structure.</div>
 
             <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div class="w-full sm:w-80">
                     <div class="mb-1 text-xs text-gray-500">Menu Name</div>
-                    <input type="text" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                         wire:model.defer="newMenuName" placeholder="New menu name...">
                     @error('newMenuName')
                         <div class="mt-1 text-xs text-red-600">{{ $message }}</div>
@@ -113,7 +113,7 @@
                 </div>
 
                 <button type="button"
-                    class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                    class="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white"
                     wire:click="saveCreateMenu">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M4 7a3 3 0 0 1 3-3h10l3 3v14a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7z" stroke="currentColor"
@@ -125,7 +125,7 @@
                 </button>
 
                 <button type="button"
-                    class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700"
+                    class="inline-flex items-center gap-2 border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700"
                     wire:click="cancelCreateMenu">
                     Cancel
                 </button>
@@ -135,7 +135,7 @@
 
     {{-- Locations tab --}}
     <div x-show="tab === 'locations'" x-cloak>
-        <div class="rounded-md border border-gray-200 bg-white p-4">
+        <div class="border border-gray-200 bg-white p-4">
             <div class="text-base font-semibold text-gray-900">Manage Locations</div>
             <div class="mt-1 text-sm text-gray-500">
                 Assign the selected menu to a theme location and click Save.
@@ -146,7 +146,7 @@
                     <div class="mb-1 text-xs text-gray-500">Select a menu to edit</div>
 
                     @if ($menus->count())
-                        <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        <select class="w-full border border-gray-300 px-3 py-2 text-sm"
                             wire:change="selectMenuAndEdit($event.target.value)">
                             @foreach ($menus as $m)
                                 <option value="{{ $m->id }}" @selected($activeMenuId === $m->id)>
@@ -155,7 +155,7 @@
                             @endforeach
                         </select>
                     @else
-                        <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                        <div class="border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
                             No menus found yet.
                         </div>
                     @endif
@@ -163,9 +163,8 @@
 
                 <div class="lg:col-span-5">
                     <div class="mb-1 text-xs text-gray-500">Menu location</div>
-                    <select class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                        wire:model="draftLocationKey" wire:change="setDraftLocation($event.target.value)"
-                        @disabled(!$activeMenuId)>
+                    <select class="w-full border border-gray-300 px-3 py-2 text-sm" wire:model="draftLocationKey"
+                        wire:change="setDraftLocation($event.target.value)" @disabled(!$activeMenuId)>
                         <option value="">— Not assigned —</option>
                         @foreach ($locations as $loc)
                             <option value="{{ $loc->key }}">{{ $loc->label }} ({{ $loc->key }})</option>
@@ -178,7 +177,7 @@
 
                 <div class="flex gap-2 lg:col-span-2">
                     <button type="button"
-                        class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        class="inline-flex w-full items-center justify-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
                         wire:click="saveLocationAssignment" @disabled(!$activeMenuId)>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M4 7a3 3 0 0 1 3-3h10l3 3v14a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7z"
@@ -194,13 +193,13 @@
 
     {{-- Edit tab --}}
     <div x-show="tab === 'edit'" x-cloak class="space-y-4">
-        <div class="rounded-md border border-gray-200 bg-white p-4">
+        <div class="border border-gray-200 bg-white p-4">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div class="text-sm text-gray-700">Select a menu to edit:</div>
 
                     @if ($menus->count())
-                        <select class="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        <select class="border border-gray-300 px-3 py-2 text-sm"
                             wire:change="selectMenuAndEdit($event.target.value)">
                             @foreach ($menus as $m)
                                 <option value="{{ $m->id }}" @selected($activeMenuId === $m->id)>
@@ -209,17 +208,17 @@
                             @endforeach
                         </select>
                     @else
-                        <div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+                        <div class="border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500">
                             No menus found yet.
                         </div>
                     @endif
 
-                    <button type="button" class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                         x-on:click="tab='create'; $wire.openCreateMenuPanel()">
                         create a new menu
                     </button>
 
-                    <button type="button" class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                         x-on:click="tab='locations'; $wire.openManageLocationsPanel()">
                         Manage Locations
                     </button>
@@ -228,20 +227,18 @@
                 @if ($activeMenuId)
                     <div class="flex flex-wrap gap-2">
                         @if (!$isRenaming)
-                            <button type="button"
-                                class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                            <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                                 wire:click="startRename">
                                 Rename
                             </button>
                         @endif
 
-                        <button type="button" class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                        <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                             wire:click="duplicateActiveMenu">
                             Duplicate
                         </button>
 
-                        <button type="button"
-                            class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+                        <button type="button" class="border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
                             x-on:click="if(confirm('Delete this menu and all items?')) $wire.deleteActiveMenu()">
                             Delete
                         </button>
@@ -250,24 +247,24 @@
             </div>
 
             @if ($isRenaming)
-                <div class="mt-4 rounded-md border border-gray-200 bg-white p-3">
+                <div class="mt-4 border border-gray-200 bg-white p-3">
                     <div class="mb-2 text-sm font-medium text-gray-900">Rename menu</div>
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
                         <div class="flex-1">
-                            <input type="text" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                            <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                 wire:model.defer="renameValue" placeholder="Menu name...">
                             @error('renameValue')
                                 <div class="mt-1 text-xs text-red-600">{{ $message }}</div>
                             @enderror
                         </div>
 
-                        <button type="button" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                        <button type="button" class="bg-blue-600 px-4 py-2 text-sm font-medium text-white"
                             wire:click="saveRename">
                             Save
                         </button>
 
                         <button type="button"
-                            class="rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800"
+                            class="border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800"
                             wire:click="cancelRename">
                             Cancel
                         </button>
@@ -277,28 +274,28 @@
         </div>
 
         @if (!$activeMenuId)
-            <div class="rounded-md border border-gray-200 bg-white p-6 text-center">
+            <div class="border border-gray-200 bg-white p-6 text-center">
                 <div class="text-base font-semibold text-gray-900">No menu selected</div>
                 <div class="mt-1 text-sm text-gray-500">Create a new menu to begin.</div>
                 <div class="mt-4">
-                    <button type="button" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                    <button type="button" class="bg-blue-600 px-4 py-2 text-sm font-medium text-white"
                         x-on:click="tab='create'; $wire.openCreateMenuPanel()">
                         Create Menu
                     </button>
                 </div>
             </div>
         @else
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <div class="menu-builder-grid">
                 {{-- Left column --}}
-                <div class="lg:col-span-4">
-                    <div class="rounded-md border border-gray-200 bg-white">
+                <div class="menu-builder-left">
+                    <div class="border border-gray-200 bg-white">
                         <div class="border-b border-gray-200 px-4 py-3">
                             <div class="text-sm font-semibold text-gray-900">Add menu items</div>
                         </div>
 
                         <div class="space-y-3 p-4">
                             {{-- Pages --}}
-                            <details open class="rounded-md border border-gray-200">
+                            <details open class="border border-gray-200">
                                 <summary
                                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium text-gray-900">
                                     <span>Pages</span>
@@ -310,11 +307,10 @@
                                 </summary>
 
                                 <div class="space-y-2 px-3 pb-3">
-                                    <input type="text"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                         wire:model.live.debounce.400ms="searchPages" placeholder="Search pages...">
 
-                                    <div class="max-h-56 overflow-auto rounded-md border border-gray-200 p-2">
+                                    <div class="max-h-56 overflow-auto border border-gray-200 p-2">
                                         @foreach ($pages as $p)
                                             <label class="flex items-center gap-2 py-1 text-sm text-gray-700">
                                                 <input type="checkbox" wire:model="selectedPageIds"
@@ -324,8 +320,7 @@
                                         @endforeach
                                     </div>
 
-                                    <button type="button"
-                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                                         wire:click="addSelectedPages">
                                         Add to Menu
                                     </button>
@@ -333,7 +328,7 @@
                             </details>
 
                             {{-- Posts --}}
-                            <details class="rounded-md border border-gray-200">
+                            <details class="border border-gray-200">
                                 <summary
                                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium text-gray-900">
                                     <span>Posts</span>
@@ -345,11 +340,10 @@
                                 </summary>
 
                                 <div class="space-y-2 px-3 pb-3">
-                                    <input type="text"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                         wire:model.live.debounce.400ms="searchPosts" placeholder="Search posts...">
 
-                                    <div class="max-h-56 overflow-auto rounded-md border border-gray-200 p-2">
+                                    <div class="max-h-56 overflow-auto border border-gray-200 p-2">
                                         @foreach ($posts as $p)
                                             <label class="flex items-center gap-2 py-1 text-sm text-gray-700">
                                                 <input type="checkbox" wire:model="selectedPostIds"
@@ -359,8 +353,7 @@
                                         @endforeach
                                     </div>
 
-                                    <button type="button"
-                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                                         wire:click="addSelectedPosts">
                                         Add to Menu
                                     </button>
@@ -368,7 +361,7 @@
                             </details>
 
                             {{-- Terms --}}
-                            <details class="rounded-md border border-gray-200">
+                            <details class="border border-gray-200">
                                 <summary
                                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium text-gray-900">
                                     <span>Categories / Terms</span>
@@ -380,11 +373,10 @@
                                 </summary>
 
                                 <div class="space-y-2 px-3 pb-3">
-                                    <input type="text"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                         wire:model.live.debounce.400ms="searchTerms" placeholder="Search terms...">
 
-                                    <div class="max-h-56 overflow-auto rounded-md border border-gray-200 p-2">
+                                    <div class="max-h-56 overflow-auto border border-gray-200 p-2">
                                         @foreach ($terms as $t)
                                             <label class="flex items-center gap-2 py-1 text-sm text-gray-700">
                                                 <input type="checkbox" wire:model="selectedTermIds"
@@ -394,8 +386,7 @@
                                         @endforeach
                                     </div>
 
-                                    <button type="button"
-                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                                         wire:click="addSelectedTerms">
                                         Add to Menu
                                     </button>
@@ -403,7 +394,7 @@
                             </details>
 
                             {{-- Custom link --}}
-                            <details class="rounded-md border border-gray-200">
+                            <details class="border border-gray-200">
                                 <summary
                                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-sm font-medium text-gray-900">
                                     <span>Custom Links</span>
@@ -415,16 +406,13 @@
                                 </summary>
 
                                 <div class="space-y-2 px-3 pb-3">
-                                    <input type="text"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                         wire:model.defer="customLabel" placeholder="Label">
 
-                                    <input type="text"
-                                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    <input type="text" class="w-full border border-gray-300 px-3 py-2 text-sm"
                                         wire:model.defer="customUrl" placeholder="https://example.com">
 
-                                    <button type="button"
-                                        class="rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+                                    <button type="button" class="border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                                         wire:click="addCustomLink">
                                         Add to Menu
                                     </button>
@@ -435,8 +423,8 @@
                 </div>
 
                 {{-- Right column --}}
-                <div class="lg:col-span-8">
-                    <div class="rounded-md border border-gray-200 bg-white">
+                <div class="menu-builder-right">
+                    <div class="border border-gray-200 bg-white">
                         <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
                             <div>
                                 <div class="text-sm font-semibold text-gray-900">Menu structure</div>
@@ -447,7 +435,7 @@
                             </div>
 
                             <button type="button"
-                                class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                                class="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white"
                                 wire:click="saveMenu">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                     aria-hidden="true">
@@ -459,9 +447,9 @@
                             </button>
                         </div>
 
-                        <div class="p-4">
+                        <div class="p-4 menu-structure-wrap">
                             <div id="menu-tree-root">
-                                <ul data-menu-ul="1" data-root-ul="1" class="space-y-2">
+                                <ul data-menu-ul="1" data-menu-root="1" class="menu-root-list">
                                     @foreach ($tree as $node)
                                         @include('livewire.partials.menu-tree-wp', [
                                             'node' => $node,
@@ -475,7 +463,7 @@
 
                             <div class="mt-4">
                                 <button type="button"
-                                    class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                                    class="inline-flex items-center gap-2 bg-blue-600 px-4 py-2 text-sm font-medium text-white"
                                     wire:click="saveMenu">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                         aria-hidden="true">
@@ -496,105 +484,254 @@
             @push('scripts')
                 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
                 <script>
-                    function directLis(ul) {
-                        return Array.from(ul.children).filter(el => el.matches('li[data-id]'));
-                    }
-
-                    function directChildUl(li) {
-                        return Array.from(li.children).find(el => el.matches('ul[data-children-ul="1"]')) || null;
-                    }
-
-                    function buildTreeFromDom(ul) {
-                        return directLis(ul).map(li => {
-                            const id = parseInt(li.dataset.id, 10);
-                            const childUl = directChildUl(li);
-                            return {
-                                id,
-                                children: childUl ? buildTreeFromDom(childUl) : []
-                            };
-                        });
-                    }
-
-                    let __menuDragging = false;
-                    let __reorderTimer = null;
-
-                    function initSortables() {
-                        if (typeof Sortable === 'undefined') return;
-
-                        document.querySelectorAll('ul[data-menu-ul]').forEach((ul) => {
-                            if (ul._sortable) {
-                                ul._sortable.destroy();
-                                ul._sortable = null;
-                            }
-
-                            ul._sortable = new Sortable(ul, {
-                                group: 'menu-tree',
-                                filter: 'input, textarea, select, button, a, [data-no-drag]',
-                                preventOnFilter: true,
-                                animation: 150,
-                                fallbackOnBody: true,
-                                swapThreshold: 0.65,
-                                direction: 'vertical',
-                                emptyInsertThreshold: 16,
-                                delay: 80,
-                                delayOnTouchOnly: true,
-
-                                onStart: () => {
-                                    __menuDragging = true;
-                                },
-
-                                onMove: (evt, originalEvent) => {
-                                    const toUl = evt.to;
-                                    const isChildrenUl = toUl && toUl.dataset && toUl.dataset.childrenUl === '1';
-                                    if (!isChildrenUl) return true;
-
-                                    const parentLi = toUl.closest('li[data-id]');
-                                    if (!parentLi) return true;
-
-                                    const row = parentLi.querySelector('[data-row="1"]') || parentLi.querySelector(
-                                        'div.border');
-                                    if (!row) return true;
-
-                                    const rect = row.getBoundingClientRect();
-                                    const threshold = rect.left + 40;
-                                    return originalEvent.clientX >= threshold;
-                                },
-
-                                onEnd: () => {
-                                    __menuDragging = false;
-
-                                    const root = document.querySelector(
-                                        '#menu-tree-root > ul[data-menu-ul][data-root-ul="1"]'
-                                    );
-                                    if (!root) return;
-
-                                    const tree = buildTreeFromDom(root);
-
-                                    if (__reorderTimer) clearTimeout(__reorderTimer);
-                                    __reorderTimer = setTimeout(() => {
-                                        @this.reorder(tree);
-                                    }, 50);
-                                },
-                            });
-                        });
-                    }
-
                     document.addEventListener('livewire:init', () => {
-                        initSortables();
+                        let sortables = [];
 
-                        Livewire.on('menu-builder-init', () => {
-                            if (__menuDragging) return;
-                            setTimeout(initSortables, 0);
-                        });
+                        function destroySortables() {
+                            sortables.forEach(sortable => {
+                                try {
+                                    sortable.destroy();
+                                } catch (e) {}
+                            });
+                            sortables = [];
+                        }
 
-                        if (Livewire.hook) {
-                            Livewire.hook('morph.updated', () => {
-                                if (__menuDragging) return;
-                                setTimeout(initSortables, 0);
+                        function serializeTree(ul) {
+                            const items = [];
+
+                            Array.from(ul.children).forEach(li => {
+                                if (!li.matches('li[data-id]')) return;
+
+                                const childUl = Array.from(li.children).find(child =>
+                                    child.matches && child.matches('ul[data-children-ul="1"]')
+                                );
+
+                                items.push({
+                                    id: parseInt(li.dataset.id, 10),
+                                    children: childUl ? serializeTree(childUl) : [],
+                                });
+                            });
+
+                            return items;
+                        }
+
+                        function initMenuSortables() {
+                            if (typeof Sortable === 'undefined') return;
+
+                            destroySortables();
+
+                            document.querySelectorAll('[data-menu-ul="1"]').forEach(ul => {
+                                const sortable = new Sortable(ul, {
+                                    group: 'cms-menu-builder',
+                                    animation: 150,
+                                    fallbackOnBody: true,
+                                    forceFallback: true,
+                                    fallbackTolerance: 3,
+                                    invertSwap: false,
+                                    emptyInsertThreshold: 30,
+                                    bubbleScroll: true,
+                                    scroll: true,
+                                    swapThreshold: 0.65,
+                                    handle: '[data-drag-handle="1"]',
+                                    draggable: 'li[data-id]',
+                                    filter: 'input, textarea, select, a, label, button[data-no-drag="1"], [data-no-drag="1"]',
+                                    preventOnFilter: false,
+                                    ghostClass: 'menu-sortable-ghost',
+                                    chosenClass: 'menu-sortable-chosen',
+                                    dragClass: 'menu-sortable-drag',
+                                    onEnd: function() {
+                                        const root = document.querySelector('[data-menu-root="1"]');
+                                        if (!root) return;
+
+                                        const tree = serializeTree(root);
+                                        const livewireEl = ul.closest('[wire\\:id]');
+                                        if (!livewireEl) return;
+
+                                        const component = Livewire.find(livewireEl.getAttribute('wire:id'));
+                                        if (!component) return;
+
+                                        component.call('reorder', tree);
+                                    },
+                                });
+
+                                sortables.push(sortable);
                             });
                         }
+
+                        document.addEventListener('menu-builder-init', () => {
+                            setTimeout(initMenuSortables, 100);
+                        });
+
+                        document.addEventListener('livewire:navigated', () => {
+                            setTimeout(initMenuSortables, 100);
+                        });
+
+                        Livewire.hook('morph.updated', () => {
+                            setTimeout(initMenuSortables, 100);
+                        });
+
+                        setTimeout(initMenuSortables, 100);
                     });
                 </script>
+
+                <style>
+                    .menu-builder-grid {
+                        display: grid;
+                        gap: 16px;
+                        grid-template-columns: 1fr;
+                        align-items: start;
+                    }
+
+                    @media (min-width: 1024px) {
+                        .menu-builder-grid {
+                            grid-template-columns: 300px minmax(0, 1fr);
+                        }
+                    }
+
+                    .menu-builder-left,
+                    .menu-builder-right {
+                        min-width: 0;
+                    }
+
+                    .menu-structure-wrap {
+                        overflow-x: auto;
+                    }
+
+                    .menu-root-list,
+                    .menu-children-list {
+                        list-style: none;
+                        margin: 0;
+                        padding: 0;
+                    }
+
+                    .menu-root-list {
+                        min-height: 12px;
+                    }
+
+                    .menu-children-list {
+                        min-height: 18px;
+                        margin-top: 6px;
+                    }
+
+                    .menu-sortable-ghost {
+                        opacity: .45;
+                        background: #f0f6fc;
+                    }
+
+                    .menu-sortable-chosen .menu-item-handle {
+                        background: #f6f7f7;
+                    }
+
+                    .menu-sortable-drag {
+                        opacity: .95;
+                    }
+
+                    .menu-item-shell {
+                        list-style: none;
+                        margin: 0 0 10px;
+                        padding: 0;
+                    }
+
+                    .menu-item-bar,
+                    .menu-item-settings {
+                        margin-left: calc(var(--menu-depth, 0) * 30px);
+                    }
+
+                    .menu-item-handle {
+                        border: 1px solid #dcdcde;
+                        position: relative;
+                        padding: 10px 15px;
+                        min-height: 20px;
+                        max-width: 382px;
+                        line-height: 2.30769230;
+                        overflow: hidden;
+                        word-wrap: break-word;
+                        box-sizing: border-box;
+                        background: #fff;
+                    }
+
+                    .menu-item-settings {
+                        max-width: 382px;
+                        border: 1px solid #dcdcde;
+                        border-top: 0;
+                        background: #fff;
+                        padding: 12px 15px;
+                        box-sizing: border-box;
+                    }
+
+                    .menu-item-settings input,
+                    .menu-item-settings select,
+                    .menu-item-settings textarea {
+                        width: 100%;
+                    }
+
+                    .menu-item-drag-handle {
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 18px;
+                        height: 18px;
+                    }
+
+                    .menu-item-meta-badges {
+                        display: inline-flex;
+                        flex-wrap: wrap;
+                        gap: 6px;
+                        margin-left: 8px;
+                        vertical-align: middle;
+                    }
+
+                    .menu-item-meta-badge {
+                        display: inline-flex;
+                        align-items: center;
+                        border: 1px solid #dcdcde;
+                        background: #f6f7f7;
+                        color: #646970;
+                        font-size: 11px;
+                        line-height: 1;
+                        padding: 4px 6px;
+                    }
+
+                    .menu-item-title-row {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                    }
+
+                    .menu-item-title-main {
+                        min-width: 0;
+                        flex: 1 1 auto;
+                    }
+
+                    .menu-item-title-text {
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: #1d2327;
+                        word-break: break-word;
+                    }
+
+                    .menu-item-title-meta {
+                        margin-left: 6px;
+                        color: #646970;
+                        font-size: 12px;
+                    }
+
+                    .menu-item-actions {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 10px;
+                        flex: 0 0 auto;
+                    }
+
+                    .menu-item-toggle {
+                        color: #646970;
+                    }
+
+                    .menu-item-toggle:hover {
+                        color: #1d2327;
+                    }
+                </style>
             @endpush
         @endonce
     </div>
